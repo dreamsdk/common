@@ -10,7 +10,6 @@ uses
 const
   SETTINGS_FILE_NAME = 'dreamsdk.conf';
   SETTINGS_DIRECTORY = '/etc/dreamsdk/';
-  SETTINGS_FULL_FILE_PATH = SETTINGS_DIRECTORY + SETTINGS_FILE_NAME;
 
   DEFAULT_KALLISTI_URL = 'https://git.code.sf.net/p/cadcdev/kallistios';
   DEFAULT_KALLISTI_PORTS_URL = 'https://git.code.sf.net/p/cadcdev/kos-ports';
@@ -137,6 +136,7 @@ type
 
 function SerialPortToString(SerialPort: TDreamcastToolSerialPort): string;
 function SerialBaudrateToString(SerialBaudrate: TDreamcastToolSerialBaudrate): string;
+function UnixPathToSystem(const PathName: TFileName): TFileName;
 
 implementation
 
@@ -144,6 +144,12 @@ const
   CONFIG_SETTINGS_SECTION_NAME = 'Settings';
   CONFIG_DREAMCAST_TOOL_SECTION_NAME = 'DreamcastTool';
   CONFIG_REPOSITORIES_SECTION_NAME = 'Repositories';
+
+function UnixPathToSystem(const PathName: TFileName): TFileName;
+begin
+  Result := StringReplace(PathName, '/', DirectorySeparator, [rfReplaceAll]);
+  Result := IncludeTrailingPathDelimiter(Copy(Result, 2, Length(Result) - 1));
+end;
 
 function SerialPortToString(SerialPort: TDreamcastToolSerialPort): string;
 var
@@ -364,7 +370,8 @@ function TDreamcastSoftwareDevelopmentSettings.GetConfigurationFileName: TFileNa
 begin
   if (fConfigurationFileName = '') then
   begin
-    fConfigurationFileName := GetApplicationPath + SETTINGS_FULL_FILE_PATH;
+    fConfigurationFileName := GetApplicationPath
+      + UnixPathToSystem(SETTINGS_DIRECTORY) + SETTINGS_FILE_NAME;
 {$IFDEF DEBUG}
     if not FileExists(fConfigurationFileName) then
       fConfigurationFileName := GetApplicationPath + SETTINGS_FILE_NAME;

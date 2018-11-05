@@ -1,12 +1,12 @@
-Unit Version;
+unit Version;
 
 {$mode objfpc}{$H+}
 
-Interface
+interface
 
 (*
-  Building on the excellent vinfo.pas supplied by Paul Ishenin and available elsewhere on these Lazarus
-  Forums
+  Building on the excellent vinfo.pas supplied by Paul Ishenin and available
+  elsewhere on these Lazarus Forums
     - I hid the TVersionInfo class from the end user to simplify their (mine) number of required Uses...
     - Added defensive code to TVersionInfo if no build info is compiled into the exe
     - Deduced GetResourceStrings - works under Linux 64/GTK2 with Lazarus 0.9.30, but fails under
@@ -28,36 +28,40 @@ Interface
 
   Mike Thompson - mike.cornflake@gmail.com
   July 24 2011
+
+  Adjustements by SiZiOUS - sizious(at)gmail(d0t)com
+  Nov 5 2018
 *)
 
-Uses
+uses
   Classes, SysUtils;
 
-Function GetFileVersion: String;
-Function GetProductVersion: String;
-Function GetCompiledDate: String;
-Function GetCompilerInfo: String;
-Function GetTargetInfo: String;
-Function GetOS: String;
-Function GetResourceStrings(oStringList : TStringList) : Boolean;
-Function GetLCLVersion: String;
+function GetFileVersion: string;
+function GetProductName: string;
+function GetProductVersion: string;
+function GetCompiledDateTime: TDateTime;
+function GetCompilerInfo: string;
+function GetTargetInfo: string;
+function GetOS: string;
+function GetResourceStrings(oStringList: TStringList): Boolean;
+function GetLCLVersion: string;
 function GetWidgetSet: string;
 
-Const
-  WIDGETSET_GTK        = 'GTK widget set';
-  WIDGETSET_GTK2       = 'GTK 2 widget set';
-  WIDGETSET_WIN        = 'Win32/Win64 widget set';
-  WIDGETSET_WINCE      = 'WinCE widget set';
-  WIDGETSET_CARBON     = 'Carbon widget set';
-  WIDGETSET_QT         = 'QT widget set';
-  WIDGETSET_fpGUI      = 'fpGUI widget set';
-  WIDGETSET_OTHER      = 'Other gui';
+const
+  WIDGETSET_GTK        = 'GTK';
+  WIDGETSET_GTK2       = 'GTK 2';
+  WIDGETSET_WIN        = 'Win32/Win64';
+  WIDGETSET_WINCE      = 'WinCE';
+  WIDGETSET_CARBON     = 'Carbon';
+  WIDGETSET_QT         = 'QT';
+  WIDGETSET_fpGUI      = 'fpGUI';
+  WIDGETSET_OTHER      = '(Other)';
 
-Implementation
+implementation
 
 Uses
   Resource, VersionTypes, VersionResource, LCLVersion, InterfaceBase,
-  LCLPlatformDef;
+  LCLPlatformDef, DateUtils;
 
 Type
   TVersionInfo = Class
@@ -97,12 +101,12 @@ end;
 
 Function GetCompilerInfo: String;
 begin
-  Result := 'FPC '+{$I %FPCVERSION%};
+  Result := 'FPC ' + {$I %FPCVERSION%};
 end;
 
 Function GetTargetInfo: String;
 begin
-  Result := {$I %FPCTARGETCPU%}+' - '+{$I %FPCTARGETOS%};
+  Result := {$I %FPCTARGETCPU%} + '/' + {$I %FPCTARGETOS%};
 end;
 
 Function GetOS: String;
@@ -112,18 +116,27 @@ End;
 
 Function GetLCLVersion: String;
 begin
-  Result := 'LCL '+lcl_version;
+  Result := lcl_version;
 end;
 
-Function GetCompiledDate: String;
-Var
-  sDate, sTime: String;
-Begin
-  sDate := {$I %DATE%};
-  sTime := {$I %TIME%};
+function GetCompiledDateTime: TDateTime;
+var
+  sDate, sTime: string;
+  dYYYY, dMM, dDD, tHH, tMM, tSS: Integer;
 
-  Result := sDate + ' at ' + sTime;
-End;
+begin
+  sDate := {$I %DATE%};
+  dYYYY := StrToIntDef(Copy(sDate, 1, 4), 0);
+  dMM := StrToIntDef(Copy(sDate, 6, 2), 0);
+  dDD := StrToIntDef(Copy(sDate, 9, 2), 0);
+
+  sTime := {$I %TIME%};
+  tHH := StrToIntDef(Copy(sTime, 1, 2), 0);
+  tMM := StrToIntDef(Copy(sTime, 4, 2), 0);
+  tSS := StrToIntDef(Copy(sTime, 7, 2), 0);
+
+  Result := EncodeDateTime(dYYYY, dMM, dDD, tHH, tMM, tSS, 0);
+end;
 
 { Routines to expose TVersionInfo data }
 
@@ -177,6 +190,14 @@ Begin
   Else
     Result := 'No build information available';
 End;
+
+function GetProductName: string;
+begin
+  CreateInfo;
+
+  if FInfo.BuildInfoAvailable and (FInfo.StringFileInfo.Count > 0) then
+    Result := FInfo.StringFileInfo[0].Values['ProductName'];
+end;
 
 Function GetFileVersion: String;
 Begin
