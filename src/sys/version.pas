@@ -47,6 +47,7 @@ function GetOS: string;
 function GetResourceStrings(oStringList: TStringList): Boolean;
 function GetLCLVersion: string;
 function GetWidgetSet: string;
+function GetCompanyName: string;
 
 const
   WIDGETSET_GTK        = 'GTK';
@@ -223,6 +224,11 @@ end;
 function GetFileDescription: string;
 begin
   Result := GetVersionString('FileDescription');
+end;
+
+function GetCompanyName: string;
+begin
+  Result := GetVersionString('CompanyName');
 end;
 
 Function GetFileVersion: String;
