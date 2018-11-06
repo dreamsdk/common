@@ -5,10 +5,14 @@ unit SysTools;
 interface
 
 uses
-  Classes, SysUtils, Forms;
+  Classes, SysUtils;
+
+const
+  STRING_DATE_FORMAT = 'YYYY-MM-DD @ HH:mm:ss';
 
 function ExtractStr(LeftSubStr, RightSubStr, S: string): string;
 function ExtremeRight(SubStr: string ; S: string): string;
+function GetApplicationPath: TFileName;
 function GetSubStrCount(SubStr, S: string): Integer;
 function IsInString(const SubStr, S: string): Boolean;
 function IsValidInternetProtocolAddress(InternetProtocolAddress: string): Boolean;
@@ -17,12 +21,16 @@ function LeftNRight(SubStr, S: string; N: Integer): string;
 function Right(SubStr: string; S: string): string;
 function Run(Executable: string): string; overload;
 function Run(Executable, CommandLine: string): string; overload;
+function Run(Executable, CommandLine: string; var ProcessId: Integer): string; overload;
 function RunNoWait(Executable: string): Boolean; overload;
 function RunNoWait(Executable, CommandLine: string): Boolean; overload;
 
 implementation
 
 uses
+{$IFDEF GUI}
+  Forms,
+{$ENDIF}
 {$IFDEF DEBUG}
   Dialogs,
 {$ENDIF}
@@ -31,6 +39,9 @@ uses
   , UTF8Process
 {$ENDIF}
   ;
+
+var
+  ApplicationPath: TFileName = '';
 
 // Thanks Michel (Phidels.com)
 function GetSubStrCount(SubStr, S: string): Integer;
@@ -111,9 +122,18 @@ begin
   Result := Run(Executable, '');
 end;
 
+function Run(Executable, CommandLine: string): string;
+var
+  UselessProcessId: Integer;
+
+begin
+  UselessProcessId := 0;
+  Result := Run(Executable, CommandLine, ProcessId);
+end;
+
 // Thanks to Marc Weustink and contributors
 // http://wiki.freepascal.org/Executing_External_Programs
-function Run(Executable, CommandLine: string): string;
+function Run(Executable, CommandLine: string; var ProcessId: Integer): string;
 const
   READ_BYTES = 2048;
 
@@ -153,12 +173,14 @@ begin
       OurProcess.ShowWindow := swoHide;
       OurProcess.Execute;
 
-      ExitCode := OurProcess.ExitCode;
+      ProcessId := OurProcess.ProcessID;
 
       while True do
       begin
+{$IFDEF GUI}
         // Refresh the GUI
         Application.ProcessMessages;
+{$ENDIF}
 
         // make sure we have room
         MemStream.SetSize(BytesRead + READ_BYTES);
@@ -204,21 +226,49 @@ var
   InvalidAddress: Boolean;
 
 begin
-  net1 := StrToInt(TrimRight(Copy(InternetProtocolAddress, 0, 3)));
-  net2 := StrToInt(TrimRight(Copy(InternetProtocolAddress, 5, 3)));
-  host1 := StrToInt(TrimRight(Copy(InternetProtocolAddress, 9, 3)));
-  host2 := StrToInt(TrimRight(Copy(InternetProtocolAddress, 13, 3)));
-  InvalidAddress := (
-    (net1 < 0) or
-    (net1 > 255) or
-    (net2 < 0) or
-    (net2 > 255) or
-    (host1 < 0) or
-    (host1 > 255) or
-    (host2 < 0) or
-    (host2 > 255)
-  );
-  Result := not InvalidAddress;
+  try
+    net1 := StrToInt(TrimRight(Copy(InternetProtocolAddress, 0, 3)));
+    net2 := StrToInt(TrimRight(Copy(InternetProtocolAddress, 5, 3)));
+    host1 := StrToInt(TrimRight(Copy(InternetProtocolAddress, 9, 3)));
+    host2 := StrToInt(TrimRight(Copy(InternetProtocolAddress, 13, 3)));
+    InvalidAddress := (
+      (net1 < 0) or
+      (net1 > 255) or
+      (net2 < 0) or
+      (net2 > 255) or
+      (host1 < 0) or
+      (host1 > 255) or
+      (host2 < 0) or
+      (host2 > 255)
+    );
+    Result := not InvalidAddress;
+  except
+    Result := False;
+  end;
+end;
+
+function GetApplicationPath: TFileName;
+var
+  Path: TFileName;
+{$IFDEF Darwin}
+  i: Integer;
+{$ENDIF}
+
+begin
+  if (ApplicationPath = '') then
+  begin
+    Path := ExtractFilePath(ParamStr(0));
+{$IFDEF Darwin}
+    i := Pos('.app', Path);
+    if i > 0 then
+    begin
+      i := LastDelimiter('/', Copy(Path, 1, i));
+      Path := Copy(Path, 1, i);
+    end;
+{$ENDIF}
+    ApplicationPath := IncludeTrailingPathDelimiter(Path);
+  end;
+  Result := ApplicationPath;
 end;
 
 end.

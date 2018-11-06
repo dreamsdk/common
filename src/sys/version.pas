@@ -36,6 +36,7 @@ interface
 uses
   Classes, SysUtils;
 
+function GetFileDescription: string;
 function GetFileVersion: string;
 function GetProductName: string;
 function GetProductVersion: string;
@@ -101,7 +102,7 @@ end;
 
 Function GetCompilerInfo: String;
 begin
-  Result := 'FPC ' + {$I %FPCVERSION%};
+  Result := {$I %FPCVERSION%};
 end;
 
 Function GetTargetInfo: String;
@@ -152,6 +153,29 @@ Begin
   End;
 End;
 
+function GetVersionStringTable: TVersionStringTable;
+begin
+  Result := nil;
+  CreateInfo;
+  if FInfo.BuildInfoAvailable and (FInfo.StringFileInfo.Count > 0) then
+    Result := FInfo.StringFileInfo[0];
+end;
+
+function GetVersionString(const Key: string): string;
+var
+  VersionStringTable: TVersionStringTable;
+
+begin
+  Result := '';
+  try
+    VersionStringTable := GetVersionStringTable;
+    if Assigned(VersionStringTable) then
+      Result := VersionStringTable.Values[Key];
+  except
+    Result := '';
+  end;
+end;
+
 Function GetResourceStrings(oStringList: TStringList): Boolean;
 Var
   i, j : Integer;
@@ -193,10 +217,12 @@ End;
 
 function GetProductName: string;
 begin
-  CreateInfo;
+  Result := GetVersionString('ProductName');
+end;
 
-  if FInfo.BuildInfoAvailable and (FInfo.StringFileInfo.Count > 0) then
-    Result := FInfo.StringFileInfo[0].Values['ProductName'];
+function GetFileDescription: string;
+begin
+  Result := GetVersionString('FileDescription');
 end;
 
 Function GetFileVersion: String;

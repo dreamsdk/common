@@ -110,15 +110,13 @@ type
   { TDreamcastSoftwareDevelopmentSettings }
   TDreamcastSoftwareDevelopmentSettings = class(TObject)
   private
-    fApplicationPath: TFileName;
     fConfigurationFileName: TFileName;
     fInstallPath: TFileName;
     fRepositories: TDreamcastSoftwareDevelopmentSettingsRepositories;
     fUseMinTTY: Boolean;
     fDreamcastTool: TDreamcastSoftwareDevelopmentSettingsDreamcastTool;
   protected
-    function GetApplicationPath: TFileName;
-  function GetConfigurationFileName: TFileName;
+    function GetConfigurationFileName: TFileName;
   public
     constructor Create;
     destructor Destroy; override;
@@ -139,6 +137,9 @@ function SerialBaudrateToString(SerialBaudrate: TDreamcastToolSerialBaudrate): s
 function UnixPathToSystem(const PathName: TFileName): TFileName;
 
 implementation
+
+uses
+  SysTools;
 
 const
   CONFIG_SETTINGS_SECTION_NAME = 'Settings';
@@ -342,35 +343,11 @@ end;
 
 { TDreamcastSoftwareDevelopmentSettingsDreamcastTool }
 
-function TDreamcastSoftwareDevelopmentSettings.GetApplicationPath: TFileName;
-var
-  Path: TFileName;
-{$IFDEF Darwin}
-  i: Integer;
-{$ENDIF}
-
-begin
-  if (fApplicationPath = '') then
-  begin
-    Path := ExtractFilePath(ParamStr(0));
-{$IFDEF Darwin}
-    i := Pos('.app', Path);
-    if i > 0 then
-    begin
-      i := LastDelimiter('/', Copy(Path, 1, i));
-      Path := Copy(Path, 1, i);
-    end;
-{$ENDIF}
-    fApplicationPath := IncludeTrailingPathDelimiter(Path);
-  end;
-  Result := fApplicationPath;
-end;
-
 function TDreamcastSoftwareDevelopmentSettings.GetConfigurationFileName: TFileName;
 begin
   if (fConfigurationFileName = '') then
   begin
-    fConfigurationFileName := GetApplicationPath
+    fConfigurationFileName := GetApplicationPath + '..\..\'
       + UnixPathToSystem(SETTINGS_DIRECTORY) + SETTINGS_FILE_NAME;
 {$IFDEF DEBUG}
     if not FileExists(fConfigurationFileName) then
