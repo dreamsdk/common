@@ -48,6 +48,7 @@ function GetResourceStrings(oStringList: TStringList): Boolean;
 function GetLCLVersion: string;
 function GetWidgetSet: string;
 function GetCompanyName: string;
+function GetLegalCopyright: string;
 
 const
   WIDGETSET_GTK        = 'GTK';
@@ -229,6 +230,11 @@ end;
 function GetCompanyName: string;
 begin
   Result := GetVersionString('CompanyName');
+end;
+
+function GetLegalCopyright: string;
+begin
+  Result := GetVersionString('LegalCopyright');
 end;
 
 Function GetFileVersion: String;
