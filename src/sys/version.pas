@@ -289,10 +289,12 @@ Begin
   FBuildInfoAvailable := False;
   ResID := 1;
 
+{$IFDEF Windows}
   // Defensive code to prevent failure if no resource available...
-  Res := FindResource(Instance, PChar(PtrInt(ResID)), PChar(RT_VERSION));
+  Res := FindResource(Instance, {%H-}PChar(PtrUInt(ResID)), PChar(RT_VERSION));
   If Res = 0 Then
     Exit;
+{$ENDIF}
 
   Stream := TResourceStream.CreateFromID(Instance, ResID, PChar(RT_VERSION));
   Try

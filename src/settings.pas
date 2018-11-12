@@ -146,6 +146,17 @@ const
   CONFIG_DREAMCAST_TOOL_SECTION_NAME = 'DreamcastTool';
   CONFIG_REPOSITORIES_SECTION_NAME = 'Repositories';
 
+  DREAMCAST_TOOL_DEFAULT_KIND = 0;
+  DREAMCAST_TOOL_DEFAULT_ALWAYS_START_DEBUGGER = False;
+  DREAMCAST_TOOL_DEFAULT_ATTACH_CONSOLE_FILESERVER = True;
+  DREAMCAST_TOOL_DEFAULT_CLEAR_SCREEN_BEFORE_DOWNLOAD = True;
+  DREAMCAST_TOOL_DEFAULT_INTERNET_PROTOCOL_ADDRESS = '000.000.000.000';
+  DREAMCAST_TOOL_DEFAULT_SERIAL_DUMB_TERMINAL = False;
+  DREAMCAST_TOOL_DEFAULT_SERIAL_EXTERNAL_CLOCK = False;
+  DREAMCAST_TOOL_DEFAULT_SERIAL_BAUDRATE = 7;
+  DREAMCAST_TOOL_DEFAULT_SERIAL_BAUDRATE_ALTERNATE = False;
+  DREAMCAST_TOOL_DEFAULT_SERIAL_PORT = 0;
+
 function UnixPathToSystem(const PathName: TFileName): TFileName;
 begin
   Result := StringReplace(PathName, '/', DirectorySeparator, [rfReplaceAll]);
@@ -185,52 +196,52 @@ begin
   fDreamcastToolKind := TDreamcastToolKind(IniFile.ReadInteger(
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
     'Kind',
-    0
+    DREAMCAST_TOOL_DEFAULT_KIND
   ));
   fAlwaysStartDebugger := IniFile.ReadBool(
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
     'AlwaysStartDebugger',
-    False
+    DREAMCAST_TOOL_DEFAULT_ALWAYS_START_DEBUGGER
   );
   fAttachConsoleFileserver := IniFile.ReadBool(
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
     'AttachConsoleFileserver',
-    True
+    DREAMCAST_TOOL_DEFAULT_ATTACH_CONSOLE_FILESERVER
   );
   fClearScreenBeforeDownload := IniFile.ReadBool(
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
     'ClearScreenBeforeDownload',
-    True
+    DREAMCAST_TOOL_DEFAULT_CLEAR_SCREEN_BEFORE_DOWNLOAD
   );
   fInternetProtocolAddress := IniFile.ReadString(
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
     'InternetProtocolAddress',
-    '000.000.000.000'
+    DREAMCAST_TOOL_DEFAULT_INTERNET_PROTOCOL_ADDRESS
   );
   fSerialDumbTerminal := IniFile.ReadBool(
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
     'SerialDumbTerminal',
-    False
+    DREAMCAST_TOOL_DEFAULT_SERIAL_DUMB_TERMINAL
   );
   fSerialExternalClock := IniFile.ReadBool(
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
     'SerialExternalClock',
-    False
+    DREAMCAST_TOOL_DEFAULT_SERIAL_EXTERNAL_CLOCK
   );
   fSerialBaudrate := TDreamcastToolSerialBaudrate(IniFile.ReadInteger(
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
     'SerialBaudrate',
-    0
+    DREAMCAST_TOOL_DEFAULT_SERIAL_BAUDRATE
   ));
   fSerialBaudrateAlternate := IniFile.ReadBool(
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
     'SerialBaudrateAlternate',
-    False
+    DREAMCAST_TOOL_DEFAULT_SERIAL_BAUDRATE_ALTERNATE
   );
   fSerialPort := TDreamcastToolSerialPort(IniFile.ReadInteger(
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
     'SerialPort',
-    0
+    DREAMCAST_TOOL_DEFAULT_SERIAL_PORT
   ));
 end;
 
