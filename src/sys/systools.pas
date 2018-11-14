@@ -24,10 +24,15 @@ function Run(Executable, CommandLine: string): string; overload;
 function Run(Executable, CommandLine: string; var ProcessId: Integer): string; overload;
 function RunNoWait(Executable: string): Boolean; overload;
 function RunNoWait(Executable, CommandLine: string): Boolean; overload;
+function RunShellExecute(Executable, CommandLine: string): Boolean; overload;
+function RunShellExecute(Executable: string): Boolean; overload;
 
 implementation
 
 uses
+{$IFDEF Windows}
+  ShellApi,
+{$ENDIF}
 {$IFDEF GUI}
   Forms,
 {$ENDIF}
@@ -269,6 +274,21 @@ begin
     ApplicationPath := IncludeTrailingPathDelimiter(Path);
   end;
   Result := ApplicationPath;
+end;
+
+function RunShellExecute(Executable: string): Boolean;
+begin
+  Result := RunShellExecute(Executable, '');
+end;
+
+function RunShellExecute(Executable, CommandLine: string): Boolean;
+begin
+{$IFDEF Windows}
+  Result := ShellExecute(0, 'open', PChar(Executable), PChar(CommandLine),
+    PChar(ExtractFilePath(Executable)), 1) > 32;
+{$ELSE}
+  Result := False;
+{$ENDIF}
 end;
 
 end.
