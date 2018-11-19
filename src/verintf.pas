@@ -18,8 +18,14 @@ type
     ProductVersion: string;
   end;
 
+const
+  INVALID_VERSION = '(##INVALID##)';
+
 function LoadModuleVersion(const FileName: TFileName; const ProcessId: Integer): TModuleVersion;
 procedure SaveModuleVersion(const FileName: TFileName; const ProcessId: Integer);
+function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string): string;
+function RetrieveVersionWithFind(FindTargetFileName: TFileName; StartTag, EndTag: string): string;
+function IsVersionValid(const Version: string): Boolean;
 
 implementation
 
@@ -82,6 +88,37 @@ begin
     end;
     DeleteFile(DumpFileName);
   end;
+end;
+
+function IsVersionValid(const Version: string): Boolean;
+begin
+  Result := not IsInString(INVALID_VERSION, Version);
+end;
+
+function RetrieveVersion(Executable, CommandLine, StartTag,
+  EndTag: string): string;
+var
+  Buffer: string;
+
+begin
+  try
+    Buffer := Run(Executable, CommandLine);
+    Result := Trim(ExtractStr(StartTag, EndTag, Buffer));
+  except
+    Result := INVALID_VERSION;
+  end;
+end;
+
+function RetrieveVersionWithFind(FindTargetFileName: TFileName; StartTag,
+  EndTag: string): string;
+var
+  CommandLine: string;
+
+begin
+  CommandLine := Format('"%s" %s', [StartTag, FindTargetFileName]);
+  Result := RetrieveVersion('find', CommandLine, StartTag, EndTag);
+  if (Result = '') then
+    Result := INVALID_VERSION;
 end;
 
 end.
