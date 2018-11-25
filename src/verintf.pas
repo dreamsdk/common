@@ -32,6 +32,10 @@ implementation
 uses
   SysTools, Version;
 
+var
+  GrepFileName: TFileName;
+  ComSpecFileName: TFileName;
+
 function GetDumpVersionFileName(const FileName: TFileName;
   ProcessId: Integer): TFileName;
 var
@@ -115,11 +119,26 @@ var
   CommandLine: string;
 
 begin
-  CommandLine := Format('"%s" %s', [StartTag, FindTargetFileName]);
-  Result := RetrieveVersion('find', CommandLine, StartTag, EndTag);
+  if FileExists(GrepFileName) then
+  begin
+    CommandLine := Format('/c type "%s" | "%s" --text "%s" ', [FindTargetFileName,
+      GrepFileName, StartTag]);
+    Result := RetrieveVersion('cmd', CommandLine, StartTag, EndTag);
+  end
+  else
+  begin
+    CommandLine := Format('"%s" %s', [StartTag, FindTargetFileName]);
+    Result := RetrieveVersion('find', CommandLine, StartTag, EndTag);
+  end;
+
   if (Result = '') then
     Result := INVALID_VERSION;
 end;
+
+initialization
+  GrepFileName := IncludeTrailingPathDelimiter(GetEnvironmentVariable('DREAMSDK_HOME'))
+    + 'msys\1.0\bin\grep.exe';
+  ComSpecFileName := GetEnvironmentVariable('COMSPEC');
 
 end.
 
