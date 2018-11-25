@@ -53,7 +53,7 @@ function GetLegalCopyright: string;
 const
   WIDGETSET_GTK        = 'GTK';
   WIDGETSET_GTK2       = 'GTK 2';
-  WIDGETSET_WIN        = 'Win32/Win64';
+  WIDGETSET_WIN        = 'Windows';
   WIDGETSET_WINCE      = 'WinCE';
   WIDGETSET_CARBON     = 'Carbon';
   WIDGETSET_QT         = 'QT';
