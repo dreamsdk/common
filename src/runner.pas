@@ -1,0 +1,177 @@
+unit Runner;
+
+{$mode objfpc}{$H+}
+
+interface
+
+uses
+  Classes, SysUtils, Settings, RunCmd;
+
+type
+
+  { TDreamcastSoftwareDevelopmentKitRunner }
+
+  TDreamcastSoftwareDevelopmentKitRunner = class(TObject)
+  private
+    fShellCommand: TRunCommand;
+    fShellCommandRunning: Boolean;
+    fExecutableMinTTY: TFileName;
+    fExecutableShell: TFileName;
+    fEnvironmentVariables: TStringList;
+    fSettings: TDreamcastSoftwareDevelopmentSettings;
+    procedure InitializeEnvironment;
+    function GetHealthy: Boolean;
+    procedure RetrieveEnvironmentVariables;
+    procedure HandleNewLine(Sender: TObject; NewLine: string);
+    procedure HandleTerminate(Sender: TObject);
+    procedure HandleExecuteEnd(Sender: TObject);
+  protected
+    property Settings: TDreamcastSoftwareDevelopmentSettings read fSettings;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    function CheckHealty: Boolean;
+    procedure StartShell;
+    procedure StartShellCommand(const CommandLine: string);
+    property Healthy: Boolean read GetHealthy;
+  end;
+
+implementation
+
+uses
+  SysTools,
+{$IFDEF Windows}
+  Windows,
+{$ENDIF}
+  Process
+{$IF Defined(Unix) OR Defined(Darwin)}
+  , UTF8Process
+{$ENDIF}
+  ;
+
+resourcestring
+  ShellApplicationWindowTitle   = 'DreamSDK Shell Launcher';
+  MSYSShellNotFound             = 'MinGW/MSYS is not properly installed.';
+  ErrorTitle                    = 'Error';
+
+{ TDreamcastSoftwareDevelopmentKitRunner }
+
+procedure TDreamcastSoftwareDevelopmentKitRunner.InitializeEnvironment;
+const
+  BINARY_DIRECTORY = 'msys\1.0\bin\';
+
+begin
+  fExecutableMinTTY := Settings.InstallPath + BINARY_DIRECTORY + 'mintty.exe';
+  fExecutableShell := Settings.InstallPath + BINARY_DIRECTORY + 'sh.exe';
+end;
+
+function TDreamcastSoftwareDevelopmentKitRunner.GetHealthy: Boolean;
+begin
+  Result := FileExists(fExecutableShell)
+    and FileExists(fExecutableMinTTY);
+end;
+
+procedure TDreamcastSoftwareDevelopmentKitRunner.HandleNewLine(Sender: TObject;
+  NewLine: string);
+begin
+  WriteLn(NewLine + sLineBreak);
+end;
+
+procedure TDreamcastSoftwareDevelopmentKitRunner.HandleTerminate(Sender: TObject);
+begin
+{$IFDEF DEBUG}
+  WriteLn('*** END ***');
+{$ENDIF}
+end;
+
+procedure TDreamcastSoftwareDevelopmentKitRunner.HandleExecuteEnd(Sender: TObject);
+begin
+  fShellCommandRunning := False;
+end;
+
+procedure TDreamcastSoftwareDevelopmentKitRunner.StartShellCommand(
+  const CommandLine: string);
+begin
+  fShellCommand := TRunCommand.Create(True);
+
+  fShellCommand.Executable := fExecutableShell;
+  fShellCommand.Parameters.Add('--login');
+  fShellCommand.Parameters.Add('-i');
+  fShellCommand.Environment.Add('_EXTERNAL_COMMAND=' + CommandLine);
+
+  SetConsoleTitle(PChar(ShellApplicationWindowTitle));
+
+  fShellCommand.OnNewLine := @HandleNewLine;
+  fShellCommand.OnTerminate := @HandleTerminate;
+
+  fShellCommand.Start;
+  fShellCommand.WaitFor;
+end;
+
+procedure TDreamcastSoftwareDevelopmentKitRunner.StartShell;
+var
+  OurProcess: {$IFDEF Windows}TProcess{$ELSE}TProcessUTF8{$ENDIF};
+
+begin
+  RetrieveEnvironmentVariables;
+
+  OurProcess := {$IFDEF Windows}TProcess{$ELSE}TProcessUTF8{$ENDIF}.Create(nil);
+  try
+    // Initialize Environment context
+    OurProcess.Environment.AddStrings(fEnvironmentVariables);
+
+    // Extracted from msys.bat
+    if Settings.UseMinTTY then
+    begin
+      OurProcess.Executable := fExecutableMinTTY;
+      OurProcess.Parameters.Add('/bin/bash');
+      OurProcess.Parameters.Add('-l');
+    end
+    else
+    begin
+      OurProcess.Executable := fExecutableShell;
+      OurProcess.Parameters.Add('--login');
+      OurProcess.Parameters.Add('-i');
+    end;
+
+    // Execute our process
+    OurProcess.Execute;
+  finally
+    OurProcess.Free;
+  end;
+end;
+
+procedure TDreamcastSoftwareDevelopmentKitRunner.RetrieveEnvironmentVariables;
+var
+  i: Integer;
+
+begin
+  for i := 1 to GetEnvironmentVariableCount do
+    fEnvironmentVariables.Add(GetEnvironmentString(i));
+end;
+
+constructor TDreamcastSoftwareDevelopmentKitRunner.Create;
+begin
+  fEnvironmentVariables := TStringList.Create;
+  fSettings := TDreamcastSoftwareDevelopmentSettings.Create;
+  Settings.LoadConfiguration;
+  InitializeEnvironment;
+end;
+
+destructor TDreamcastSoftwareDevelopmentKitRunner.Destroy;
+begin
+  fShellCommand := nil;
+  fEnvironmentVariables.Free;
+  fSettings.Free;
+  inherited Destroy;
+end;
+
+function TDreamcastSoftwareDevelopmentKitRunner.CheckHealty: Boolean;
+begin
+  Result := Healthy;
+  if not Healthy then
+    MessageBox(0, PChar(MSYSShellNotFound), PChar(ErrorTitle), MB_ICONERROR);
+end;
+
+end.
+
