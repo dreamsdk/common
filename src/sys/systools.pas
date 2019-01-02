@@ -16,6 +16,7 @@ function GetApplicationPath: TFileName;
 function GetSubStrCount(SubStr, S: string): Integer;
 function IsInString(const SubStr, S: string): Boolean;
 function IsValidInternetProtocolAddress(InternetProtocolAddress: string): Boolean;
+function IsValidMediaAccessControlAddress(MediaAccessControlAddress: string): Boolean;
 function Left(SubStr: string; S: string): string;
 function LeftNRight(SubStr, S: string; N: Integer): string;
 function Right(SubStr: string; S: string): string;
@@ -30,6 +31,7 @@ function RunShellExecute(Executable: string): Boolean; overload;
 implementation
 
 uses
+  RegExpr,
 {$IFDEF Windows}
   ShellApi,
 {$ENDIF}
@@ -249,6 +251,21 @@ begin
     Result := not InvalidAddress;
   except
     Result := False;
+  end;
+end;
+
+// Thanks to: https://stackoverflow.com/a/4260512/3726096
+function IsValidMediaAccessControlAddress(MediaAccessControlAddress: string): Boolean;
+var
+  RegexObj: TRegExpr;
+
+begin
+  RegexObj := TRegExpr.Create;
+  try
+    RegexObj.Expression := '^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$';
+    Result := RegexObj.Exec(MediaAccessControlAddress);
+  finally
+    RegexObj.Free;
   end;
 end;
 

@@ -5,16 +5,17 @@ unit UITools;
 interface
 
 uses
-  Classes, SysUtils;
+{$IFDEF Windows}
+  Windows,
+{$ENDIF}
+  Classes,
+  SysUtils,
+  Controls;
 
 function IsAeroEnabled: Boolean;
+procedure SetControlMultilineLabel(Control: TWinControl);
 
 implementation
-
-{$IFDEF Windows}
-uses
-  Windows;
-{$ENDIF}
 
 function IsAeroEnabled: Boolean;
 {$IFDEF Windows}
@@ -43,6 +44,13 @@ begin
 begin
   Result := False;
 {$ENDIF}
+end;
+
+// https://forum.lazarus.freepascal.org/index.php?topic=21018.0
+procedure SetControlMultilineLabel(Control: TWinControl);
+begin
+  SetWindowLong(Control.Handle, GWL_STYLE,
+    GetWindowLong(Control.Handle, GWL_STYLE) or BS_MULTILINE);
 end;
 
 end.

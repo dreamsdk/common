@@ -50,11 +50,12 @@ type
   { TDreamcastSoftwareDevelopmentSettingsDreamcastTool }
   TDreamcastSoftwareDevelopmentSettingsDreamcastTool = class(TObject)
   private
-    fAlwaysStartDebugger: Boolean;
     fAttachConsoleFileserver: Boolean;
     fClearScreenBeforeDownload: Boolean;
     fDreamcastToolKind: TDreamcastToolKind;
     fInternetProtocolAddress: string;
+    fMediaAccessControlAddress: string;
+    fMediaAccessControlEnabled: Boolean;
     fSerialDumbTerminal: Boolean;
     fSerialExternalClock: Boolean;
     fSerialBaudrate: TDreamcastToolSerialBaudrate;
@@ -70,8 +71,6 @@ type
       read fAttachConsoleFileserver write fAttachConsoleFileserver;
     property ClearScreenBeforeDownload: Boolean
       read fClearScreenBeforeDownload write fClearScreenBeforeDownload;
-    property AlwaysStartDebugger: Boolean
-      read fAlwaysStartDebugger write fAlwaysStartDebugger;
     property SerialPort: TDreamcastToolSerialPort
       read fSerialPort write fSerialPort;
     property SerialBaudrate: TDreamcastToolSerialBaudrate
@@ -84,6 +83,10 @@ type
       read fSerialDumbTerminal write fSerialDumbTerminal;
     property InternetProtocolAddress: string
       read fInternetProtocolAddress write fInternetProtocolAddress;
+    property MediaAccessControlEnabled: Boolean
+      read fMediaAccessControlEnabled write fMediaAccessControlEnabled;
+    property MediaAccessControlAddress: string
+      read fMediaAccessControlAddress write fMediaAccessControlAddress;
   end;
 
   { TDreamcastSoftwareDevelopmentSettingsRepositories }
@@ -132,6 +135,7 @@ type
       read fRepositories;
   end;
 
+function GetConfigurationDirectory: TFileName;
 function SerialPortToString(SerialPort: TDreamcastToolSerialPort): string;
 function SerialBaudrateToString(SerialBaudrate: TDreamcastToolSerialBaudrate): string;
 function UnixPathToSystem(const PathName: TFileName): TFileName;
@@ -147,10 +151,11 @@ const
   CONFIG_REPOSITORIES_SECTION_NAME = 'Repositories';
 
   DREAMCAST_TOOL_DEFAULT_KIND = 0;
-  DREAMCAST_TOOL_DEFAULT_ALWAYS_START_DEBUGGER = False;
   DREAMCAST_TOOL_DEFAULT_ATTACH_CONSOLE_FILESERVER = True;
   DREAMCAST_TOOL_DEFAULT_CLEAR_SCREEN_BEFORE_DOWNLOAD = True;
   DREAMCAST_TOOL_DEFAULT_INTERNET_PROTOCOL_ADDRESS = '000.000.000.000';
+  DREAMCAST_TOOL_DEFAULT_MEDIA_ACCESS_CONTROL_ENABLED = False;
+  DREAMCAST_TOOL_DEFAULT_MEDIA_ACCESS_CONTROL_ADDRESS = '00-00-00-00-00-00';
   DREAMCAST_TOOL_DEFAULT_SERIAL_DUMB_TERMINAL = False;
   DREAMCAST_TOOL_DEFAULT_SERIAL_EXTERNAL_CLOCK = False;
   DREAMCAST_TOOL_DEFAULT_SERIAL_BAUDRATE = 7;
@@ -161,6 +166,12 @@ function UnixPathToSystem(const PathName: TFileName): TFileName;
 begin
   Result := StringReplace(PathName, '/', DirectorySeparator, [rfReplaceAll]);
   Result := IncludeTrailingPathDelimiter(Copy(Result, 2, Length(Result) - 1));
+end;
+
+function GetConfigurationDirectory: TFileName;
+begin
+  Result := IncludeTrailingPathDelimiter(GetApplicationPath + '..\..\'
+    + UnixPathToSystem(SETTINGS_DIRECTORY));
 end;
 
 function SerialPortToString(SerialPort: TDreamcastToolSerialPort): string;
@@ -198,11 +209,6 @@ begin
     'Kind',
     DREAMCAST_TOOL_DEFAULT_KIND
   ));
-  fAlwaysStartDebugger := IniFile.ReadBool(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
-    'AlwaysStartDebugger',
-    DREAMCAST_TOOL_DEFAULT_ALWAYS_START_DEBUGGER
-  );
   fAttachConsoleFileserver := IniFile.ReadBool(
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
     'AttachConsoleFileserver',
@@ -217,6 +223,16 @@ begin
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
     'InternetProtocolAddress',
     DREAMCAST_TOOL_DEFAULT_INTERNET_PROTOCOL_ADDRESS
+  );
+  fMediaAccessControlEnabled := IniFile.ReadBool(
+    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    'MediaAccessControlEnabled',
+    DREAMCAST_TOOL_DEFAULT_MEDIA_ACCESS_CONTROL_ENABLED
+  );
+  fMediaAccessControlAddress := IniFile.ReadString(
+    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    'MediaAccessControlAddress',
+    DREAMCAST_TOOL_DEFAULT_MEDIA_ACCESS_CONTROL_ADDRESS
   );
   fSerialDumbTerminal := IniFile.ReadBool(
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
@@ -255,11 +271,6 @@ begin
   );
   IniFile.WriteBool(
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
-    'AlwaysStartDebugger',
-    fAlwaysStartDebugger
-  );
-  IniFile.WriteBool(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
     'AttachConsoleFileserver',
     fAttachConsoleFileserver
   );
@@ -272,6 +283,16 @@ begin
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
     'InternetProtocolAddress',
     fInternetProtocolAddress
+  );
+  IniFile.WriteBool(
+    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    'MediaAccessControlEnabled',
+    fMediaAccessControlEnabled
+  );
+  IniFile.WriteString(
+    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    'MediaAccessControlAddress',
+    fMediaAccessControlAddress
   );
   IniFile.WriteBool(
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
@@ -357,15 +378,14 @@ end;
 function TDreamcastSoftwareDevelopmentSettings.GetConfigurationFileName: TFileName;
 begin
   if (fConfigurationFileName = '') then
-  begin
-    fConfigurationFileName := GetApplicationPath + '..\..\'
-      + UnixPathToSystem(SETTINGS_DIRECTORY) + SETTINGS_FILE_NAME;
+   begin
+     fConfigurationFileName := GetConfigurationDirectory + SETTINGS_FILE_NAME;
 {$IFDEF DEBUG}
-    if not FileExists(fConfigurationFileName) then
-      fConfigurationFileName := GetApplicationPath + SETTINGS_FILE_NAME;
+     if not FileExists(fConfigurationFileName) then
+       fConfigurationFileName := GetApplicationPath + SETTINGS_FILE_NAME;
 {$ENDIF}
-  end;
-  Result := fConfigurationFileName;
+   end;
+   Result := fConfigurationFileName;
 end;
 
 constructor TDreamcastSoftwareDevelopmentSettings.Create;
