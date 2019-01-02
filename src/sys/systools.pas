@@ -27,6 +27,8 @@ function RunNoWait(Executable: string): Boolean; overload;
 function RunNoWait(Executable, CommandLine: string): Boolean; overload;
 function RunShellExecute(Executable, CommandLine: string): Boolean; overload;
 function RunShellExecute(Executable: string): Boolean; overload;
+function UnixPathToSystem(const PathName: TFileName): TFileName;
+function SystemToUnixPath(const UnixPathName: TFileName): TFileName;
 
 implementation
 
@@ -306,6 +308,18 @@ begin
 {$ELSE}
   Result := False;
 {$ENDIF}
+end;
+
+function UnixPathToSystem(const PathName: TFileName): TFileName;
+begin
+  Result := StringReplace(PathName, '/', DirectorySeparator, [rfReplaceAll]);
+  Result := IncludeTrailingPathDelimiter(Copy(Result, 2, Length(Result) - 1));
+end;
+
+function SystemToUnixPath(const UnixPathName: TFileName): TFileName;
+begin
+  Result := StringReplace(UnixPathName, DirectorySeparator, '/', [rfReplaceAll]);
+  Result := '/' + StringReplace(Result, ':', EmptyStr, [rfReplaceAll]);
 end;
 
 end.

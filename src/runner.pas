@@ -13,8 +13,8 @@ type
 
   TDreamcastSoftwareDevelopmentKitRunner = class(TObject)
   private
+    fShellRunnerClientExitCodeTempFileName: TFileName;
     fShellCommand: TRunCommand;
-    fShellCommandRunning: Boolean;
     fExecutableMinTTY: TFileName;
     fExecutableShell: TFileName;
     fEnvironmentVariables: TStringList;
@@ -24,15 +24,15 @@ type
     procedure RetrieveEnvironmentVariables;
     procedure HandleNewLine(Sender: TObject; NewLine: string);
     procedure HandleTerminate(Sender: TObject);
-    procedure HandleExecuteEnd(Sender: TObject);
   protected
+    function GetClientExitCode: Integer;
     property Settings: TDreamcastSoftwareDevelopmentSettings read fSettings;
   public
     constructor Create;
     destructor Destroy; override;
     function CheckHealty: Boolean;
     procedure StartShell;
-    procedure StartShellCommand(const CommandLine: string);
+    function StartShellCommand(const CommandLine: string): Integer;
     property Healthy: Boolean read GetHealthy;
   end;
 
@@ -43,6 +43,7 @@ uses
 {$IFDEF Windows}
   Windows,
 {$ENDIF}
+  LazFileUtils,
   Process
 {$IF Defined(Unix) OR Defined(Darwin)}
   , UTF8Process
@@ -50,7 +51,7 @@ uses
   ;
 
 resourcestring
-  ShellApplicationWindowTitle   = 'DreamSDK Shell Launcher';
+  ShellApplicationWindowTitle   = 'DreamSDK Shell Runner';
   MSYSShellNotFound             = 'MinGW/MSYS is not properly installed.';
   ErrorTitle                    = 'Error';
 
@@ -74,7 +75,7 @@ end;
 procedure TDreamcastSoftwareDevelopmentKitRunner.HandleNewLine(Sender: TObject;
   NewLine: string);
 begin
-  WriteLn(NewLine + sLineBreak);
+  WriteLn(NewLine);
 end;
 
 procedure TDreamcastSoftwareDevelopmentKitRunner.HandleTerminate(Sender: TObject);
@@ -84,20 +85,44 @@ begin
 {$ENDIF}
 end;
 
-procedure TDreamcastSoftwareDevelopmentKitRunner.HandleExecuteEnd(Sender: TObject);
+function TDreamcastSoftwareDevelopmentKitRunner.GetClientExitCode: Integer;
+var
+  Buffer: TStringList;
+
 begin
-  fShellCommandRunning := False;
+  Result := -1;
+  if FileExists(fShellRunnerClientExitCodeTempFileName) then
+  begin
+    Buffer := TStringList.Create;
+    try
+      Buffer.LoadFromFile(fShellRunnerClientExitCodeTempFileName);
+      Result := StrToIntDef(Trim(Buffer.Text), -1);
+    finally
+      Buffer.Free;
+      SysUtils.DeleteFile(fShellRunnerClientExitCodeTempFileName);
+    end;
+  end;
 end;
 
-procedure TDreamcastSoftwareDevelopmentKitRunner.StartShellCommand(
-  const CommandLine: string);
+function TDreamcastSoftwareDevelopmentKitRunner.StartShellCommand(
+  const CommandLine: string): Integer;
+var
+  ClientExitCodeUnixFileName: TFileName;
+
 begin
+  fShellRunnerClientExitCodeTempFileName := SysUtils.GetTempFileName;
   fShellCommand := TRunCommand.Create(True);
 
   fShellCommand.Executable := fExecutableShell;
   fShellCommand.Parameters.Add('--login');
   fShellCommand.Parameters.Add('-i');
-  fShellCommand.Environment.Add('_EXTERNAL_COMMAND=' + CommandLine);
+
+  ClientExitCodeUnixFileName := SystemToUnixPath(fShellRunnerClientExitCodeTempFileName);
+  with fShellCommand.Environment do
+  begin
+    Add('_EXTERNAL_COMMAND=' + CommandLine);
+    Add('_EXITCODE=' + ClientExitCodeUnixFileName);
+  end;
 
   SetConsoleTitle(PChar(ShellApplicationWindowTitle));
 
@@ -106,6 +131,9 @@ begin
 
   fShellCommand.Start;
   fShellCommand.WaitFor;
+
+  if fShellCommand.ExitCode = 0 then
+    Result := GetClientExitCode;
 end;
 
 procedure TDreamcastSoftwareDevelopmentKitRunner.StartShell;

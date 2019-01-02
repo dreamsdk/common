@@ -25,6 +25,7 @@ type
     fExecutable: TFileName;
     fNewLine: TNewLineEvent;
     fParameters: TStringList;
+    function GetExitCode: Integer;
     procedure InitializeProcess;
     procedure SyncSendNewLineEvent;
     procedure SendNewLine(const NewLine: string; ProcessEnd: Boolean);
@@ -40,6 +41,7 @@ type
     property BufferOutput: TStringList read fBufferOutput;
     property Environment: TStringList read fEnvironment;
     property Executable: TFileName read fExecutable write fExecutable;
+    property ExitCode: Integer read GetExitCode;
     property Parameters: TStringList read fParameters;
     property OnNewLine: TNewLineEvent read fNewLine write fNewLine;
   end;
@@ -59,6 +61,11 @@ begin
   fProcess := {$IFDEF Windows}TProcess{$ELSE}TProcessUTF8{$ENDIF}.Create(nil);
   for i := 1 to GetEnvironmentVariableCount do
     fProcess.Environment.Add(GetEnvironmentString(i));
+end;
+
+function TRunCommand.GetExitCode: Integer;
+begin
+  Result := fProcess.ExitCode;
 end;
 
 procedure TRunCommand.SyncSendNewLineEvent;

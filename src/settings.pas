@@ -138,7 +138,6 @@ type
 function GetConfigurationDirectory: TFileName;
 function SerialPortToString(SerialPort: TDreamcastToolSerialPort): string;
 function SerialBaudrateToString(SerialBaudrate: TDreamcastToolSerialBaudrate): string;
-function UnixPathToSystem(const PathName: TFileName): TFileName;
 
 implementation
 
@@ -161,12 +160,6 @@ const
   DREAMCAST_TOOL_DEFAULT_SERIAL_BAUDRATE = 7;
   DREAMCAST_TOOL_DEFAULT_SERIAL_BAUDRATE_ALTERNATE = False;
   DREAMCAST_TOOL_DEFAULT_SERIAL_PORT = 0;
-
-function UnixPathToSystem(const PathName: TFileName): TFileName;
-begin
-  Result := StringReplace(PathName, '/', DirectorySeparator, [rfReplaceAll]);
-  Result := IncludeTrailingPathDelimiter(Copy(Result, 2, Length(Result) - 1));
-end;
 
 function GetConfigurationDirectory: TFileName;
 begin
