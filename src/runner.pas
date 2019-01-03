@@ -7,10 +7,11 @@ interface
 uses
   Classes, SysUtils, Settings, RunCmd;
 
+const
+  UNKNOWN_EXIT_CODE = -1;
+
 type
-
   { TDreamcastSoftwareDevelopmentKitRunner }
-
   TDreamcastSoftwareDevelopmentKitRunner = class(TObject)
   private
     fShellRunnerClientExitCodeTempFileName: TFileName;
@@ -39,11 +40,11 @@ type
 implementation
 
 uses
+  Version,
   SysTools,
 {$IFDEF Windows}
   Windows,
 {$ENDIF}
-  LazFileUtils,
   Process
 {$IF Defined(Unix) OR Defined(Darwin)}
   , UTF8Process
@@ -51,7 +52,6 @@ uses
   ;
 
 resourcestring
-  ShellApplicationWindowTitle   = 'DreamSDK Shell Runner';
   MSYSShellNotFound             = 'MinGW/MSYS is not properly installed.';
   ErrorTitle                    = 'Error';
 
@@ -90,13 +90,13 @@ var
   Buffer: TStringList;
 
 begin
-  Result := -1;
+  Result := UNKNOWN_EXIT_CODE;
   if FileExists(fShellRunnerClientExitCodeTempFileName) then
   begin
     Buffer := TStringList.Create;
     try
       Buffer.LoadFromFile(fShellRunnerClientExitCodeTempFileName);
-      Result := StrToIntDef(Trim(Buffer.Text), -1);
+      Result := StrToIntDef(Trim(Buffer.Text), UNKNOWN_EXIT_CODE);
     finally
       Buffer.Free;
       SysUtils.DeleteFile(fShellRunnerClientExitCodeTempFileName);
@@ -110,6 +110,7 @@ var
   ClientExitCodeUnixFileName: TFileName;
 
 begin
+  Result := UNKNOWN_EXIT_CODE;
   fShellRunnerClientExitCodeTempFileName := SysUtils.GetTempFileName;
   fShellCommand := TRunCommand.Create(True);
 
@@ -124,7 +125,7 @@ begin
     Add('_EXITCODE=' + ClientExitCodeUnixFileName);
   end;
 
-  SetConsoleTitle(PChar(ShellApplicationWindowTitle));
+  SetConsoleTitle(PChar(GetFileDescription));
 
   fShellCommand.OnNewLine := @HandleNewLine;
   fShellCommand.OnTerminate := @HandleTerminate;
@@ -132,7 +133,7 @@ begin
   fShellCommand.Start;
   fShellCommand.WaitFor;
 
-  if fShellCommand.ExitCode = 0 then
+  if (fShellCommand.ExitCode = 0) then
     Result := GetClientExitCode;
 end;
 
