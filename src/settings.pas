@@ -20,7 +20,8 @@ type
   TDreamcastToolKind = (
     dtkUndefined,
     dtkSerial,
-    dtkInternetProtocol
+    dtkInternetProtocol,
+    dtkCustom
   );
 
   TDreamcastToolSerialPort = (
@@ -52,6 +53,8 @@ type
   private
     fAttachConsoleFileserver: Boolean;
     fClearScreenBeforeDownload: Boolean;
+    fCustomArguments: string;
+    fCustomExecutable: TFileName;
     fDreamcastToolKind: TDreamcastToolKind;
     fInternetProtocolAddress: string;
     fMediaAccessControlAddress: string;
@@ -87,6 +90,10 @@ type
       read fMediaAccessControlEnabled write fMediaAccessControlEnabled;
     property MediaAccessControlAddress: string
       read fMediaAccessControlAddress write fMediaAccessControlAddress;
+    property CustomExecutable: TFileName
+      read fCustomExecutable write fCustomExecutable;
+    property CustomArguments: string
+      read fCustomArguments write fCustomArguments;
   end;
 
   { TDreamcastSoftwareDevelopmentSettingsRepositories }
@@ -160,6 +167,8 @@ const
   DREAMCAST_TOOL_DEFAULT_SERIAL_BAUDRATE = 7;
   DREAMCAST_TOOL_DEFAULT_SERIAL_BAUDRATE_ALTERNATE = False;
   DREAMCAST_TOOL_DEFAULT_SERIAL_PORT = 0;
+  DREAMCAST_TOOL_DEFAULT_CUSTOM_EXECUTABLE = '';
+  DREAMCAST_TOOL_DEFAULT_CUSTOM_ARGUMENTS = '';
 
 function GetConfigurationDirectory: TFileName;
 begin
@@ -252,6 +261,16 @@ begin
     'SerialPort',
     DREAMCAST_TOOL_DEFAULT_SERIAL_PORT
   ));
+  fCustomExecutable := IniFile.ReadString(
+    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    'CustomExecutable',
+    DREAMCAST_TOOL_DEFAULT_CUSTOM_EXECUTABLE
+  );
+  fCustomArguments := IniFile.ReadString(
+    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    'CustomArguments',
+    DREAMCAST_TOOL_DEFAULT_CUSTOM_ARGUMENTS
+  );
 end;
 
 procedure TDreamcastSoftwareDevelopmentSettingsDreamcastTool.SaveConfiguration(
@@ -311,6 +330,16 @@ begin
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
     'SerialPort',
     Integer(fSerialPort)
+  );
+  IniFile.WriteString(
+    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    'CustomExecutable',
+    fCustomExecutable
+  );
+  IniFile.WriteString(
+    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    'CustomArguments',
+    fCustomArguments
   );
 end;
 
