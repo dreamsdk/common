@@ -36,6 +36,7 @@ interface
 uses
   Classes, SysUtils;
 
+function GetComments: string;
 function GetFileDescription: string;
 function GetFileVersion: string;
 function GetProductName: string;
@@ -235,6 +236,11 @@ end;
 function GetLegalCopyright: string;
 begin
   Result := GetVersionString('LegalCopyright');
+end;
+
+function GetComments: string;
+begin
+  Result := GetVersionString('Comments');
 end;
 
 Function GetFileVersion: String;
