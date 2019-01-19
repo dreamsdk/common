@@ -110,8 +110,14 @@ var
   ClientExitCodeUnixFileName: TFileName;
 
 begin
+{$IFDEF DEBUG}
+  WriteLn('CommandLine: ', CommandLine);
+{$ENDIF}
+
   Result := UNKNOWN_EXIT_CODE;
   fShellRunnerClientExitCodeTempFileName := SysUtils.GetTempFileName;
+
+  FreeAndNil(fShellCommand);
   fShellCommand := TRunCommand.Create(True);
 
   fShellCommand.Executable := fExecutableShell;
@@ -131,7 +137,16 @@ begin
   fShellCommand.OnTerminate := @HandleTerminate;
 
   fShellCommand.Start;
+
+{$IFDEF DEBUG}
+  WriteLn('WaitFor is starting...');
+{$ENDIF}
+
   fShellCommand.WaitFor;
+
+{$IFDEF DEBUG}
+  WriteLn('WaitFor is done!');
+{$ENDIF}
 
   if (fShellCommand.ExitCode = 0) then
     Result := GetClientExitCode;
@@ -189,7 +204,7 @@ end;
 
 destructor TDreamcastSoftwareDevelopmentKitRunner.Destroy;
 begin
-  fShellCommand := nil;
+  FreeAndNil(fShellCommand);
   fEnvironmentVariables.Free;
   fSettings.Free;
   inherited Destroy;
