@@ -130,24 +130,13 @@ begin
 
   repeat
     BytesRead := fProcess.Output.Read(Buffer, BUF_SIZE);
-{$IFDEF DEBUG}
-    WriteLn('BytesRead: ', BytesRead);
-{$ENDIF}
     SetString(NewLine, PChar(@Buffer[0]), BytesRead);
     if Trim(NewLine) <> '' then
       SendNewLine(NewLine, False);
   until (BytesRead = 0) or (Terminated) or (not fProcess.Active);
 
-{$IFDEF DEBUG}
-  WriteLn('SendNewLine for the last time...');
-{$ENDIF}
-
   if Trim(fPartialLine) <> '' then
     SendNewLine(NewLine, True);
-
-{$IFDEF DEBUG}
-  WriteLn('Execute finished!');
-{$ENDIF}
 end;
 
 procedure TRunCommand.KillRunningProcess;
