@@ -5,11 +5,18 @@ unit SysTools;
 interface
 
 uses
-  Classes, SysUtils;
+  Classes, SysUtils, FGL;
 
 const
+  WhiteSpaceStr = ' ';
   STRING_DATE_FORMAT = 'YYYY-MM-DD @ HH:mm:ss';
 
+type
+  TIntegerList = specialize TFPGList<Integer>;
+  TStringIntegerMap = specialize TFPGMap<string, Integer>;
+
+procedure DebugLog(const Message: string);
+function EndsWith(const SubStr, S: string): Boolean;
 function ExtractStr(LeftSubStr, RightSubStr, S: string): string;
 function ExtremeRight(SubStr: string ; S: string): string;
 function GetApplicationPath: TFileName;
@@ -28,11 +35,14 @@ function RunNoWait(Executable, CommandLine: string): Boolean; overload;
 function RunShellExecute(Executable, CommandLine: string): Boolean; overload;
 function RunShellExecute(Executable: string): Boolean; overload;
 function UnixPathToSystem(const PathName: TFileName): TFileName;
+function StartsWith(const SubStr, S: string): Boolean;
+function SuppressUselessWhiteSpaces(const S: string): string;
 function SystemToUnixPath(const UnixPathName: TFileName): TFileName;
 
 implementation
 
 uses
+  StrUtils,
   RegExpr,
 {$IFDEF Windows}
   ShellApi,
@@ -228,6 +238,31 @@ begin
   Result := Pos(LowerCase(SubStr), LowerCase(S)) > 0;
 end;
 
+function SuppressUselessWhiteSpaces(const S: string): string;
+var
+  Buffer: TStringList;
+  i: Integer;
+  Entry, Separator: string;
+
+begin
+  Result := EmptyStr;
+  Buffer := TStringList.Create;
+  try
+    Buffer.Text := StringReplace(Trim(S), WhiteSpaceStr, sLineBreak, [rfReplaceAll]);
+    Separator := EmptyStr;
+    for i := 0 to Buffer.Count - 1 do
+    begin
+      Entry := Buffer[i];
+      if not SameText(Entry, EmptyStr) then
+        Result := Result + Separator + Entry;
+      Separator := WhiteSpaceStr;
+    end;
+    Result := Trim(Result);
+  finally
+    Buffer.Free;
+  end;
+end;
+
 // Thanks to: http://docwiki.embarcadero.com/CodeExamples/Tokyo/en/EditMask_(Delphi)
 function IsValidInternetProtocolAddress(InternetProtocolAddress: string): Boolean;
 var
@@ -320,6 +355,28 @@ function SystemToUnixPath(const UnixPathName: TFileName): TFileName;
 begin
   Result := StringReplace(UnixPathName, DirectorySeparator, '/', [rfReplaceAll]);
   Result := '/' + StringReplace(Result, ':', EmptyStr, [rfReplaceAll]);
+end;
+
+function EndsWith(const SubStr, S: string): Boolean;
+begin
+  if SubStr = EmptyStr then
+    Result := True
+  else
+    Result := AnsiEndsStr(SubStr, S);
+end;
+
+function StartsWith(const SubStr, S: string): Boolean;
+begin
+  Result := AnsiStartsStr(SubStr, S);
+end;
+
+procedure DebugLog(const Message: string);
+begin
+{$IFDEF DEBUG}
+{$IFDEF CONSOLE}
+  WriteLn(Message);
+{$ENDIF}
+{$ENDIF}
 end;
 
 end.
