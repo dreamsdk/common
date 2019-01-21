@@ -15,7 +15,9 @@ type
   TIntegerList = specialize TFPGList<Integer>;
   TStringIntegerMap = specialize TFPGMap<string, Integer>;
 
+{$IFDEF DEBUG}
 procedure DebugLog(const Message: string);
+{$ENDIF}
 function EndsWith(const SubStr, S: string): Boolean;
 function ExtractStr(LeftSubStr, RightSubStr, S: string): string;
 function ExtremeRight(SubStr: string ; S: string): string;
@@ -36,6 +38,7 @@ function RunShellExecute(Executable, CommandLine: string): Boolean; overload;
 function RunShellExecute(Executable: string): Boolean; overload;
 function UnixPathToSystem(const PathName: TFileName): TFileName;
 function StartsWith(const SubStr, S: string): Boolean;
+function StringListToString(SL: TStringList; const Delimiter: string): string;
 function SuppressUselessWhiteSpaces(const S: string): string;
 function SystemToUnixPath(const UnixPathName: TFileName): TFileName;
 
@@ -370,13 +373,20 @@ begin
   Result := AnsiStartsStr(SubStr, S);
 end;
 
+{$IFDEF DEBUG}
 procedure DebugLog(const Message: string);
 begin
-{$IFDEF DEBUG}
 {$IFDEF CONSOLE}
   WriteLn(Message);
 {$ENDIF}
+end;
 {$ENDIF}
+
+function StringListToString(SL: TStringList; const Delimiter: string): string;
+begin
+  Result := EmptyStr;
+  if Assigned(SL) then
+    Result := Trim(StringReplace(Trim(SL.Text), sLineBreak, Delimiter, [rfReplaceAll]));
 end;
 
 end.
