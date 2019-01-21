@@ -37,7 +37,9 @@ function RunNoWait(Executable, CommandLine: string): Boolean; overload;
 function RunShellExecute(Executable, CommandLine: string): Boolean; overload;
 function RunShellExecute(Executable: string): Boolean; overload;
 function UnixPathToSystem(const PathName: TFileName): TFileName;
+procedure SaveStringToFile(const InString: string; FileName: TFileName);
 function StartsWith(const SubStr, S: string): Boolean;
+procedure StringToStringList(const S, Delimiter: string; SL: TStringList);
 function StringListToString(SL: TStringList; const Delimiter: string): string;
 function SuppressUselessWhiteSpaces(const S: string): string;
 function SystemToUnixPath(const UnixPathName: TFileName): TFileName;
@@ -387,6 +389,26 @@ begin
   Result := EmptyStr;
   if Assigned(SL) then
     Result := Trim(StringReplace(Trim(SL.Text), sLineBreak, Delimiter, [rfReplaceAll]));
+end;
+
+procedure StringToStringList(const S, Delimiter: string; SL: TStringList);
+begin
+  if Assigned(SL) then
+    SL.Text := StringReplace(Trim(S), Delimiter, sLineBreak, [rfReplaceAll]);
+end;
+
+procedure SaveStringToFile(const InString: string; FileName: TFileName);
+var
+  Buffer: TStringList;
+
+begin
+  Buffer := TStringList.Create;
+  try
+    Buffer.Add(InString);
+    Buffer.SaveToFile(FileName);
+  finally
+    Buffer.Free;
+  end;
 end;
 
 end.
