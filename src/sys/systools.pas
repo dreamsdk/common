@@ -9,6 +9,7 @@ uses
 
 const
   WhiteSpaceStr = ' ';
+  ArraySeparator = '|';
   STRING_DATE_FORMAT = 'YYYY-MM-DD @ HH:mm:ss';
 
 type
