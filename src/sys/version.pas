@@ -50,6 +50,7 @@ function GetLCLVersion: string;
 function GetWidgetSet: string;
 function GetCompanyName: string;
 function GetLegalCopyright: string;
+function IsDebugBuild: Boolean;
 
 const
   WIDGETSET_GTK        = 'GTK';
@@ -60,12 +61,14 @@ const
   WIDGETSET_QT         = 'QT';
   WIDGETSET_fpGUI      = 'fpGUI';
   WIDGETSET_OTHER      = '(Other)';
+  WIDGETSET_NONE       = '(None)';
 
 implementation
 
 Uses
-  Resource, VersionTypes, VersionResource, LCLVersion, InterfaceBase,
-  LCLPlatformDef, DateUtils;
+  Resource, VersionTypes, VersionResource,
+  {$IFDEF GUI}LCLVersion, InterfaceBase, LCLPlatformDef, {$ENDIF}
+  DateUtils;
 
 Type
   TVersionInfo = Class
@@ -90,6 +93,7 @@ Type
 
 function GetWidgetSet: string;
 begin
+{$IFDEF GUI}
   case WidgetSet.LCLPlatform of
     lpGtk:   Result := WIDGETSET_GTK;
     lpGtk2:  Result := WIDGETSET_GTK2;
@@ -99,8 +103,11 @@ begin
     lpQT:    Result := WIDGETSET_QT;
     lpfpGUI: Result := WIDGETSET_fpGUI;
   else
-    Result:=WIDGETSET_OTHER;
+    Result := WIDGETSET_OTHER;
   end;
+{$ELSE}
+  Result := WIDGETSET_NONE;
+{$ENDIF}
 end;
 
 Function GetCompilerInfo: String;
@@ -120,7 +127,11 @@ End;
 
 Function GetLCLVersion: String;
 begin
+{$IFDEF GUI}
   Result := lcl_version;
+{$ELSE}
+  Result := '(None)';
+{$ENDIF}
 end;
 
 function GetCompiledDateTime: TDateTime;
@@ -317,6 +328,15 @@ Begin
     Stream.Free;
   End;
 End;
+
+function IsDebugBuild: Boolean;
+begin
+{$IFDEF DEBUG}
+  Result := True;
+{$ELSE}
+  Result := False;
+{$ENDIF}
+end;
 
 Initialization
   FInfo := nil;

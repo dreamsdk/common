@@ -19,7 +19,6 @@ type
 {$IFDEF DEBUG}
 procedure DebugLog(const Message: string);
 {$ENDIF}
-function DecompressZipFile(const FileName, OutputDirectory: TFileName): Boolean;
 function EndsWith(const SubStr, S: string): Boolean;
 function ExtractStr(LeftSubStr, RightSubStr, S: string): string;
 function ExtremeRight(SubStr: string ; S: string): string;
@@ -31,6 +30,7 @@ function IsValidMediaAccessControlAddress(MediaAccessControlAddress: string): Bo
 function Left(SubStr: string; S: string): string;
 function LeftNRight(SubStr, S: string; N: Integer): string;
 function LoadFileToString(FileName: TFileName): string;
+function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string): Boolean;
 function Right(SubStr: string; S: string): string;
 function Run(Executable: string): string; overload;
 function Run(Executable, CommandLine: string): string; overload;
@@ -47,6 +47,7 @@ function StringListToString(SL: TStringList; const Delimiter: string): string;
 function StringListSubstringIndexOf(SL: TStringList; const SubStr: string): Integer;
 function SuppressUselessWhiteSpaces(const S: string): string;
 function SystemToUnixPath(const UnixPathName: TFileName): TFileName;
+function UncompressZipFile(const FileName, OutputDirectory: TFileName): Boolean;
 
 implementation
 
@@ -446,7 +447,7 @@ begin
   end;
 end;
 
-function DecompressZipFile(const FileName, OutputDirectory: TFileName): Boolean;
+function UncompressZipFile(const FileName, OutputDirectory: TFileName): Boolean;
 var
   UnZipper: TUnZipper;
 
@@ -463,6 +464,29 @@ begin
       Result := True;
     finally
       UnZipper.Free;
+    end;
+  end;
+end;
+
+function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string): Boolean;
+var
+  Buffer: TStringList;
+
+begin
+  Result := False;
+  if FileExists(FileName) then
+  begin
+    Buffer := TStringList.Create;
+    try
+      Buffer.LoadFromFile(FileName);
+      if IsInString(OldValue, Buffer.Text) then
+      begin
+        Buffer.Text := StringReplace(Buffer.Text, OldValue, NewValue, [rfReplaceAll]);
+        Buffer.SaveToFile(FileName);
+        Result := True;
+      end;
+    finally
+      Buffer.Free;
     end;
   end;
 end;
