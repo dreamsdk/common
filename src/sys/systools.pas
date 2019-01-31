@@ -19,6 +19,7 @@ type
 {$IFDEF DEBUG}
 procedure DebugLog(const Message: string);
 {$ENDIF}
+function DecompressZipFile(const FileName, OutputDirectory: TFileName): Boolean;
 function EndsWith(const SubStr, S: string): Boolean;
 function ExtractStr(LeftSubStr, RightSubStr, S: string): string;
 function ExtremeRight(SubStr: string ; S: string): string;
@@ -29,6 +30,7 @@ function IsValidInternetProtocolAddress(InternetProtocolAddress: string): Boolea
 function IsValidMediaAccessControlAddress(MediaAccessControlAddress: string): Boolean;
 function Left(SubStr: string; S: string): string;
 function LeftNRight(SubStr, S: string; N: Integer): string;
+function LoadFileToString(FileName: TFileName): string;
 function Right(SubStr: string; S: string): string;
 function Run(Executable: string): string; overload;
 function Run(Executable, CommandLine: string): string; overload;
@@ -42,6 +44,7 @@ procedure SaveStringToFile(const InString: string; FileName: TFileName);
 function StartsWith(const SubStr, S: string): Boolean;
 procedure StringToStringList(const S, Delimiter: string; SL: TStringList);
 function StringListToString(SL: TStringList; const Delimiter: string): string;
+function StringListSubstringIndexOf(SL: TStringList; const SubStr: string): Integer;
 function SuppressUselessWhiteSpaces(const S: string): string;
 function SystemToUnixPath(const UnixPathName: TFileName): TFileName;
 
@@ -56,9 +59,7 @@ uses
 {$IFDEF GUI}
   Forms,
 {$ENDIF}
-{$IFDEF DEBUG}
-  Dialogs,
-{$ENDIF}
+  Zipper,
   Process
 {$IF Defined(Unix) OR Defined(Darwin)}
   , UTF8Process
@@ -398,6 +399,21 @@ begin
     SL.Text := StringReplace(Trim(S), Delimiter, sLineBreak, [rfReplaceAll]);
 end;
 
+function LoadFileToString(FileName: TFileName): string;
+var
+  Buffer: TStringList;
+
+begin
+  Result := EmptyStr;
+  Buffer := TStringList.Create;
+  try
+    Buffer.LoadFromFile(FileName);
+    Result := Trim(Buffer.Text);
+  finally
+    Buffer.Free;
+  end;
+end;
+
 procedure SaveStringToFile(const InString: string; FileName: TFileName);
 var
   Buffer: TStringList;
@@ -409,6 +425,45 @@ begin
     Buffer.SaveToFile(FileName);
   finally
     Buffer.Free;
+  end;
+end;
+
+function StringListSubstringIndexOf(SL: TStringList; const SubStr: string): Integer;
+var
+  i: Integer;
+
+begin
+  Result := -1;
+  if Assigned(SL) then
+  begin
+    i := 0;
+    while (i < SL.Count) and (Result = -1) do
+    begin
+      if IsInString(SubStr, SL[i]) then
+        Result := i;
+      Inc(i);
+    end;
+  end;
+end;
+
+function DecompressZipFile(const FileName, OutputDirectory: TFileName): Boolean;
+var
+  UnZipper: TUnZipper;
+
+begin
+  Result := False;
+  if FileExists(FileName) then
+  begin
+    UnZipper := TUnZipper.Create;
+    try
+      UnZipper.FileName := FileName;
+      UnZipper.OutputPath := OutputDirectory;
+      UnZipper.Examine;
+      UnZipper.UnZipAllFiles;
+      Result := True;
+    finally
+      UnZipper.Free;
+    end;
   end;
 end;
 
