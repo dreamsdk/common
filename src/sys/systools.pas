@@ -20,6 +20,7 @@ type
 procedure DebugLog(const Message: string);
 {$ENDIF}
 function EndsWith(const SubStr, S: string): Boolean;
+function ExpandEnvironmentStrings(const InputString: string): string;
 function ExtractStr(LeftSubStr, RightSubStr, S: string): string;
 function ExtremeRight(SubStr: string ; S: string): string;
 function GetApplicationPath: TFileName;
@@ -55,6 +56,7 @@ uses
   StrUtils,
   RegExpr,
 {$IFDEF Windows}
+  Windows,
   ShellApi,
 {$ENDIF}
 {$IFDEF GUI}
@@ -489,6 +491,20 @@ begin
       Buffer.Free;
     end;
   end;
+end;
+
+function ExpandEnvironmentStrings(const InputString: string): string;
+{$IFDEF WINDOWS}
+const
+  MAXSIZE = 32768;
+
+begin
+  SetLength(Result, MAXSIZE);
+  SetLength(Result, Windows.ExpandEnvironmentStrings(PChar(InputString), @Result[1], Length(Result)) - 1);
+{$ELSE}
+begin
+  Result := InputString;
+{$ENDIF}
 end;
 
 end.
