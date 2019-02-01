@@ -16,10 +16,8 @@ type
   TIntegerList = specialize TFPGList<Integer>;
   TStringIntegerMap = specialize TFPGMap<string, Integer>;
 
-{$IFDEF DEBUG}
-procedure DebugLog(const Message: string);
-{$ENDIF}
-procedure Delay(Milliseconds: Integer);
+{$IFDEF DEBUG}procedure DebugLog(const Message: string);{$ENDIF}
+{$IFDEF GUI}procedure Delay(Milliseconds: Integer);{$ENDIF}
 function EndsWith(const SubStr, S: string): Boolean;
 function ExpandEnvironmentStrings(const InputString: string): string;
 function ExtractStr(LeftSubStr, RightSubStr, S: string): string;
@@ -508,6 +506,7 @@ begin
 {$ENDIF}
 end;
 
+{$IFDEF GUI}
 procedure Delay(Milliseconds: Integer);
 var
   PastTime: LongInt;
@@ -518,6 +517,7 @@ begin
     Application.ProcessMessages;
   until (GetTickCount - PastTime) >= LongInt(Milliseconds);
 end;
+{$ENDIF}
 
 end.
 
