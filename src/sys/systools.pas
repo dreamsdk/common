@@ -19,6 +19,7 @@ type
 {$IFDEF DEBUG}
 procedure DebugLog(const Message: string);
 {$ENDIF}
+procedure Delay(Milliseconds: Integer);
 function EndsWith(const SubStr, S: string): Boolean;
 function ExpandEnvironmentStrings(const InputString: string): string;
 function ExtractStr(LeftSubStr, RightSubStr, S: string): string;
@@ -505,6 +506,17 @@ begin
 begin
   Result := InputString;
 {$ENDIF}
+end;
+
+procedure Delay(Milliseconds: Integer);
+var
+  PastTime: LongInt;
+
+begin
+  PastTime := GetTickCount;
+  repeat
+    Application.ProcessMessages;
+  until (GetTickCount - PastTime) >= LongInt(Milliseconds);
 end;
 
 end.
