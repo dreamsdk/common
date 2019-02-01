@@ -8,10 +8,13 @@ uses
 {$IFDEF Windows}
   Windows,
 {$ENDIF}
+  Graphics,
   Classes,
   SysUtils,
-  Controls;
+  Controls,
+  ExtCtrls;
 
+procedure ImageToForm(FormHandle: THandle; Image: TImage; TransparentColor: TColor);
 function IsAeroEnabled: Boolean;
 procedure SetControlMultilineLabel(Control: TWinControl);
 
@@ -52,6 +55,38 @@ begin
   SetWindowLong(Control.Handle, GWL_STYLE,
     GetWindowLong(Control.Handle, GWL_STYLE) or BS_MULTILINE);
 end;
+
+procedure ImageToForm(FormHandle: THandle; Image: TImage; TransparentColor: TColor);
+{$IFDEF WINDOWS}
+var
+  i, j, k : Integer;
+  Region, Region2 : HRGN;
+
+begin
+  Region := CreateRectRgn(0, 0, 0, 0);
+  for i := 0 to Image.Width - 1 do
+  begin
+    j := 0;
+    while j < Image.Height - 1 do
+    begin
+      if Image.Canvas.Pixels[i, j] <> TransparentColor then
+      begin
+        k := j;
+        while (Image.Canvas.Pixels[i, j] <> TransparentColor) and (j < Image.Height) do
+          Inc(j);
+        Region2 := CreateRectRgn(i, k, i + 1, j);
+        CombineRgn(Region, Region, Region2, RGN_OR);
+        DeleteObject(Region2);
+      end;
+      Inc(j);
+    end;
+  end;
+  SetWindowRgn(FormHandle, Region, True);
+{$ELSE}
+begin
+{$ENDIF}
+end;
+
 
 end.
 
