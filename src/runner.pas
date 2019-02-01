@@ -20,11 +20,13 @@ type
     fExecutableShell: TFileName;
     fEnvironmentVariables: TStringList;
     fSettings: TDreamcastSoftwareDevelopmentSettings;
+    fWorkingDirectory: TFileName;
     procedure InitializeEnvironment;
     function GetHealthy: Boolean;
     procedure RetrieveEnvironmentVariables;
     procedure HandleNewLine(Sender: TObject; NewLine: string);
     procedure HandleTerminate(Sender: TObject);
+    procedure SetWorkingDirectory(AValue: TFileName);
   protected
     function GetClientExitCode: Integer;
     property Settings: TDreamcastSoftwareDevelopmentSettings read fSettings;
@@ -35,16 +37,17 @@ type
     procedure StartShell;
     function StartShellCommand(const CommandLine: string): Integer;
     property Healthy: Boolean read GetHealthy;
+    property WorkingDirectory: TFileName read fWorkingDirectory write SetWorkingDirectory;
   end;
 
 implementation
 
 uses
   Version,
-  SysTools,
 {$IFDEF Windows}
   Windows,
 {$ENDIF}
+  SysTools,
   Process
 {$IF Defined(Unix) OR Defined(Darwin)}
   , UTF8Process
@@ -85,6 +88,20 @@ begin
 {$ENDIF}
 end;
 
+procedure TDreamcastSoftwareDevelopmentKitRunner.SetWorkingDirectory(
+  AValue: TFileName);
+var
+  Temp: TFileName;
+
+begin
+  if fWorkingDirectory <> AValue then
+  begin
+    Temp := IncludeTrailingPathDelimiter(ExpandFileName( ExpandEnvironmentStrings( Trim( AValue ) ) ));
+    if DirectoryExists(Temp) then
+      fWorkingDirectory := Temp;
+  end;
+end;
+
 function TDreamcastSoftwareDevelopmentKitRunner.GetClientExitCode: Integer;
 var
   Buffer: TStringList;
@@ -119,6 +136,12 @@ begin
 
   FreeAndNil(fShellCommand);
   fShellCommand := TRunCommand.Create(True);
+
+  // Handle working directory
+  if (WorkingDirectory <> EmptyStr) then
+  begin
+    fShellCommand.WorkingDirectory := WorkingDirectory;
+  end;
 
   fShellCommand.Executable := fExecutableShell;
   fShellCommand.Parameters.Add('--login');
@@ -163,6 +186,13 @@ begin
   try
     // Initialize Environment context
     OurProcess.Environment.AddStrings(fEnvironmentVariables);
+
+    // Handle working directory
+    if WorkingDirectory <> EmptyStr then
+    begin
+      OurProcess.CurrentDirectory := WorkingDirectory;
+      OurProcess.Environment.Add('_WORKING_DIRECTORY=' + WorkingDirectory);
+    end;
 
     // Extracted from msys.bat
     if Settings.UseMinTTY then

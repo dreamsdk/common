@@ -25,6 +25,7 @@ type
     fExecutable: TFileName;
     fNewLine: TNewLineEvent;
     fParameters: TStringList;
+    fWorkingDirectory: TFileName;
     function GetExitCode: Integer;
     procedure InitializeProcess;
     procedure SyncSendNewLineEvent;
@@ -43,6 +44,8 @@ type
     property Executable: TFileName read fExecutable write fExecutable;
     property ExitCode: Integer read GetExitCode;
     property Parameters: TStringList read fParameters;
+    property WorkingDirectory: TFileName read fWorkingDirectory
+      write fWorkingDirectory;
     property OnNewLine: TNewLineEvent read fNewLine write fNewLine;
   end;
 
@@ -126,6 +129,7 @@ begin
   fProcess.Environment.AddStrings(fEnvironment);
   fProcess.Options := [poUsePipes, poStderrToOutPut];
   fProcess.ShowWindow := swoHide;
+  fProcess.CurrentDirectory := WorkingDirectory;
   fProcess.Execute;
 
   repeat
