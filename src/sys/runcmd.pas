@@ -117,9 +117,12 @@ const
   BUF_SIZE = 2048;
 
 var
-  Buffer: array[0..BUF_SIZE - 1] of Char;
+  Buffer: array[0..BUF_SIZE - 1] of AnsiChar;
   BytesRead: Integer;
   NewLine: string;
+{$IFDEF DEBUG}
+  i: Integer;
+{$ENDIF}
 
 begin
   Buffer[0] := #0;
@@ -132,15 +135,28 @@ begin
   fProcess.CurrentDirectory := WorkingDirectory;
   fProcess.Execute;
 
-  repeat
-    BytesRead := fProcess.Output.Read(Buffer, BUF_SIZE);
-    SetString(NewLine, PChar(@Buffer[0]), BytesRead);
-    if Trim(NewLine) <> '' then
-      SendNewLine(NewLine, False);
-  until (BytesRead = 0) or (Terminated) or (not fProcess.Active);
+{$IFDEF DEBUG}
+  i := 0;
+  WriteLn('PID: ', fProcess.ProcessID);
+{$ENDIF}
 
-  if Trim(fPartialLine) <> '' then
-    SendNewLine(NewLine, True);
+  repeat
+    FillByte(Buffer, BUF_SIZE, $00);
+    BytesRead := fProcess.Output.Read(Buffer, BUF_SIZE);
+{$IFDEF DEBUG}
+    if BytesRead > 0 then
+    begin
+      DumpCharArrayToFile(Buffer, Format('dump_%d_%d.bin', [fProcess.ProcessID, i]));
+      Inc(i);
+    end;
+{$ENDIF}
+    SetString(NewLine, PChar(@Buffer[0]), BytesRead);
+    if Trim(NewLine) <> EmptyStr then
+      SendNewLine(NewLine, False);
+  until (BytesRead = 0);
+
+  if Trim(fPartialLine) <> EmptyStr then
+    SendNewLine(fPartialLine, True);
 end;
 
 procedure TRunCommand.KillRunningProcess;

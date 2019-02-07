@@ -18,6 +18,7 @@ type
 
 {$IFDEF DEBUG}procedure DebugLog(const Message: string);{$ENDIF}
 {$IFDEF GUI}procedure Delay(Milliseconds: Integer);{$ENDIF}
+{$IFDEF DEBUG}procedure DumpCharArrayToFile(A: array of Char; const FileName: TFileName);{$ENDIF}
 function EndsWith(const SubStr, S: string): Boolean;
 function ExpandEnvironmentStrings(const InputString: string): string;
 function ExtractStr(LeftSubStr, RightSubStr, S: string): string;
@@ -516,6 +517,19 @@ begin
   repeat
     Application.ProcessMessages;
   until (GetTickCount - PastTime) >= LongInt(Milliseconds);
+end;
+{$ENDIF}
+
+{$IFDEF DEBUG}
+procedure DumpCharArrayToFile(A: array of Char; const FileName: TFileName);
+var
+  F: file;
+
+begin
+  AssignFile(F, FileName);
+  ReWrite(F, SizeOf(A));
+  BlockWrite(F, A[0], 1);
+  CloseFile(F);
 end;
 {$ENDIF}
 
