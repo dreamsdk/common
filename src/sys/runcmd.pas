@@ -121,7 +121,9 @@ var
   BytesRead: Integer;
   NewLine: string;
 {$IFDEF DEBUG}
+{$IFDEF DUMP_PROCESS_PIPE}
   i: Integer;
+{$ENDIF}
 {$ENDIF}
 
 begin
@@ -136,19 +138,23 @@ begin
   fProcess.Execute;
 
 {$IFDEF DEBUG}
+{$IFDEF DUMP_PROCESS_PIPE}
   i := 0;
   WriteLn('PID: ', fProcess.ProcessID);
+{$ENDIF}
 {$ENDIF}
 
   repeat
     FillByte(Buffer, BUF_SIZE, $00);
     BytesRead := fProcess.Output.Read(Buffer, BUF_SIZE);
 {$IFDEF DEBUG}
+{$IFDEF DUMP_PROCESS_PIPE}
     if BytesRead > 0 then
     begin
       DumpCharArrayToFile(Buffer, Format('dump_%d_%d.bin', [fProcess.ProcessID, i]));
       Inc(i);
     end;
+{$ENDIF}
 {$ENDIF}
     SetString(NewLine, PChar(@Buffer[0]), BytesRead);
     if Trim(NewLine) <> EmptyStr then
