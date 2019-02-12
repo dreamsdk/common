@@ -195,6 +195,10 @@ var
   ModuleVersion: TModuleVersion;
 
 begin
+  ModuleVersion.BuildDateTime := EmptyStr;
+  ModuleVersion.FileDescription := EmptyStr;
+  ModuleVersion.FileVersion := EmptyStr;
+  ModuleVersion.ProductVersion := EmptyStr;
   if FileExists(FileName) then
   begin
     ModuleProcessId := 0;

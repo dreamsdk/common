@@ -26,6 +26,7 @@ function ExtremeRight(SubStr: string ; S: string): string;
 function GetApplicationPath: TFileName;
 function GetSubStrCount(SubStr, S: string): Integer;
 function IsInString(const SubStr, S: string): Boolean;
+function IsRegExMatch(const InputValue, RegEx: string): Boolean;
 function IsValidInternetProtocolAddress(InternetProtocolAddress: string): Boolean;
 function IsValidMediaAccessControlAddress(MediaAccessControlAddress: string): Boolean;
 function Left(SubStr: string; S: string): string;
@@ -273,47 +274,30 @@ begin
   end;
 end;
 
-// Thanks to: http://docwiki.embarcadero.com/CodeExamples/Tokyo/en/EditMask_(Delphi)
-function IsValidInternetProtocolAddress(InternetProtocolAddress: string): Boolean;
-var
-  net1, net2, host1, host2: Integer;
-  InvalidAddress: Boolean;
-
-begin
-  try
-    net1 := StrToInt(TrimRight(Copy(InternetProtocolAddress, 0, 3)));
-    net2 := StrToInt(TrimRight(Copy(InternetProtocolAddress, 5, 3)));
-    host1 := StrToInt(TrimRight(Copy(InternetProtocolAddress, 9, 3)));
-    host2 := StrToInt(TrimRight(Copy(InternetProtocolAddress, 13, 3)));
-    InvalidAddress := (
-      (net1 < 0) or
-      (net1 > 255) or
-      (net2 < 0) or
-      (net2 > 255) or
-      (host1 < 0) or
-      (host1 > 255) or
-      (host2 < 0) or
-      (host2 > 255)
-    );
-    Result := not InvalidAddress;
-  except
-    Result := False;
-  end;
-end;
-
-// Thanks to: https://stackoverflow.com/a/4260512/3726096
-function IsValidMediaAccessControlAddress(MediaAccessControlAddress: string): Boolean;
+function IsRegExMatch(const InputValue, RegEx: string): Boolean;
 var
   RegexObj: TRegExpr;
 
 begin
   RegexObj := TRegExpr.Create;
   try
-    RegexObj.Expression := '^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$';
-    Result := RegexObj.Exec(MediaAccessControlAddress);
+    RegexObj.Expression := RegEx;
+    Result := RegexObj.Exec(InputValue);
   finally
     RegexObj.Free;
   end;
+end;
+
+// Thanks to: https://stackoverflow.com/a/5284410/3726096
+function IsValidInternetProtocolAddress(InternetProtocolAddress: string): Boolean;
+begin
+  Result := IsRegExMatch(InternetProtocolAddress, '\b((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.|$)){4}\b');
+end;
+
+// Thanks to: https://stackoverflow.com/a/4260512/3726096
+function IsValidMediaAccessControlAddress(MediaAccessControlAddress: string): Boolean;
+begin
+  Result := IsRegExMatch(MediaAccessControlAddress, '^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$');
 end;
 
 function GetApplicationPath: TFileName;
