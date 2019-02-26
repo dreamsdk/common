@@ -154,7 +154,7 @@ begin
     Add('_EXITCODE=' + ClientExitCodeUnixFileName);
   end;
 
-  SetConsoleTitle(PChar(GetFileDescription));
+//  SetConsoleTitle(PChar(GetFileDescription));
 
   fShellCommand.OnNewLine := @HandleNewLine;
   fShellCommand.OnTerminate := @HandleTerminate;
