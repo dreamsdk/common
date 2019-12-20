@@ -138,6 +138,7 @@ type
   private
     fConfigurationFileName: TFileName;
     fInstallPath: TFileName;
+    fProgressWindowAutoClose: Boolean;
     fRepositories: TDreamcastSoftwareDevelopmentSettingsRepositories;
     fUseMinTTY: Boolean;
     fDreamcastTool: TDreamcastSoftwareDevelopmentSettingsDreamcastTool;
@@ -154,6 +155,8 @@ type
     property FileName: TFileName read GetConfigurationFileName;
     property InstallPath: TFileName read fInstallPath;
     property UseMinTTY: Boolean read fUseMinTTY write fUseMinTTY;
+    property ProgressWindowAutoClose: Boolean read fProgressWindowAutoClose
+      write fProgressWindowAutoClose;
     property Repositories: TDreamcastSoftwareDevelopmentSettingsRepositories
       read fRepositories;
   end;
@@ -165,7 +168,7 @@ function SerialBaudrateToString(SerialBaudrate: TDreamcastToolSerialBaudrate): s
 implementation
 
 uses
-  SysTools;
+  RefBase, SysTools;
 
 const
   CONFIG_SETTINGS_SECTION_NAME = 'Settings';
@@ -174,7 +177,7 @@ const
 
 function GetConfigurationDirectory: TFileName;
 begin
-  Result := IncludeTrailingPathDelimiter(GetApplicationPath + '..\..\'
+  Result := IncludeTrailingPathDelimiter(GetMsysBaseDirectory
     + UnixPathToSystem(SETTINGS_DIRECTORY));
 end;
 
@@ -450,6 +453,12 @@ begin
       False
     );
 
+    fProgressWindowAutoClose := IniFile.ReadBool(
+      CONFIG_SETTINGS_SECTION_NAME,
+      'ProgressWindowAutoClose',
+      True
+    );
+
     DreamcastTool.LoadConfiguration(IniFile);
     Repositories.LoadConfiguration(IniFile);
 
@@ -476,6 +485,11 @@ begin
       CONFIG_SETTINGS_SECTION_NAME,
       'UseMinTTY',
       fUseMintty
+    );
+    IniFile.WriteBool(
+      CONFIG_SETTINGS_SECTION_NAME,
+      'ProgressWindowAutoClose',
+      fProgressWindowAutoClose
     );
 
     DreamcastTool.SaveConfiguration(IniFile);

@@ -32,7 +32,7 @@ function IsVersionValid(const Version: string): Boolean;
 implementation
 
 uses
-  SysTools, Version, FirstRun;
+  RefBase, SysTools, Version, FirstRun;
 
 const
   GREP_FILE_SYSTEM_LOCATION = 'msys\1.0\bin\grep.exe';
@@ -134,6 +134,7 @@ var
   Buffer: string;
 
 begin
+  Result := EmptyStr;
   try
     Buffer := Run(Executable, CommandLine);
     Result := Trim(ExtractStr(StartTag, EndTag, Buffer));
@@ -162,13 +163,6 @@ begin
 
   if (Result = '') then
     Result := INVALID_VERSION;
-end;
-
-function GetInstallationBaseDirectory: TFileName;
-begin
-  Result := IncludeTrailingPathDelimiter(GetEnvironmentVariable('DREAMSDK_HOME'));
-  if IsFirstRunMode then
-    Result := IncludeTrailingPathDelimiter(GetFirstRunInstallationDirectory);
 end;
 
 function ProcessModuleVersion(ModuleVersion: TModuleVersion;
