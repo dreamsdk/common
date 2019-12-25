@@ -27,20 +27,24 @@ function GetApplicationPath: TFileName;
 function GetSubStrCount(SubStr, S: string): Integer;
 function IsInString(const SubStr, S: string): Boolean;
 function IsRegExMatch(const InputValue, RegEx: string): Boolean;
-function IsValidInternetProtocolAddress(InternetProtocolAddress: string): Boolean;
-function IsValidMediaAccessControlAddress(MediaAccessControlAddress: string): Boolean;
+function KillFile(const FileName: TFileName): Boolean;
 function Left(SubStr: string; S: string): string;
 function LeftNRight(SubStr, S: string; N: Integer): string;
 function LoadFileToString(FileName: TFileName): string;
+function LoadUTF16FileToString(const FileName: TFileName): string;
 function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string): Boolean;
 function Right(SubStr: string; S: string): string;
 function Run(Executable: string): string; overload;
 function Run(Executable, CommandLine: string): string; overload;
 function Run(Executable, CommandLine: string; var ProcessId: Integer): string; overload;
+function RunAndWait(Executable: string): Boolean;
+function RunAndWait(Executable, CommandLine: string): Boolean;
 function RunNoWait(Executable: string): Boolean; overload;
 function RunNoWait(Executable, CommandLine: string): Boolean; overload;
-function RunShellExecute(Executable, CommandLine: string): Boolean; overload;
 function RunShellExecute(Executable: string): Boolean; overload;
+function RunShellExecute(Executable: string; ShowWindow: Boolean): Boolean;
+function RunShellExecute(Executable, CommandLine: string): Boolean; overload;
+function RunShellExecute(Executable, CommandLine: string; ShowWindow: Boolean): Boolean; overload;
 function UnixPathToSystem(const PathName: TFileName): TFileName;
 procedure SaveStringToFile(const InString: string; FileName: TFileName);
 function StartsWith(const SubStr, S: string): Boolean;
@@ -56,6 +60,8 @@ implementation
 uses
   StrUtils,
   RegExpr,
+  LazUTF8,
+  LConvEncoding,
 {$IFDEF Windows}
   Windows,
   ShellApi,
@@ -124,12 +130,14 @@ begin
   result:=S;
 end;
 
-function RunNoWait(Executable: string): Boolean;
+function ParseProcessParameters(const CommandLine: string): string;
 begin
-  Result := RunNoWait(Executable, '');
+  Result := EmptyStr;
+  if Length(CommandLine) > 0 then
+    Result := StringReplace(CommandLine, ' ', sLineBreak, [rfReplaceAll]);
 end;
 
-function RunNoWait(Executable, CommandLine: string): Boolean;
+function RunProgram(Executable, CommandLine: string; SyncExec: Boolean): Boolean;
 var
   OurProcess: {$IFDEF Windows}TProcess{$ELSE}TProcessUTF8{$ENDIF};
 
@@ -137,14 +145,35 @@ begin
   OurProcess := {$IFDEF Windows}TProcess{$ELSE}TProcessUTF8{$ENDIF}.Create(nil);
   try
     OurProcess.Executable := Executable;
-    if CommandLine <> '' then
-      OurProcess.Parameters.Text := StringReplace(CommandLine, ' ', sLineBreak, [rfReplaceAll]);
+    OurProcess.Parameters.Text := ParseProcessParameters(CommandLine);
     OurProcess.ShowWindow := swoHide;
+    if SyncExec then
+      OurProcess.Options := [poWaitOnExit];
     OurProcess.Execute;
     Result := (OurProcess.ExitCode = 0);
   finally
     OurProcess.Free;
   end;
+end;
+
+function RunNoWait(Executable: string): Boolean;
+begin
+  Result := RunNoWait(Executable, EmptyStr);
+end;
+
+function RunNoWait(Executable, CommandLine: string): Boolean;
+begin
+  Result := RunProgram(Executable, CommandLine, False);
+end;
+
+function RunAndWait(Executable: string): Boolean;
+begin
+  Result := RunAndWait(Executable, EmptyStr);
+end;
+
+function RunAndWait(Executable, CommandLine: string): Boolean;
+begin
+  Result := RunProgram(Executable, CommandLine, True);
 end;
 
 function Run(Executable: string): string;
@@ -191,9 +220,7 @@ begin
 {$ENDIF}
     try
       OurProcess.Executable := Executable;
-
-      if Length(CommandLine) > 0 then
-        OurProcess.Parameters.Text := StringReplace(CommandLine, ' ', sLineBreak, [rfReplaceAll]);
+      OurProcess.Parameters.Text := ParseProcessParameters(CommandLine);
 
       { We cannot use poWaitOnExit here since we don't know the size of the output.
         On Linux the size of the output pipe is 2 kB; if the output data is more, we
@@ -244,6 +271,37 @@ begin
   end;
 end;
 
+function RunShellExecute(Executable: string): Boolean;
+begin
+  Result := RunShellExecute(Executable, EmptyStr);
+end;
+
+function RunShellExecute(Executable: string; ShowWindow: Boolean): Boolean;
+begin
+  Result := RunShellExecute(Executable, EmptyStr, ShowWindow);
+end;
+
+function RunShellExecute(Executable, CommandLine: string): Boolean;
+begin
+  Result := RunShellExecute(Executable, CommandLine, True);
+end;
+
+function RunShellExecute(Executable, CommandLine: string; ShowWindow: Boolean): Boolean;
+var
+  Flag: Integer;
+
+begin
+  Result := False;
+{$IFDEF Windows}
+  Flag := SW_SHOWNORMAL;
+  if not ShowWindow then
+    Flag := SW_HIDE;
+
+  Result := ShellExecute(0, 'open', PChar(Executable), PChar(CommandLine),
+    PChar(ExtractFilePath(Executable)), Flag) > 32;
+{$ENDIF}
+end;
+
 function IsInString(const SubStr, S: string): Boolean;
 begin
   Result := Pos(LowerCase(SubStr), LowerCase(S)) > 0;
@@ -288,18 +346,6 @@ begin
   end;
 end;
 
-// Thanks to: https://stackoverflow.com/a/5284410/3726096
-function IsValidInternetProtocolAddress(InternetProtocolAddress: string): Boolean;
-begin
-  Result := IsRegExMatch(InternetProtocolAddress, '\b((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.|$)){4}\b');
-end;
-
-// Thanks to: https://stackoverflow.com/a/4260512/3726096
-function IsValidMediaAccessControlAddress(MediaAccessControlAddress: string): Boolean;
-begin
-  Result := IsRegExMatch(MediaAccessControlAddress, '^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$');
-end;
-
 function GetApplicationPath: TFileName;
 var
   Path: TFileName;
@@ -308,7 +354,7 @@ var
 {$ENDIF}
 
 begin
-  if (ApplicationPath = '') then
+  if (ApplicationPath = EmptyStr) then
   begin
     Path := ExtractFilePath(ParamStr(0));
 {$IFDEF Darwin}
@@ -322,21 +368,6 @@ begin
     ApplicationPath := IncludeTrailingPathDelimiter(Path);
   end;
   Result := ApplicationPath;
-end;
-
-function RunShellExecute(Executable: string): Boolean;
-begin
-  Result := RunShellExecute(Executable, '');
-end;
-
-function RunShellExecute(Executable, CommandLine: string): Boolean;
-begin
-{$IFDEF Windows}
-  Result := ShellExecute(0, 'open', PChar(Executable), PChar(CommandLine),
-    PChar(ExtractFilePath(Executable)), 1) > 32;
-{$ELSE}
-  Result := False;
-{$ENDIF}
 end;
 
 function UnixPathToSystem(const PathName: TFileName): TFileName;
@@ -475,6 +506,35 @@ begin
       Buffer.Free;
     end;
   end;
+end;
+
+// Thanks to: GetMem
+// https://forum.lazarus.freepascal.org/index.php?topic=30553.0
+function LoadUTF16FileToString(const FileName: TFileName): string;
+var
+  MS: TMemoryStream;
+  S: string;
+
+begin
+  MS := TMemoryStream.Create;
+  try
+    MS.LoadFromFile(FileName);
+    MS.Position := 0;
+
+    // UTF-16 to UTF-8 with BOM
+    S := UTF16ToUTF8(PWideChar(MS.Memory), MS.Size div SizeOf(WideChar));
+
+    // UTF-8 without BOM
+    Result := string(UTF8BOMToUTF8(S));
+  finally
+    MS.Free;
+  end;
+end;
+
+function KillFile(const FileName: TFileName): Boolean;
+begin
+  if FileExists(FileName) then
+    Result := SysUtils.DeleteFile(FileName);
 end;
 
 function ExpandEnvironmentStrings(const InputString: string): string;
