@@ -9,23 +9,31 @@ uses
   SysUtils;
 
 type
+  TIpAddresses = array of string;
+  PIpAddresses = ^TIpAddresses;
+
   TNetworkCardAdapter = record
     NetworkCardName: string;
     MacAddress: string;
-    IpAddresses: array of string;
+    IPv4Addresses: TIpAddresses;
+    IPv6Addresses: TIpAddresses;
   end;
 
   TNetworkCardAdapterList = array of TNetworkCardAdapter;
 
 function GetNetworkCardAdapterList(var ANetworkAdapterCardList: TNetworkCardAdapterList): Boolean;
+function FindMediaAccessControlAddress(var ANetworkAdapterCardList: TNetworkCardAdapterList;
+  MediaAccessControlAddress: string): Integer;
 function IsValidInternetProtocolAddress(InternetProtocolAddress: string): Boolean;
 function IsValidMediaAccessControlAddress(MediaAccessControlAddress: string): Boolean;
 function ParseInternetProtocolAddress(const InputValue: string): string;
+function SanitizeMediaAccessControlAddress(MediaAccessControlAddress: string): string;
 
 implementation
 
 uses
   LazUTF8,
+  SynaIP,
   SysTools;
 
 function ParseInternetProtocolAddress(const InputValue: string): string;
@@ -49,16 +57,39 @@ begin
   end;
 end;
 
-// Thanks to: https://stackoverflow.com/a/5284410/3726096
 function IsValidInternetProtocolAddress(InternetProtocolAddress: string): Boolean;
 begin
-  Result := IsRegExMatch(InternetProtocolAddress, '\b((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.|$)){4}\b');
+  Result := IsIP(InternetProtocolAddress);
 end;
 
 // Thanks to: https://stackoverflow.com/a/4260512/3726096
 function IsValidMediaAccessControlAddress(MediaAccessControlAddress: string): Boolean;
 begin
   Result := IsRegExMatch(MediaAccessControlAddress, '^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$');
+end;
+
+function SanitizeMediaAccessControlAddress(MediaAccessControlAddress: string): string;
+begin
+  Result := StringReplace(UpperCase(MediaAccessControlAddress), ':', '-', [rfReplaceAll]);
+end;
+
+function FindMediaAccessControlAddress(
+  var ANetworkAdapterCardList: TNetworkCardAdapterList;
+  MediaAccessControlAddress: string): Integer;
+var
+  i: Integer;
+
+begin
+  Result := -1;
+  MediaAccessControlAddress :=
+    SanitizeMediaAccessControlAddress(MediaAccessControlAddress);
+
+  for i := Low(ANetworkAdapterCardList) to High(ANetworkAdapterCardList) do
+    if SameText(ANetworkAdapterCardList[i].MacAddress, MediaAccessControlAddress) then
+    begin
+      Result := i;
+      Break;
+    end;
 end;
 
 // For debugging this complex function:
@@ -160,7 +191,7 @@ var
 
         if Buffer.Count = 3 then
         begin
-          MacAddress := Buffer[1];
+          MacAddress := SanitizeMediaAccessControlAddress(Buffer[1]);
           if MacAddress <> EmptyStr then
           begin
             SetLength(ANetworkAdapterCardList, j + 1);
@@ -181,25 +212,12 @@ var
     end;
   end;
 
-  function FindMac(const MacAddress: string): Integer;
-  var
-    i: Integer;
-
-  begin
-    Result := -1;
-    for i := Low(ANetworkAdapterCardList) to High(ANetworkAdapterCardList) do
-      if SameText(ANetworkAdapterCardList[i].MacAddress, MacAddress) then
-      begin
-        Result := i;
-        Break;
-      end;
-  end;
-
   procedure HandleIpAddresses(const AIpIndex: Integer; const AIpAddresses: string);
   var
     i, IpEntryIndex: Integer;
     ExtractedIpAddresses, CurrentIpAddress: string;
     Buffer: TStringList;
+    IpAddresses: PIpAddresses;
 
   begin
     ExtractedIpAddresses := ExtractStr('{', '}', AIpAddresses);
@@ -213,17 +231,21 @@ var
         begin
           for i := 0 to Buffer.Count - 1 do
           begin
-            CurrentIpAddress := Buffer[i];
+            CurrentIpAddress := Trim(Buffer[i]);
 {$IFDEF DEBUG}
 {$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
             WriteLn('    ', CurrentIpAddress);
 {$ENDIF}
 {$ENDIF}
-            if Trim(CurrentIpAddress) <> EmptyStr then
+            if CurrentIpAddress <> EmptyStr then
             begin
-              IpEntryIndex := Length(IpAddresses);
-              SetLength(IpAddresses, IpEntryIndex + 1);
-              IpAddresses[IpEntryIndex] := CurrentIpAddress;
+              IpAddresses := @IPv4Addresses;
+              if IsIP6(CurrentIpAddress) then
+                IpAddresses := @IPv6Addresses;
+
+              IpEntryIndex := Length(IpAddresses^);
+              SetLength(IpAddresses^, IpEntryIndex + 1);
+              IpAddresses^[IpEntryIndex] := CurrentIpAddress;
             end;
           end;
         end;
@@ -241,6 +263,7 @@ var
   var
     i, j, StartIndex: Integer;
     Buffer: TStringList;
+    MacAddress: string;
 
   begin
     Buffer := TStringList.Create;
@@ -258,7 +281,8 @@ var
         if Buffer.Count = 3 then
         begin
           // Only for items with MAC
-          j := FindMac(Buffer[2]);
+          MacAddress := SanitizeMediaAccessControlAddress(Buffer[2]);
+          j := FindMediaAccessControlAddress(ANetworkAdapterCardList, MacAddress);
           if j <> -1 then
             HandleIpAddresses(j, Buffer[1]);
         end;

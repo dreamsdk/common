@@ -75,6 +75,7 @@ type
     fInternetProtocolAddress: string;
     fMediaAccessControlAddress: string;
     fMediaAccessControlEnabled: Boolean;
+    fHostMediaAccessControlAddress: string;
     fSerialDumbTerminal: Boolean;
     fSerialExternalClock: Boolean;
     fSerialBaudrate: TDreamcastToolSerialBaudrate;
@@ -106,6 +107,8 @@ type
       read fMediaAccessControlEnabled write fMediaAccessControlEnabled;
     property MediaAccessControlAddress: string
       read fMediaAccessControlAddress write fMediaAccessControlAddress;
+    property HostMediaAccessControlAddress: string
+      read fHostMediaAccessControlAddress write fHostMediaAccessControlAddress;
     property CustomExecutable: TFileName
       read fCustomExecutable write fCustomExecutable;
     property CustomArguments: string
@@ -241,6 +244,11 @@ begin
     'MediaAccessControlAddress',
     DREAMCAST_TOOL_DEFAULT_MEDIA_ACCESS_CONTROL_ADDRESS
   );
+  fHostMediaAccessControlAddress := IniFile.ReadString(
+    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    'HostMediaAccessControlAddress',
+    DREAMCAST_TOOL_DEFAULT_MEDIA_ACCESS_CONTROL_ADDRESS
+  );
   fSerialDumbTerminal := IniFile.ReadBool(
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
     'SerialDumbTerminal',
@@ -310,6 +318,11 @@ begin
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
     'MediaAccessControlAddress',
     fMediaAccessControlAddress
+  );
+  IniFile.WriteString(
+    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    'HostMediaAccessControlAddress',
+    fHostMediaAccessControlAddress
   );
   IniFile.WriteBool(
     CONFIG_DREAMCAST_TOOL_SECTION_NAME,
