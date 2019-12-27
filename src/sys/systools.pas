@@ -22,7 +22,7 @@ type
 function EndsWith(const SubStr, S: string): Boolean;
 function ExpandEnvironmentStrings(const InputString: string): string;
 function ExtractStr(LeftSubStr, RightSubStr, S: string): string;
-function ExtremeRight(SubStr: string ; S: string): string;
+function ExtremeRight(SubStr: string; S: string): string;
 function GetApplicationPath: TFileName;
 function GetSubStrCount(SubStr, S: string): Integer;
 function IsInString(const SubStr, S: string): Boolean;

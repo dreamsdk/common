@@ -9,7 +9,13 @@ uses
   SysUtils;
 
 type
-  TIpAddresses = array of string;
+  TIpAddress = record
+    Address: string;
+    Subnet: string;
+  end;
+  PIpAddress = ^TIpAddress;
+
+  TIpAddresses = array of TIpAddress;
   PIpAddresses = ^TIpAddresses;
 
   TNetworkCardAdapter = record
@@ -92,7 +98,7 @@ begin
     end;
 end;
 
-// For debugging this complex function:
+// Note: for debugging this complex function, define the thing below
 // {$DEFINE DEBUG_GET_NETWORK_CARD_ADAPTER}
 function GetNetworkCardAdapterList(
   var ANetworkAdapterCardList: TNetworkCardAdapterList): Boolean;
@@ -118,7 +124,7 @@ var
     try
       Buffer.Add('@echo off');
       Buffer.Add('wmic OS get Version > nul');
-      Buffer.Add(Format('wmic NICCONFIG get IPAddress,MACAddress /FORMAT:CSV > "%s"', [IpToMacFileName]));
+      Buffer.Add(Format('wmic NICCONFIG get IPAddress,IPSubnet,MACAddress /FORMAT:CSV > "%s"', [IpToMacFileName]));
       Buffer.Add(Format('wmic NIC where "NetConnectionID like ''%%%%''" get MACAddress,NetConnectionID /FORMAT:CSV > "%s"', [MacToAdapterNameFileName]));
       Buffer.Add(':check_files');
       Buffer.Add(Format('if not exist "%s" goto check_files', [IpToMacFileName]));
@@ -174,6 +180,7 @@ var
     i, j, StartIndex: Integer;
     Buffer: TStringList;
     MacAddress: string;
+    FieldCount: Integer;
 
   begin
 {$IFDEF DEBUG}
@@ -181,6 +188,7 @@ var
     WriteLn('ParseMacToAdapterName');
 {$ENDIF}
 {$ENDIF}
+    FieldCount := GetSubStrCount(',', HEADER) + 1;
     Buffer := TStringList.Create;
     try
       j := 0;
@@ -189,8 +197,13 @@ var
       begin
         StringToStringList(MacToAdapterNameBuffer[i], ',', Buffer);
 
-        if Buffer.Count = 3 then
+        if Buffer.Count = FieldCount then
         begin
+{$IFDEF DEBUG}
+{$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
+          WriteLn('  ', MacToAdapterNameBuffer[i]);
+{$ENDIF}
+{$ENDIF}
           MacAddress := SanitizeMediaAccessControlAddress(Buffer[1]);
           if MacAddress <> EmptyStr then
           begin
@@ -199,8 +212,8 @@ var
             ANetworkAdapterCardList[j].MacAddress := MacAddress;
 {$IFDEF DEBUG}
 {$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
-            WriteLn('  MacAddress: ', ANetworkAdapterCardList[j].MacAddress,
-              ', NetworkCardName: ', ANetworkAdapterCardList[j].NetworkCardName);
+            WriteLn('    MacAddress: ', ANetworkAdapterCardList[j].MacAddress, sLineBreak,
+              '    NetworkCardName: ', ANetworkAdapterCardList[j].NetworkCardName);
 {$ENDIF}
 {$ENDIF}
             Inc(j);
@@ -212,79 +225,107 @@ var
     end;
   end;
 
-  procedure HandleIpAddresses(const AIpIndex: Integer; const AIpAddresses: string);
+  procedure HandleIpAddresses(const AIpIndex: Integer;
+    const AIpAddresses: string; const AIpSubnets: string);
   var
     i, IpEntryIndex: Integer;
-    ExtractedIpAddresses, CurrentIpAddress: string;
-    Buffer: TStringList;
+    ExtractedIpAddresses,
+    ExtractedSubnets,
+    CurrentIpAddress,
+    CurrentIpSubnet: string;
+    IpBuffer,
+    SubnetBuffer: TStringList;
     IpAddresses: PIpAddresses;
 
   begin
     ExtractedIpAddresses := ExtractStr('{', '}', AIpAddresses);
+    ExtractedSubnets := ExtractStr('{', '}', AIpSubnets);
+
     if ExtractedIpAddresses <> EmptyStr then
     begin
-      Buffer := TStringList.Create;
+      IpBuffer := TStringList.Create;
+      SubnetBuffer := TStringList.Create;
       try
-        StringToStringList(ExtractedIpAddresses, ';', Buffer);
+        StringToStringList(ExtractedIpAddresses, ';', IpBuffer);
+        StringToStringList(ExtractedSubnets, ';', SubnetBuffer);
 
         with ANetworkAdapterCardList[AIpIndex] do
         begin
-          for i := 0 to Buffer.Count - 1 do
+          for i := 0 to IpBuffer.Count - 1 do
           begin
-            CurrentIpAddress := Trim(Buffer[i]);
-{$IFDEF DEBUG}
-{$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
-            WriteLn('    ', CurrentIpAddress);
-{$ENDIF}
-{$ENDIF}
+            CurrentIpAddress := IpBuffer[i];
+            CurrentIpSubnet := SubnetBuffer[i]; // no parsing needed
+
             if CurrentIpAddress <> EmptyStr then
             begin
+{$IFDEF DEBUG}
+{$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
+              WriteLn('    ', CurrentIpAddress);
+{$ENDIF}
+{$ENDIF}
+              // Determine if the item is an IPv4 or IPv6
               IpAddresses := @IPv4Addresses;
               if IsIP6(CurrentIpAddress) then
-                IpAddresses := @IPv6Addresses;
+                IpAddresses := @IPv6Addresses
+              else
+                CurrentIpAddress := ParseInternetProtocolAddress(CurrentIpAddress); // Sanitize IPv4
 
+              // Add a item to the array
               IpEntryIndex := Length(IpAddresses^);
               SetLength(IpAddresses^, IpEntryIndex + 1);
-              IpAddresses^[IpEntryIndex] := CurrentIpAddress;
+
+              // Assign the values to the new item
+              IpAddresses^[IpEntryIndex].Address := CurrentIpAddress;
+              IpAddresses^[IpEntryIndex].Subnet := CurrentIpSubnet;
             end;
           end;
         end;
 
       finally
-        Buffer.Free;
+        SubnetBuffer.Free;
+        IpBuffer.Free;
       end;
     end;
   end;
 
   procedure ParseIpToMac;
   const
-    HEADER = 'Node,IPAddress,MACAddress';
+    HEADER = 'Node,IPAddress,IPSubnet,MACAddress';
 
   var
     i, j, StartIndex: Integer;
     Buffer: TStringList;
     MacAddress: string;
+    FieldCount: Integer;
 
   begin
+{$IFDEF DEBUG}
+{$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
+    WriteLn('ParseIpToMac');
+{$ENDIF}
+{$ENDIF}
+    FieldCount := GetSubStrCount(',', HEADER) + 1;
     Buffer := TStringList.Create;
     try
       StartIndex := StringListSubstringIndexOf(IpToMacBuffer, HEADER) + 1;
       for i := StartIndex to IpToMacBuffer.Count - 1 do
       begin
-{$IFDEF DEBUG}
-{$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
-        WriteLn('  ', IpToMacBuffer[i]);
-{$ENDIF}
-{$ENDIF}
         StringToStringList(IpToMacBuffer[i], ',', Buffer);
 
-        if Buffer.Count = 3 then
+        if Buffer.Count = FieldCount then
         begin
           // Only for items with MAC
-          MacAddress := SanitizeMediaAccessControlAddress(Buffer[2]);
+          MacAddress := SanitizeMediaAccessControlAddress(Buffer[3]);
           j := FindMediaAccessControlAddress(ANetworkAdapterCardList, MacAddress);
           if j <> -1 then
-            HandleIpAddresses(j, Buffer[1]);
+          begin
+{$IFDEF DEBUG}
+{$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
+            WriteLn('  ', IpToMacBuffer[i]);
+{$ENDIF}
+{$ENDIF}
+            HandleIpAddresses(j, Buffer[1], Buffer[2]);
+          end;
         end;
       end;
      finally
