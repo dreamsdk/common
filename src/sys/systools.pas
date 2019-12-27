@@ -5,7 +5,9 @@ unit SysTools;
 interface
 
 uses
-  Classes, SysUtils, FGL;
+  Classes,
+  SysUtils,
+  FGL;
 
 const
   WhiteSpaceStr = ' ';
@@ -533,6 +535,7 @@ end;
 
 function KillFile(const FileName: TFileName): Boolean;
 begin
+  Result := False;
   if FileExists(FileName) then
     Result := SysUtils.DeleteFile(FileName);
 end;

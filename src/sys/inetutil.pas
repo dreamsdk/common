@@ -63,6 +63,50 @@ begin
   end;
 end;
 
+function IsSameSubnet(const Subnet, InternetProtocolAddress1,
+  InternetProtocolAddress2: string): Boolean;
+var
+  BufferInternetProtocolAddress1,
+  BufferInternetProtocolAddress2,
+  BufferSubnet: TStringList;
+  i: Integer;
+  SubnetValue,
+  IPv4Value1,
+  IPv4Value2: Integer;
+
+begin
+  Result := False;
+
+  BufferSubnet := TStringList.Create;
+  BufferInternetProtocolAddress1 := TStringList.Create;
+  BufferInternetProtocolAddress2 := TStringList.Create;
+  try
+    StringToStringList(Subnet, '.', BufferSubnet);
+    StringToStringList(InternetProtocolAddress1, '.', BufferInternetProtocolAddress1);
+    StringToStringList(InternetProtocolAddress2, '.', BufferInternetProtocolAddress2);
+
+    if (BufferSubnet.Count <> BufferInternetProtocolAddress1.Count) or
+      (BufferSubnet.Count <> BufferInternetProtocolAddress2.Count) then
+        Exit;
+
+    Result := True;
+    for i := 0 to BufferSubnet.Count - 1 do
+    begin
+      SubnetValue := StrToInt(BufferSubnet[i]);
+      IPv4Value1 := StrToInt(BufferInternetProtocolAddress1[i]);
+      IPv4Value2 := StrToInt(BufferInternetProtocolAddress2[i]);
+
+      Result := Result
+        and (IPv4Value1 and SubnetValue = IPv4Value2 and SubnetValue);
+    end;
+
+  finally
+    BufferInternetProtocolAddress1.Free;
+    BufferInternetProtocolAddress2.Free;
+    BufferSubnet.Free;
+  end;
+end;
+
 function IsValidInternetProtocolAddress(InternetProtocolAddress: string): Boolean;
 begin
   Result := IsIP(InternetProtocolAddress);
