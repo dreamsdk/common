@@ -20,6 +20,7 @@ type
 
   TNetworkCardAdapter = record
     NetworkCardName: string;
+    InterfaceIndex: Integer;
     MacAddress: string;
     IPv4Addresses: TIpAddresses;
     IPv6Addresses: TIpAddresses;
@@ -30,6 +31,8 @@ type
 function GetNetworkCardAdapterList(var ANetworkAdapterCardList: TNetworkCardAdapterList): Boolean;
 function FindMediaAccessControlAddress(var ANetworkAdapterCardList: TNetworkCardAdapterList;
   MediaAccessControlAddress: string): Integer;
+function IsSameSubnet(const Subnet, InternetProtocolAddress1,
+  InternetProtocolAddress2: string): Boolean;
 function IsValidInternetProtocolAddress(InternetProtocolAddress: string): Boolean;
 function IsValidMediaAccessControlAddress(MediaAccessControlAddress: string): Boolean;
 function ParseInternetProtocolAddress(const InputValue: string): string;
@@ -169,7 +172,7 @@ var
       Buffer.Add('@echo off');
       Buffer.Add('wmic OS get Version > nul');
       Buffer.Add(Format('wmic NICCONFIG get IPAddress,IPSubnet,MACAddress /FORMAT:CSV > "%s"', [IpToMacFileName]));
-      Buffer.Add(Format('wmic NIC where "NetConnectionID like ''%%%%''" get MACAddress,NetConnectionID /FORMAT:CSV > "%s"', [MacToAdapterNameFileName]));
+      Buffer.Add(Format('wmic NIC where "NetConnectionID like ''%%%%''" get InterfaceIndex,MACAddress,NetConnectionID /FORMAT:CSV > "%s"', [MacToAdapterNameFileName]));
       Buffer.Add(':check_files');
       Buffer.Add(Format('if not exist "%s" goto check_files', [IpToMacFileName]));
       Buffer.Add(Format('if not exist "%s" goto check_files', [MacToAdapterNameFileName]));
@@ -218,7 +221,7 @@ var
 
   procedure ParseMacToAdapterName;
   const
-    HEADER = 'Node,MACAddress,NetConnectionID';
+    HEADER = 'Node,InterfaceIndex,MACAddress,NetConnectionID';
 
   var
     i, j, StartIndex: Integer;
@@ -248,11 +251,12 @@ var
           WriteLn('  ', MacToAdapterNameBuffer[i]);
 {$ENDIF}
 {$ENDIF}
-          MacAddress := SanitizeMediaAccessControlAddress(Buffer[1]);
+          MacAddress := SanitizeMediaAccessControlAddress(Buffer[2]);
           if MacAddress <> EmptyStr then
           begin
             SetLength(ANetworkAdapterCardList, j + 1);
-            ANetworkAdapterCardList[j].NetworkCardName := Buffer[2];
+            ANetworkAdapterCardList[j].InterfaceIndex := StrToInt(Buffer[1]);
+            ANetworkAdapterCardList[j].NetworkCardName := Buffer[3];
             ANetworkAdapterCardList[j].MacAddress := MacAddress;
 {$IFDEF DEBUG}
 {$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
