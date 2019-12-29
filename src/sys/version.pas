@@ -51,6 +51,7 @@ function GetWidgetSet: string;
 function GetCompanyName: string;
 function GetLegalCopyright: string;
 function IsDebugBuild: Boolean;
+function IsWindowsVistaOrGreater: Boolean;
 
 const
   WIDGETSET_GTK        = 'GTK';
@@ -336,6 +337,11 @@ begin
 {$ELSE}
   Result := False;
 {$ENDIF}
+end;
+
+function IsWindowsVistaOrGreater: Boolean;
+begin
+  Result := Win32MajorVersion >= 6;
 end;
 
 Initialization

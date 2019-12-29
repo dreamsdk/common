@@ -43,7 +43,8 @@ implementation
 uses
   LazUTF8,
   SynaIP,
-  SysTools;
+  SysTools,
+  Version;
 
 function ParseInternetProtocolAddress(const InputValue: string): string;
 var
@@ -161,18 +162,23 @@ var
     BatchFileName,
     IpToMacFileName,
     MacToAdapterNameFileName: TFileName;
+    InterfaceIndexField: string;
 
   begin
     BatchFileName := ChangeFileExt(SysUtils.GetTempFileName, '.bat');
     IpToMacFileName := ChangeFileExt(SysUtils.GetTempFileName, '-ip2mac.tmp');
     MacToAdapterNameFileName := ChangeFileExt(SysUtils.GetTempFileName, '-mac2name.tmp');
 
+    InterfaceIndexField := EmptyStr;
+    if IsWindowsVistaOrGreater then
+      InterfaceIndexField := 'InterfaceIndex,';
+
     Buffer := TStringList.Create;
     try
       Buffer.Add('@echo off');
       Buffer.Add('wmic OS get Version > nul');
       Buffer.Add(Format('wmic NICCONFIG get IPAddress,IPSubnet,MACAddress /FORMAT:CSV > "%s"', [IpToMacFileName]));
-      Buffer.Add(Format('wmic NIC where "NetConnectionID like ''%%%%''" get InterfaceIndex,MACAddress,NetConnectionID /FORMAT:CSV > "%s"', [MacToAdapterNameFileName]));
+      Buffer.Add(Format('wmic NIC where "NetConnectionID like ''%%%%''" get %sMACAddress,NetConnectionID /FORMAT:CSV > "%s"', [InterfaceIndexField, MacToAdapterNameFileName]));
       Buffer.Add(':check_files');
       Buffer.Add(Format('if not exist "%s" goto check_files', [IpToMacFileName]));
       Buffer.Add(Format('if not exist "%s" goto check_files', [MacToAdapterNameFileName]));
@@ -221,13 +227,14 @@ var
 
   procedure ParseMacToAdapterName;
   const
-    HEADER = 'Node,InterfaceIndex,MACAddress,NetConnectionID';
+    HEADER_VISTA_OR_GREATER = 'Node,InterfaceIndex,MACAddress,NetConnectionID';
+    HEADER_XP_OR_OLDER = 'Node,MACAddress,NetConnectionID';
 
   var
     i, j, StartIndex: Integer;
     Buffer: TStringList;
-    MacAddress: string;
-    FieldCount: Integer;
+    Header, MacAddress: string;
+    FieldCount, FieldIndex: Integer;
 
   begin
 {$IFDEF DEBUG}
@@ -235,11 +242,16 @@ var
     WriteLn('ParseMacToAdapterName');
 {$ENDIF}
 {$ENDIF}
-    FieldCount := GetSubStrCount(',', HEADER) + 1;
+
+    Header := HEADER_XP_OR_OLDER;
+    if IsWindowsVistaOrGreater then
+      Header := HEADER_VISTA_OR_GREATER;
+
+    FieldCount := GetSubStrCount(',', Header) + 1;
     Buffer := TStringList.Create;
     try
       j := 0;
-      StartIndex := StringListSubstringIndexOf(MacToAdapterNameBuffer, HEADER) + 1;
+      StartIndex := StringListSubstringIndexOf(MacToAdapterNameBuffer, Header) + 1;
       for i := StartIndex to MacToAdapterNameBuffer.Count - 1 do
       begin
         StringToStringList(MacToAdapterNameBuffer[i], ',', Buffer);
@@ -251,12 +263,18 @@ var
           WriteLn('  ', MacToAdapterNameBuffer[i]);
 {$ENDIF}
 {$ENDIF}
-          MacAddress := SanitizeMediaAccessControlAddress(Buffer[2]);
+          // In WinXP there is no InterfaceIndex field
+          FieldIndex := -1;
+          if IsWindowsVistaOrGreater then
+            FieldIndex := 0;
+
+          MacAddress := SanitizeMediaAccessControlAddress(Buffer[FieldIndex + 2]);
           if MacAddress <> EmptyStr then
           begin
             SetLength(ANetworkAdapterCardList, j + 1);
-            ANetworkAdapterCardList[j].InterfaceIndex := StrToInt(Buffer[1]);
-            ANetworkAdapterCardList[j].NetworkCardName := Buffer[3];
+            if IsWindowsVistaOrGreater then
+              ANetworkAdapterCardList[j].InterfaceIndex := StrToInt(Buffer[FieldIndex + 1]);
+            ANetworkAdapterCardList[j].NetworkCardName := Buffer[FieldIndex + 3];
             ANetworkAdapterCardList[j].MacAddress := MacAddress;
 {$IFDEF DEBUG}
 {$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}

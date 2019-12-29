@@ -21,6 +21,9 @@ procedure SetControlMultilineLabel(Control: TWinControl);
 
 implementation
 
+uses
+  Version;
+	
 function IsAeroEnabled: Boolean;
 {$IFDEF Windows}
 type
@@ -31,7 +34,7 @@ var
   DwmIsCompositionEnabledFunc: TDwmIsCompositionEnabledFunc;
 begin
   Result := False;
-  if (Win32MajorVersion >= 6) then // Vista or Windows 7+
+  if IsWindowsVistaOrGreater then // Vista or Windows 7+
   begin
     ModuleHandle := LoadLibrary('dwmapi.dll');
     if ModuleHandle <> 0 then
@@ -91,7 +94,7 @@ end;
 function MsgBoxWrapStr: string;
 begin
   Result := ' ';
-  if Win32MajorVersion < 6 then
+  if not IsWindowsVistaOrGreater then
     Result := sLineBreak;
 end;
 
