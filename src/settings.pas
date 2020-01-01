@@ -171,7 +171,7 @@ function SerialBaudrateToString(SerialBaudrate: TDreamcastToolSerialBaudrate): s
 implementation
 
 uses
-  RefBase, SysTools;
+  RefBase, FSTools;
 
 const
   CONFIG_SETTINGS_SECTION_NAME = 'Settings';

@@ -32,7 +32,7 @@ function IsVersionValid(const Version: string): Boolean;
 implementation
 
 uses
-  RefBase, SysTools, Version, FirstRun;
+  RefBase, SysTools, RunTools, Version, FirstRun;
 
 const
   GREP_FILE_SYSTEM_LOCATION = 'msys\1.0\bin\grep.exe';

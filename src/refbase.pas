@@ -10,20 +10,26 @@ uses
 type
   EHomeDirectoryNotFound = class(Exception);
 
+function GetBaseEnvironmentVariableName: string;
 function GetInstallationBaseDirectory: TFileName;
 function GetMSysBaseDirectory: TFileName;
 
 implementation
 
 uses
-  FirstRun, SysTools;
+  FirstRun, FSTools;
 
-function GetInstallationBaseDirectory: TFileName;
+function GetBaseEnvironmentVariableName: string;
 const
   DREAMSDK_ENVIRONMENT_VARIABLE = {$IFDEF RELEASE}'DREAMSDK_HOME'{$ELSE}'DREAMSDK_HOME_DEBUG'{$ENDIF};
 
 begin
-  Result := GetEnvironmentVariable(DREAMSDK_ENVIRONMENT_VARIABLE);
+  Result := DREAMSDK_ENVIRONMENT_VARIABLE;
+end;
+
+function GetInstallationBaseDirectory: TFileName;
+begin
+  Result := GetEnvironmentVariable(GetBaseEnvironmentVariableName);
   if not DirectoryExists(Result) then
     Result := GetApplicationPath + '..\..\'; // Fail-safe
 

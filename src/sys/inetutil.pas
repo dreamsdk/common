@@ -44,6 +44,8 @@ uses
   LazUTF8,
   SynaIP,
   SysTools,
+  RunTools,
+  FSTools,
   Version;
 
 function ParseInternetProtocolAddress(const InputValue: string): string;
@@ -132,14 +134,14 @@ function FindMediaAccessControlAddress(
   MediaAccessControlAddress: string): Integer;
 var
   i: Integer;
+  MacAddress: string;
 
 begin
   Result := -1;
-  MediaAccessControlAddress :=
-    SanitizeMediaAccessControlAddress(MediaAccessControlAddress);
+  MacAddress := SanitizeMediaAccessControlAddress(MediaAccessControlAddress);
 
   for i := Low(ANetworkAdapterCardList) to High(ANetworkAdapterCardList) do
-    if SameText(ANetworkAdapterCardList[i].MacAddress, MediaAccessControlAddress) then
+    if SameText(ANetworkAdapterCardList[i].MacAddress, MacAddress) then
     begin
       Result := i;
       Break;
