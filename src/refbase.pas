@@ -31,13 +31,13 @@ function GetInstallationBaseDirectory: TFileName;
 begin
   Result := GetEnvironmentVariable(GetBaseEnvironmentVariableName);
   if not DirectoryExists(Result) then
-    Result := GetApplicationPath + '..\..\'; // Fail-safe
+    Result := GetApplicationPath + '..\..\..\..\'; // Fail-safe: this points to the X:\DreamSDK\ directory
 
   if IsFirstRunMode then
     Result := GetFirstRunInstallationDirectory;
 
   if Result <> EmptyStr then
-    Result := IncludeTrailingPathDelimiter(Result);
+    Result := IncludeTrailingPathDelimiter(ExpandFileName(Result));
 
   if not DirectoryExists(Result) then
     raise EHomeDirectoryNotFound.Create('DreamSDK Home directory not found!');
