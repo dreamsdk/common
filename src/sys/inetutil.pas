@@ -9,6 +9,8 @@ uses
   SysUtils;
 
 type
+  EExternalInternetProtocolAddress = class(Exception);
+
   TIpAddress = record
     Address: string;
     Subnet: string;
@@ -28,9 +30,11 @@ type
 
   TNetworkCardAdapterList = array of TNetworkCardAdapter;
 
+function GetExternalInternetProtocolAddress: string;
 function GetNetworkCardAdapterList(var ANetworkAdapterCardList: TNetworkCardAdapterList): Boolean;
 function FindMediaAccessControlAddress(var ANetworkAdapterCardList: TNetworkCardAdapterList;
   MediaAccessControlAddress: string): Integer;
+function IsInternetConnectionAvailable: Boolean;
 function IsSameSubnet(const Subnet, InternetProtocolAddress1,
   InternetProtocolAddress2: string): Boolean;
 function IsValidInternetProtocolAddress(InternetProtocolAddress: string): Boolean;
@@ -43,6 +47,8 @@ implementation
 uses
   LazUTF8,
   SynaIP,
+  FPHTTPClient,
+  RegExpr,
   SysTools,
   RunTools,
   FSTools,
@@ -297,6 +303,9 @@ var
 
   procedure HandleIpAddresses(const AIpIndex: Integer;
     const AIpAddresses: string; const AIpSubnets: string);
+  const
+    INVALID_IP_ADDRESS = '0.0.0.0';
+
   var
     i, IpEntryIndex: Integer;
     ExtractedIpAddresses,
@@ -324,29 +333,32 @@ var
           for i := 0 to IpBuffer.Count - 1 do
           begin
             CurrentIpAddress := IpBuffer[i];
-            CurrentIpSubnet := SubnetBuffer[i]; // no parsing needed
-
-            if CurrentIpAddress <> EmptyStr then
+            if CurrentIpAddress <> INVALID_IP_ADDRESS then
             begin
+              CurrentIpSubnet := SubnetBuffer[i]; // no parsing needed
+
+              if CurrentIpAddress <> EmptyStr then
+              begin
 {$IFDEF DEBUG}
 {$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
-              WriteLn('    ', CurrentIpAddress);
+                WriteLn('    ', CurrentIpAddress);
 {$ENDIF}
 {$ENDIF}
-              // Determine if the item is an IPv4 or IPv6
-              IpAddresses := @IPv4Addresses;
-              if IsIP6(CurrentIpAddress) then
-                IpAddresses := @IPv6Addresses
-              else
-                CurrentIpAddress := ParseInternetProtocolAddress(CurrentIpAddress); // Sanitize IPv4
+                // Determine if the item is an IPv4 or IPv6
+                IpAddresses := @IPv4Addresses;
+                if IsIP6(CurrentIpAddress) then
+                  IpAddresses := @IPv6Addresses
+                else
+                  CurrentIpAddress := ParseInternetProtocolAddress(CurrentIpAddress); // Sanitize IPv4
 
-              // Add a item to the array
-              IpEntryIndex := Length(IpAddresses^);
-              SetLength(IpAddresses^, IpEntryIndex + 1);
+                // Add a item to the array
+                IpEntryIndex := Length(IpAddresses^);
+                SetLength(IpAddresses^, IpEntryIndex + 1);
 
-              // Assign the values to the new item
-              IpAddresses^[IpEntryIndex].Address := CurrentIpAddress;
-              IpAddresses^[IpEntryIndex].Subnet := CurrentIpSubnet;
+                // Assign the values to the new item
+                IpAddresses^[IpEntryIndex].Address := CurrentIpAddress;
+                IpAddresses^[IpEntryIndex].Subnet := CurrentIpSubnet;
+              end;
             end;
           end;
         end;
@@ -425,6 +437,58 @@ begin
       IpToMacBuffer.Free;
       MacToAdapterNameBuffer.Free;
     end;
+  end;
+end;
+
+// See: https://wiki.lazarus.freepascal.org/fphttpclient#Get_external_IP_address
+function GetExternalInternetProtocolAddress: string;
+const
+  TEST_URL = 'http://checkip.dyndns.org';
+  INVALID_IP_ADDRESS = 'Got invalid results getting external IP address. Details: %s %s';
+  GENERIC_EXCEPTION = 'Error retrieving external IP address: %s';
+
+var
+  HTTPClient: TFPHTTPClient;
+  IPRegEx: TRegExpr;
+  RawData: string;
+
+begin
+  try
+    HTTPClient := TFPHTTPClient.Create(nil);
+    IPRegEx := TRegExpr.Create;
+    try
+      //returns something like:
+      {
+<html><head><title>Current IP Check</title></head><body>Current IP Address: 44.151.191.44</body></html>
+      }
+      RawData := HTTPClient.Get(TEST_URL);
+      // adjust for expected output; we just capture the first IP address now:
+      IPRegEx.Expression := RegExprString('\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b');
+      //or
+      //\b(?:\d{1,3}\.){3}\d{1,3}\b
+      if IPRegEx.Exec(RawData) then
+        Result := IPRegEx.Match[0]
+      else
+        raise EExternalInternetProtocolAddress
+          .CreateFmt(INVALID_IP_ADDRESS, [LineEnding, RawData]);
+    except
+      on E: Exception do
+        raise EExternalInternetProtocolAddress
+          .CreateFmt(GENERIC_EXCEPTION, [E.Message]);
+    end;
+  finally
+    HTTPClient.Free;
+    IPRegEx.Free;
+  end;
+end;
+
+function IsInternetConnectionAvailable: Boolean;
+begin
+  Result := True;
+  try
+    GetExternalInternetProtocolAddress;
+  except
+    Result := False;
   end;
 end;
 
