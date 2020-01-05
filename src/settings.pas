@@ -12,10 +12,10 @@ const
   SETTINGS_DIRECTORY = '/etc/dreamsdk/';
 
   // Repositories
-  DEFAULT_KALLISTI_URL = 'https://git.code.sf.net/p/cadcdev/kallistios';
-  DEFAULT_KALLISTI_PORTS_URL = 'https://git.code.sf.net/p/cadcdev/kos-ports';
-  DEFAULT_DREAMCAST_TOOL_SERIAL_URL = 'https://github.com/dreamsdk/dcload-serial.git';
-  DEFAULT_DREAMCAST_TOOL_INTERNET_PROTOCOL_URL = 'https://github.com/dreamsdk/dcload-ip.git';
+  DEFAULT_KALLISTI_URL = 'https://gitlab.com/simulant/community/kallistios-nitro.git';
+  DEFAULT_KALLISTI_PORTS_URL = 'https://gitlab.com/simulant/community/kallistios-ports-nitro.git';
+  DEFAULT_DREAMCAST_TOOL_SERIAL_URL = 'https://gitlab.com/simulant/community/dcload-serial-nitro.git';
+  DEFAULT_DREAMCAST_TOOL_INTERNET_PROTOCOL_URL = 'https://gitlab.com/simulant/community/dcload-ip-nitro.git';
 
   // Dreamcast Tool
   DREAMCAST_TOOL_DEFAULT_KIND = 0;
@@ -32,7 +32,7 @@ const
   DREAMCAST_TOOL_DEFAULT_CUSTOM_EXECUTABLE = '';
   DREAMCAST_TOOL_DEFAULT_CUSTOM_ARGUMENTS = '';
 
-type
+type  
   TDreamcastToolKind = (
     dtkUndefined,
     dtkSerial,
@@ -124,7 +124,7 @@ type
     fDreamcastToolInternetProtocolURL: string;
   protected
     procedure LoadConfiguration(IniFile: TIniFile);
-    procedure SaveConfiguration(IniFile: TIniFile);
+    procedure SaveConfiguration(IniFile: TIniFile);	
   public
     property KallistiURL: string
       read fKallistiURL write fKallistiURL;
