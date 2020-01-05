@@ -33,8 +33,11 @@ type
     property Items[Index: Integer]: TFileName read GetItem; default;
   end;
 
+function ExtractDirectoryName(const DirectoryName: string): string;
 function GetApplicationPath: TFileName;
 function GetProgramName: string;
+function GetUserAppDataList(var UserAppDataList: TStringList): Boolean;
+function KillDirectory(const DirectoryName: TFileName): Boolean;
 function KillFile(const FileName: TFileName): Boolean;
 function LoadFileToString(FileName: TFileName): string;
 function LoadUTF16FileToString(const FileName: TFileName): string;
@@ -45,8 +48,6 @@ function SystemToUnixPath(const UnixPathName: TFileName): TFileName;
 function UncompressZipFile(const FileName, OutputDirectory: TFileName): Boolean;
 function UnixPathToSystem(const PathName: TFileName): TFileName;
 
-function GetUserAppDataList(var UserAppDataList: TStringList): Boolean;
-
 implementation
 
 uses
@@ -55,6 +56,7 @@ uses
   LazUTF8,
   LConvEncoding,
   LazFileUtils,
+  FileUtil,
 {$IFDEF GUI}
   Forms,
 {$ENDIF}
@@ -63,6 +65,12 @@ uses
 
 var
   ApplicationPath: TFileName = '';
+
+function ExtractDirectoryName(const DirectoryName: string): string;
+begin
+  Result := ExtremeRight(DirectorySeparator,
+    ExcludeTrailingPathDelimiter(DirectoryName));
+end;
 
 function GetUserAppDataList(var UserAppDataList: TStringList): Boolean;
 var
@@ -102,6 +110,52 @@ begin
   Result := False;
   if FileExists(FileName) then
     Result := SysUtils.DeleteFile(FileName);
+end;
+
+// See: https://forum.lazarus.freepascal.org/index.php/topic,16093.msg87124.html#msg87124
+function KillDirectory(const DirectoryName: TFileName): Boolean;
+// Lazarus fileutil.DeleteDirectory on steroids, works like
+// deltree <directory>, rmdir /s /q <directory> or rm -rf <directory>
+// - removes read-only files/directories (DeleteDirectory doesn't)
+// - removes directory itself
+// Adapted from fileutil.DeleteDirectory, thanks to Paweł Dmitruk
+var
+  FileInfo: TSearchRec;
+  CurSrcDir,
+  CurFileName: string;
+
+begin
+  Result := False;
+
+  CurSrcDir := CleanAndExpandDirectory(DirectoryName);
+  if FindFirstUTF8(CurSrcDir + GetAllFilesMask, faAnyFile, FileInfo) = 0 then
+  begin
+    repeat
+      // Ignore directories and files without name:
+      if (FileInfo.Name <> '.') and (FileInfo.Name <> '..') and (FileInfo.Name <> '') then
+      begin
+        // Remove all files and directories in this directory:
+        CurFileName := CurSrcDir + FileInfo.Name;
+        // Remove read-only file attribute so we can delete it:
+        if (FileInfo.Attr and faReadOnly) > 0 then
+          FileSetAttrUTF8(CurFileName, FileInfo.Attr - faReadOnly);
+        if (FileInfo.Attr and faDirectory) > 0 then
+        begin
+          // Directory; exit with failure on error
+          if not KillDirectory(CurFileName) then Exit;
+        end
+        else
+        begin
+          // File; exit with failure on error
+          if not DeleteFileUTF8(CurFileName) then Exit;
+        end;
+      end;
+    until FindNextUTF8(FileInfo) <> 0;
+  end;
+  FindCloseUTF8(FileInfo);
+
+  // Remove "root" directory
+  Result := RemoveDirUTF8(DirectoryName);
 end;
 
 // Thanks to: GetMem
