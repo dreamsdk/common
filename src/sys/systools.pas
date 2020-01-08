@@ -7,12 +7,17 @@ interface
 uses
   Classes,
   SysUtils,
-  FGL;
+  FGL
+  {$IFDEF Windows}
+  , Windows
+  {$ENDIF} ;
 
 const
   WhiteSpaceStr = ' ';
   ArraySeparator = '|';
+
   STRING_DATE_FORMAT = 'YYYY-MM-DD @ HH:mm:ss';
+  ACL_RIGHT_FULL = 'F';
 
 type
   TIntegerList = specialize TFPGList<Integer>;
@@ -23,11 +28,17 @@ type
 {$IFDEF DEBUG}procedure DumpCharArrayToFile(A: array of Char; const FileName: TFileName);{$ENDIF}
 function EndsWith(const SubStr, S: string): Boolean;
 function ExpandEnvironmentStrings(const InputString: string): string;
+function ExtractEmbeddedResourceToFile(const ResourceName: string;
+  const FileName: TFileName): Boolean;
 function ExtractStr(LeftSubStr, RightSubStr, S: string): string;
 function ExtremeRight(SubStr: string; S: string): string;
 function GetSubStrCount(SubStr, S: string): Integer;
+function GetEveryoneName: string;
+function GetUserList(var UserList: TStringList): Boolean;
+function GetUserFullNameFromUserName(const UserName: string): string;
 function IsInString(const SubStr, S: string): Boolean;
 function IsRegExMatch(const InputValue, RegEx: string): Boolean;
+function KillProcessByName(const FileName: TFileName): Boolean;
 function Left(SubStr: string; S: string): string;
 function LeftNRight(SubStr, S: string; N: Integer): string;
 function Right(SubStr: string; S: string): string;
@@ -36,8 +47,8 @@ procedure StringToStringList(const S, Delimiter: string; SL: TStringList);
 function StringListToString(SL: TStringList; const Delimiter: string): string;
 function StringListSubstringIndexOf(SL: TStringList; const SubStr: string): Integer;
 function SuppressUselessWhiteSpaces(const S: string): string;
-
-function GetUserList(var UserList: TStringList): Boolean;
+function SetDirectoryRights(const DirectoryFullPath: TFileName;
+  const UserName, Rights: string): Boolean;
 
 implementation
 
@@ -46,51 +57,59 @@ uses
   RegExpr,
   LazUTF8,
   LConvEncoding,
-{$IFDEF Windows}
-  Windows
-{$ENDIF}
 {$IFDEF GUI}
-  , Forms,
-{$ELSE}
-  ,
+  Forms,
 {$ENDIF}
   RunTools,
-  FSTools;
+  Version;
+
+function SetDirectoryRights(const DirectoryFullPath: TFileName;
+  const UserName, Rights: string): Boolean;
+var
+  CommandLine: string;
+
+begin
+{$IFDEF Windows}
+  Result := False;
+
+  CommandLine := 'echo Y | cacls "%s" /E /G "%s":%s';
+  if IsWindowsVistaOrGreater then
+    CommandLine := 'icacls "%s" /q /c /t /grant %s:%s';
+
+  CommandLine := Format(CommandLine, [
+    ExcludeTrailingPathDelimiter(DirectoryFullPath),
+    UserName,
+    Rights
+  ]);
+
+  Result := RunSingleCommand(CommandLine);
+{$ELSE}
+  Result := False;
+{$IFDEF DEBUG}
+  WriteLn('SetDirectoryRights: Not implemented');
+{$ENDIF}
+{$ENDIF}
+end;
 
 function GetUserList(var UserList: TStringList): Boolean;
 var
-  BatchFileName,
-  OutputFileName: TFileName;
-  Buffer: TStringList;
   i: Integer;
+  OutputBuffer: string;
 
 begin
+  Result := False;
   if Assigned(UserList) then
   begin
-    BatchFileName := ChangeFileExt(SysUtils.GetTempFileName, '.bat');
-    OutputFileName := SysUtils.GetTempFileName;
+    OutputBuffer := EmptyStr;
+    Result := RunWmic('UserAccount where "LocalAccount = True and Disabled = False" get Name',
+      OutputBuffer);
 
-    Buffer := TStringList.Create;
-    try
-      Buffer.Add('@echo off');
-      Buffer.Add(Format('wmic UserAccount where "LocalAccount = True and Disabled = False" get Name > "%s"', [OutputFileName]));
-      Buffer.SaveToFile(BatchFileName);
-    finally
-      Buffer.Free;
-    end;
-
-    Result := RunAndWait(BatchFileName);
-
-    if FileExists(OutputFileName) then
+    if Result then
     begin
-      UserList.Text := LoadUTF16FileToString(OutputFileName);
-      UserList.Delete(0); // Remove the 'Name' header
+      UserList.Text := OutputBuffer;
       for i := 0 to UserList.Count - 1 do
         UserList[i] := Trim(UserList[i]);
     end;
-
-    KillFile(OutputFileName);
-    KillFile(BatchFileName);
   end;
 end;
 
@@ -122,6 +141,15 @@ function Right(SubStr: string; S: string): string;
 begin
   if pos(substr,s)=0 then result:='' else
     result:=copy(s, pos(substr, s)+length(substr), length(s)-pos(substr, s)+length(substr));
+end;
+
+function KillProcessByName(const FileName: TFileName): Boolean;
+begin
+  Result := False;
+  if FileExists(FileName) then
+    Result := RunSingleCommand(Format('taskkill /im "%s" /f', [
+      ExtractFileName(FileName)
+    ]));
 end;
 
 // Thanks Michel (Phidels.com)
@@ -207,6 +235,8 @@ procedure DebugLog(const Message: string);
 begin
 {$IFDEF CONSOLE}
   WriteLn(Message);
+{$ELSE}
+  MessageBox(Application.Handle, 'Debug', PChar(Message), MB_ICONINFORMATION + MB_OK);
 {$ENDIF}
 end;
 {$ENDIF}
@@ -240,6 +270,34 @@ begin
       Inc(i);
     end;
   end;
+end;
+
+// See: https://wiki.freepascal.org/Lazarus_Resources
+function ExtractEmbeddedResourceToFile(const ResourceName: string;
+  const FileName: TFileName): Boolean;
+var
+  S: TResourceStream;
+  F: TFileStream;
+
+begin
+  // create a resource stream which points to our resource
+  S := TResourceStream.Create(HInstance, ResourceName, RT_RCDATA);
+  // Replace RT_RCDATA with ??? with what?
+  // Please ensure you write the enclosing apostrophes around MYDATA,
+  // otherwise no data will be extracted.
+  try
+    // create a file mydata.dat in the application directory
+    F := TFileStream.Create(FileName, fmCreate);
+    try
+      F.CopyFrom(S, S.Size); // copy data from the resource stream to file stream
+    finally
+      F.Free; // destroy the file stream
+    end;
+  finally
+    S.Free; // destroy the resource stream
+  end;
+
+  Result := FileExists(FileName);
 end;
 
 function ExpandEnvironmentStrings(const InputString: string): string;
@@ -281,6 +339,169 @@ begin
   CloseFile(F);
 end;
 {$ENDIF}
+
+{$IFDEF Windows}
+
+// Thanks fbalien
+// See: https://www.developpez.net/forums/d1736505/environnements-developpement/delphi/api-com-sdks/probleme-getnamedsecurityinfo-sous-tokyo-10-2-a/
+function ConvertSidToString(RequestSID : PSID): string;
+
+  function ConvertSidToStringSid(RequestSID: PSID): string;
+  type
+    TAdvApiConvertSidToStringSidA = function (Sid: PSID; var StringSid: LPSTR): BOOL; stdcall;
+
+  const
+    ADVAPI_LIBRARY_NAME = 'advapi32.dll';
+    ADVAPI_CONVERT_SID_TO_STRING_SID = 'ConvertSidToStringSidA';
+
+  var
+    AdvApiConvertStringSidToSid: TAdvApiConvertSidToStringSidA;
+    LibraryHandle: THandle;
+    SidStringResult: PAnsiChar;
+
+  begin
+    Result := EmptyStr;
+    LibraryHandle := LoadLibrary(ADVAPI_LIBRARY_NAME);
+    if LibraryHandle <> 0 then
+    try
+      AdvApiConvertStringSidToSid := TAdvApiConvertSidToStringSidA(
+        GetProcAddress(LibraryHandle, ADVAPI_CONVERT_SID_TO_STRING_SID));
+
+      if @AdvApiConvertStringSidToSid <> nil then
+      begin
+        SidStringResult := Default(PAnsiChar);
+        if AdvApiConvertStringSidToSid(RequestSID, SidStringResult) then
+          Result := Format('[%s]', [SidStringResult]);
+        FreeSID(RequestSID);
+      end;
+    finally
+      FreeLibrary(LibraryHandle);
+    end;
+  end;
+
+  function LegacyConvertSidToStringSid(RequestSID: PSID): string;
+  const
+    SID_REVISION  = 1;
+
+  var
+    Psia: TSIDIdentifierAuthority;
+    i, SubAuthCount: LongWord;
+
+  begin
+    Psia := GetSidIdentifierAuthority(RequestSID)^;
+    SubAuthCount := GetSidSubAuthorityCount(RequestSID)^;
+    Result := Format('[S-%u-', [SID_REVISION]);
+    if ((Psia.Value[0] <> 0) or (Psia.Value[1] <> 0)) then
+      Result := Result + Format ('%.2x%.2x%.2x%.2x%.2x%.2x', [Psia.Value[0],
+        Psia.Value[1], Psia.Value[2], Psia.Value[3], Psia.Value[4],
+        Psia.Value[5]])
+    else
+      Result := Result + Format ('%u', [LongWord(Psia.Value[5]) +
+        LongWord(Psia.Value[4] shl 8) + LongWord(Psia.Value[3] shl 16) +
+        LongWord(Psia.Value[2] shl 24)]);
+    for i := 0 to SubAuthCount - 1 do
+      Result := Result + Format ('-%u', [GetSidSubAuthority(RequestSID, i)^]);
+    Result := Result + ']';
+  end;
+
+begin
+  Result := EmptyStr;
+  if IsValidSid(RequestSID) then
+  begin
+    if (Win32Platform = VER_PLATFORM_WIN32_NT) and (Win32MajorVersion >= 5) then
+      Result := ConvertSidToStringSid(RequestSID) // XP and newer
+    else
+      Result := LegacyConvertSidToStringSid(RequestSID); // older Windows
+  end;
+end;
+
+function GetUserFromSid(OwnerSID: PSID): string;
+type
+  TWindowsString = array[0..MAX_PATH] of Char;
+
+var
+  OwnerName,
+  DomainName: TWindowsString;
+  SidSeparator: string;
+  cbSize: DWORD;
+  OwnerType: SID_NAME_USE;
+
+begin
+  Result := EmptyStr;
+  OwnerName := Default(TWindowsString);
+  DomainName := Default(TWindowsString);
+  OwnerType := Default(SID_NAME_USE);
+  cbSize := SizeOf(OwnerName);
+
+  if LookupAccountSid(nil, OwnerSID, OwnerName, cbSize, DomainName, cbSize, OwnerType) then
+  begin
+    SidSeparator := DirectorySeparator;
+    if SameText(DomainName, EmptyStr) then
+      SidSeparator := EmptyStr;
+    Result := Format('%s%s%s', [DomainName, SidSeparator, OwnerName]);
+  end
+  else
+    Result := ConvertSidToString(OwnerSID);
+end;
+
+function CreateEveryoneSid: PSID;
+const
+  SECURITY_WORLD_SID_AUTHORITY: SID_IDENTIFIER_AUTHORITY = (
+    Value: (0, 0, 0, 0, 0, 1)
+  );
+
+var
+  IdentifierAuthority: SID_IDENTIFIER_AUTHORITY;
+  EveryoneSID: PSID;
+  fSuccess: Boolean;
+
+begin
+  Result := nil;
+
+  IdentifierAuthority := SECURITY_WORLD_SID_AUTHORITY;
+
+  EveryoneSID := nil;
+  fSuccess := AllocateAndInitializeSid(IdentifierAuthority, 1,
+    SECURITY_WORLD_RID, 0, 0, 0, 0, 0, 0, 0, EveryoneSID);
+
+  if fSuccess then
+    Result := EveryoneSID;
+end;
+
+{$ENDIF}
+
+function GetEveryoneName: string;
+{$IFDEF Windows}
+var
+  EveryoneSID: PSID;
+
+begin
+  Result := EmptyStr;
+  EveryoneSID := CreateEveryoneSid;
+  try
+    Result := GetUserFromSid(EveryoneSID);
+  finally
+    FreeSid(EveryoneSID);
+  end;
+{$ELSE}
+begin
+  Result := EmptyStr;
+{$IFDEF DEBUG}
+  DebugLog('GetEveryoneName: Not implemented');
+{$ENDIF}
+{$ENDIF}
+end;
+
+function GetUserFullNameFromUserName(const UserName: string): string;
+var
+  OutputBuffer: string;
+
+begin
+  Result := EmptyStr;
+  OutputBuffer := EmptyStr;
+  if RunWmic(Format('UserAccount where Name=''%s'' get FullName', [UserName]), OutputBuffer) then
+    Result := Trim(OutputBuffer);
+end;
 
 end.
 

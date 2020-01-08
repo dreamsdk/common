@@ -36,10 +36,11 @@ type
 function ExtractDirectoryName(const DirectoryName: string): string;
 function GetApplicationPath: TFileName;
 function GetProgramName: string;
+function GetUsersDirectory: TFileName;
 function GetUserAppDataList(var UserAppDataList: TStringList): Boolean;
 function KillDirectory(const DirectoryName: TFileName): Boolean;
 function KillFile(const FileName: TFileName): Boolean;
-function LoadFileToString(FileName: TFileName): string;
+function LoadFileToString(const FileName: TFileName): string;
 function LoadUTF16FileToString(const FileName: TFileName): string;
 function ParseInputFileSystemObject(const Parameter: TFileName): TFileName;
 function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string): Boolean;
@@ -72,6 +73,17 @@ begin
     ExcludeTrailingPathDelimiter(DirectoryName));
 end;
 
+function GetUsersDirectory: TFileName;
+var
+  CurrentUserName: string;
+
+begin
+  CurrentUserName := GetEnvironmentVariable('USERNAME');
+  Result := IncludeTrailingPathDelimiter(Left(DirectorySeparator
+    + CurrentUserName, GetEnvironmentVariable('APPDATA')));
+end;
+
+// {$DEFINE DEBUG_USER_APP_DATA_LIST}
 function GetUserAppDataList(var UserAppDataList: TStringList): Boolean;
 var
   AppDataTemplate: TFileName;
@@ -79,7 +91,8 @@ var
   i: Integer;
 
 begin
-  AppDataTemplate := ParseInputFileSystemObject('%AppData%');
+  AppDataTemplate := IncludeTrailingPathDelimiter(
+    ParseInputFileSystemObject('%AppData%'));
   CurrentUserName := GetEnvironmentVariable('USERNAME');
 
   AppDataTemplate := StringReplace(
@@ -91,8 +104,20 @@ begin
 
   Result := GetUserList(UserAppDataList);
 
+{$IFDEF DEBUG_USER_APP_DATA_LIST}
+{$IFDEF DEBUG}
+  DebugLog('UserAppDataList:');
+{$ENDIF}
+{$ENDIF}
   for i := 0 to UserAppDataList.Count - 1 do
+  begin
     UserAppDataList[i] := Format(AppDataTemplate, [UserAppDataList[i]]);
+{$IFDEF DEBUG_USER_APP_DATA_LIST}
+{$IFDEF DEBUG}
+    DebugLog('  ' + UserAppDataList[i]);
+{$ENDIF}
+{$ENDIF}
+  end;
 end;
 
 function GetProgramName: string;
@@ -225,7 +250,7 @@ begin
   end;
 end;
 
-function LoadFileToString(FileName: TFileName): string;
+function LoadFileToString(const FileName: TFileName): string;
 var
   Buffer: TStringList;
 
