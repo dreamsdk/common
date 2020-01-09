@@ -236,7 +236,9 @@ begin
 {$IFDEF CONSOLE}
   WriteLn(Message);
 {$ELSE}
+{$IFDEF GUI}
   MessageBox(Application.Handle, 'Debug', PChar(Message), MB_ICONINFORMATION + MB_OK);
+{$ENDIF}
 {$ENDIF}
 end;
 {$ENDIF}

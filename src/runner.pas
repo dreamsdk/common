@@ -48,11 +48,11 @@ uses
   Windows,
 {$ENDIF}
   SysTools,
-  Process
+  Process,
 {$IF Defined(Unix) OR Defined(Darwin)}
-  , UTF8Process
+  , UTF8Process,
 {$ENDIF}
-  ;
+  FSTools;
 
 resourcestring
   MSYSShellNotFound             = 'MinGW/MSYS is not properly installed.';
