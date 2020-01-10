@@ -180,7 +180,10 @@ begin
   FindCloseUTF8(FileInfo);
 
   // Remove "root" directory
-  Result := RemoveDirUTF8(DirectoryName);
+  RemoveDirUTF8(DirectoryName);
+
+  // Verify if the required directory exists
+  Result := not DirectoryExists(DirectoryName);
 end;
 
 // Thanks to: GetMem
