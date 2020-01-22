@@ -122,9 +122,6 @@ type
     fKallistiURL: string;
     fDreamcastToolSerialURL: string;
     fDreamcastToolInternetProtocolURL: string;
-  protected
-    procedure LoadConfiguration(IniFile: TIniFile);
-    procedure SaveConfiguration(IniFile: TIniFile);	
   public
     property KallistiURL: string
       read fKallistiURL write fKallistiURL;
@@ -176,7 +173,6 @@ uses
 const
   CONFIG_SETTINGS_SECTION_NAME = 'Settings';
   CONFIG_DREAMCAST_TOOL_SECTION_NAME = 'DreamcastTool';
-  CONFIG_REPOSITORIES_SECTION_NAME = 'Repositories';
 
 function GetConfigurationDirectory: TFileName;
 begin
@@ -361,58 +357,6 @@ begin
   );
 end;
 
-{ TDreamcastSoftwareDevelopmentSettingsRepositories }
-
-procedure TDreamcastSoftwareDevelopmentSettingsRepositories.LoadConfiguration(
-  IniFile: TIniFile);
-begin
-  fKallistiURL := IniFile.ReadString(
-    CONFIG_REPOSITORIES_SECTION_NAME,
-    'KallistiOS',
-    DEFAULT_KALLISTI_URL
-  );
-  fKallistiPortsURL := IniFile.ReadString(
-    CONFIG_REPOSITORIES_SECTION_NAME,
-    'KallistiPorts',
-    DEFAULT_KALLISTI_PORTS_URL
-  );
-  fDreamcastToolSerialURL := IniFile.ReadString(
-    CONFIG_REPOSITORIES_SECTION_NAME,
-    'DreamcastToolSerial',
-    DEFAULT_DREAMCAST_TOOL_SERIAL_URL
-  );
-  fDreamcastToolInternetProtocolURL := IniFile.ReadString(
-    CONFIG_REPOSITORIES_SECTION_NAME,
-    'DreamcastToolInternetProtocol',
-    DEFAULT_DREAMCAST_TOOL_INTERNET_PROTOCOL_URL
-  );
-end;
-
-procedure TDreamcastSoftwareDevelopmentSettingsRepositories.SaveConfiguration(
-  IniFile: TIniFile);
-begin
-  IniFile.WriteString(
-    CONFIG_REPOSITORIES_SECTION_NAME,
-    'KallistiOS',
-    fKallistiURL
-  );
-  IniFile.WriteString(
-    CONFIG_REPOSITORIES_SECTION_NAME,
-    'KallistiPorts',
-    fKallistiPortsURL
-  );
-  IniFile.WriteString(
-    CONFIG_REPOSITORIES_SECTION_NAME,
-    'DreamcastToolSerial',
-    fDreamcastToolSerialURL
-  );
-  IniFile.WriteString(
-    CONFIG_REPOSITORIES_SECTION_NAME,
-    'DreamcastToolInternetProtocol',
-    fDreamcastToolInternetProtocolURL
-  );
-end;
-
 { TDreamcastSoftwareDevelopmentSettingsDreamcastTool }
 
 function TDreamcastSoftwareDevelopmentSettings.GetConfigurationFileName: TFileName;
@@ -473,7 +417,6 @@ begin
     );
 
     DreamcastTool.LoadConfiguration(IniFile);
-    Repositories.LoadConfiguration(IniFile);
 
     Result := True;
   finally
@@ -506,7 +449,6 @@ begin
     );
 
     DreamcastTool.SaveConfiguration(IniFile);
-    Repositories.SaveConfiguration(IniFile);
   finally
     IniFile.Free;
   end;
