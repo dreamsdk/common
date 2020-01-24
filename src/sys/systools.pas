@@ -36,6 +36,7 @@ function GetSubStrCount(SubStr, S: string): Integer;
 function GetEveryoneName: string;
 function GetUserList(var UserList: TStringList): Boolean;
 function GetUserFullNameFromUserName(const UserName: string): string;
+function IsEmpty(const S: string): Boolean;
 function IsInString(const SubStr, S: string): Boolean;
 function IsRegExMatch(const InputValue, RegEx: string): Boolean;
 function KillProcessByName(const FileName: TFileName): Boolean;
@@ -503,6 +504,11 @@ begin
   OutputBuffer := EmptyStr;
   if RunWmic(Format('UserAccount where Name=''%s'' get FullName', [UserName]), OutputBuffer) then
     Result := Trim(OutputBuffer);
+end;
+
+function IsEmpty(const S: string): Boolean;
+begin
+  Result := SameText(S, EmptyStr);
 end;
 
 end.

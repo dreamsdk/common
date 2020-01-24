@@ -9,7 +9,6 @@ uses
 
 const
   SETTINGS_FILE_NAME = 'dreamsdk.conf';
-  SETTINGS_DIRECTORY = '/etc/dreamsdk/';
 
   // Repositories
   DEFAULT_KALLISTI_URL = 'https://gitlab.com/simulant/community/kallistios-nitro.git';
@@ -161,7 +160,6 @@ type
       read fRepositories;
   end;
 
-function GetConfigurationDirectory: TFileName;
 function SerialPortToString(SerialPort: TDreamcastToolSerialPort): string;
 function SerialBaudrateToString(SerialBaudrate: TDreamcastToolSerialBaudrate): string;
 
@@ -173,12 +171,6 @@ uses
 const
   CONFIG_SETTINGS_SECTION_NAME = 'Settings';
   CONFIG_DREAMCAST_TOOL_SECTION_NAME = 'DreamcastTool';
-
-function GetConfigurationDirectory: TFileName;
-begin
-  Result := IncludeTrailingPathDelimiter(GetMsysBaseDirectory
-    + UnixPathToSystem(SETTINGS_DIRECTORY));
-end;
 
 function SerialPortToString(SerialPort: TDreamcastToolSerialPort): string;
 var

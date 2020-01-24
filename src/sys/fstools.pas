@@ -2,10 +2,19 @@ unit FSTools; // File System Tools
 
 {$mode objfpc}{$H+}
 
+{$IFDEF LZMA_SUPPORT}
+{$R fstools.rc}
+{$ENDIF}
+
 interface
 
 uses
   Classes, SysUtils;
+
+{$IFDEF LZMA_SUPPORT}
+const
+  EMBEDDED_7ZIP = 'SEVENZIP';
+{$ENDIF}
 
 type
   { TFileListItem }
@@ -29,13 +38,18 @@ type
     procedure Clear;
     procedure Add(const FileName: TFileName);
     procedure Add(const FileNames, Delimiter: string);
+    function GetItems(const Delimiter: string): string;
+    procedure SetItems(const Values, Delimiter: string);
     property Count: Integer read GetCount;
     property Items[Index: Integer]: TFileName read GetItem; default;
   end;
 
 function ExtractDirectoryName(const DirectoryName: string): string;
+function ExtractEmbeddedFileToWorkingPath(const ResourceName: string;
+  const FileName: TFileName): TFileName;
 function GetApplicationPath: TFileName;
 function GetProgramName: string;
+function GetWorkingPath: TFileName;
 function GetUsersDirectory: TFileName;
 function GetUserAppDataList(var UserAppDataList: TStringList): Boolean;
 function KillDirectory(const DirectoryName: TFileName): Boolean;
@@ -47,6 +61,7 @@ function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string): B
 procedure SaveStringToFile(const InString: string; FileName: TFileName);
 function SystemToUnixPath(const UnixPathName: TFileName): TFileName;
 function UncompressZipFile(const FileName, OutputDirectory: TFileName): Boolean;
+{$IFDEF LZMA_SUPPORT}function UncompressLzmaFile(const FileName, OutputDirectory: TFileName): Boolean;{$ENDIF}
 function UnixPathToSystem(const PathName: TFileName): TFileName;
 
 implementation
@@ -62,10 +77,18 @@ uses
   Forms,
 {$ENDIF}
   Zipper,
-  SysTools;
+  SysTools
+{$IFDEF LZMA_SUPPORT}
+  ,RunTools
+{$ENDIF}
+  ;
 
 var
   ApplicationPath: TFileName = '';
+  WorkingPath: TFileName = '';
+{$IFDEF LZMA_SUPPORT}
+  SevenZipFileName: TFileName = '';
+{$ENDIF}
 
 function ExtractDirectoryName(const DirectoryName: string): string;
 begin
@@ -306,6 +329,36 @@ begin
   Result := ApplicationPath;
 end;
 
+function ExtractEmbeddedFileToWorkingPath(const ResourceName: string;
+  const FileName: TFileName): TFileName;
+begin
+  Result := GetWorkingPath + FileName;
+  ExtractEmbeddedResourceToFile(ResourceName, Result);
+end;
+
+{$IFDEF LZMA_SUPPORT}
+function UncompressLzmaFile(const FileName, OutputDirectory: TFileName): Boolean;
+const
+  SEVENZIP_FILE = '7za.exe';
+  SUCCESS_MESSAGE = 'Everything is Ok';
+
+var
+  Buffer: string;
+
+begin
+  Result := False;
+  if not FileExists(SevenZipFileName) then
+    SevenZipFileName := ExtractEmbeddedFileToWorkingPath(EMBEDDED_7ZIP, SEVENZIP_FILE);
+  try
+    Buffer := Run(SevenZipFileName, Format('x "%s" -o"%s" -y',
+      [FileName, OutputDirectory]));
+    Result := IsInString(SUCCESS_MESSAGE, Buffer);
+  except
+    Result := False;
+  end;
+end;
+{$ENDIF}
+
 function UnixPathToSystem(const PathName: TFileName): TFileName;
 begin
   Result := StringReplace(PathName, '/', DirectorySeparator, [rfReplaceAll]);
@@ -316,6 +369,11 @@ function SystemToUnixPath(const UnixPathName: TFileName): TFileName;
 begin
   Result := StringReplace(UnixPathName, DirectorySeparator, '/', [rfReplaceAll]);
   Result := '/' + StringReplace(Result, ':', EmptyStr, [rfReplaceAll]);
+end;
+
+function GetWorkingPath: TFileName;
+begin
+  Result := WorkingPath;
 end;
 
 { TFileListItem }
@@ -389,6 +447,35 @@ begin
     Buffer.Free;
   end;
 end;
+
+function TFileList.GetItems(const Delimiter: string): string;
+var
+  i: Integer;
+  Separator: string;
+
+begin
+  Result := EmptyStr;
+  Separator := EmptyStr;
+  for i := 0 to Count - 1 do
+  begin
+    Result := Result + Separator + Items[i];
+    Separator := Delimiter;
+  end;
+end;
+
+procedure TFileList.SetItems(const Values, Delimiter: string);
+begin
+  Clear;
+  Add(Values, Delimiter);
+end;
+
+initialization
+  WorkingPath := IncludeTrailingPathDelimiter(
+    LowerCase(ChangeFileExt(SysUtils.GetTempFileName, '-' + GetProgramName)));
+  ForceDirectories(WorkingPath);
+
+finalization
+  KillDirectory(WorkingPath);
 
 end.
 
