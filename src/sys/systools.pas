@@ -9,7 +9,8 @@ uses
   SysUtils,
   FGL
   {$IFDEF Windows}
-  , Windows
+  , Windows,
+  JwaTlHelp32
   {$ENDIF} ;
 
 const
@@ -38,6 +39,7 @@ function GetUserList(var UserList: TStringList): Boolean;
 function GetUserFullNameFromUserName(const UserName: string): string;
 function IsEmpty(const S: string): Boolean;
 function IsInString(const SubStr, S: string): Boolean;
+function IsProcessRunning(FileName: TFileName): Boolean;
 function IsRegExMatch(const InputValue, RegEx: string): Boolean;
 function KillProcessByName(const FileName: TFileName): Boolean;
 function Left(SubStr: string; S: string): string;
@@ -509,6 +511,35 @@ end;
 function IsEmpty(const S: string): Boolean;
 begin
   Result := SameText(S, EmptyStr);
+end;
+
+function IsProcessRunning(FileName: TFileName): Boolean;
+{$IFDEF Windows}
+var
+  ContinueLoop: Boolean;
+  FSnapshotHandle: THandle;
+  FProcessEntry32: TProcessEntry32;
+  
+begin
+  FSnapshotHandle := CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  FProcessEntry32.dwSize := SizeOf(FProcessEntry32);
+  ContinueLoop := Process32First(FSnapshotHandle, FProcessEntry32);
+  Result := False;
+  while ContinueLoop do
+  begin
+    if ((UpperCase(ExtractFileName(FProcessEntry32.szExeFile)) =
+      UpperCase(FileName)) or (UpperCase(FProcessEntry32.szExeFile) =
+      UpperCase(FileName))) then
+    begin
+      Result := True;
+    end;
+    ContinueLoop := Process32Next(FSnapshotHandle, FProcessEntry32);
+  end;
+  CloseHandle(FSnapshotHandle);
+{$ELSE}
+begin
+  raise EAbstractError.Create('IsProcessRunning is not implemented for this OS');
+{$ENDIF}
 end;
 
 end.

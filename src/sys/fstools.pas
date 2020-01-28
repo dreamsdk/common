@@ -51,7 +51,8 @@ function GetApplicationPath: TFileName;
 function GetProgramName: string;
 function GetWorkingPath: TFileName;
 function GetUsersDirectory: TFileName;
-function GetUserAppDataList(var UserAppDataList: TStringList): Boolean;
+function GetAppDataListFromUsers(var UserAppDataList: TStringList): Boolean;
+function GetUserFromAppDataDirectory(const AppDataDirectory: TFileName): string;
 function KillDirectory(const DirectoryName: TFileName): Boolean;
 function KillFile(const FileName: TFileName): Boolean;
 function LoadFileToString(const FileName: TFileName): string;
@@ -106,12 +107,10 @@ begin
     + CurrentUserName, GetEnvironmentVariable('APPDATA')));
 end;
 
-// {$DEFINE DEBUG_USER_APP_DATA_LIST}
-function GetUserAppDataList(var UserAppDataList: TStringList): Boolean;
+function GetAppDataTemplate: TFileName;
 var
   AppDataTemplate: TFileName;
   CurrentUserName: string;
-  i: Integer;
 
 begin
   AppDataTemplate := IncludeTrailingPathDelimiter(
@@ -125,22 +124,48 @@ begin
     [rfIgnoreCase]
   );
 
-  Result := GetUserList(UserAppDataList);
+  Result := AppDataTemplate;
+end;
 
-{$IFDEF DEBUG_USER_APP_DATA_LIST}
-{$IFDEF DEBUG}
-  DebugLog('UserAppDataList:');
-{$ENDIF}
-{$ENDIF}
-  for i := 0 to UserAppDataList.Count - 1 do
+// {$DEFINE DEBUG_USER_APP_DATA_LIST}
+function GetAppDataListFromUsers(var UserAppDataList: TStringList): Boolean;
+var
+  AppDataTemplate: TFileName;
+  i: Integer;
+
+begin
+  Result := GetUserList(UserAppDataList);
+  if Result then
   begin
-    UserAppDataList[i] := Format(AppDataTemplate, [UserAppDataList[i]]);
 {$IFDEF DEBUG_USER_APP_DATA_LIST}
 {$IFDEF DEBUG}
-    DebugLog('  ' + UserAppDataList[i]);
+    DebugLog('UserAppDataList:');
 {$ENDIF}
 {$ENDIF}
+
+    AppDataTemplate := GetAppDataTemplate;
+    for i := 0 to UserAppDataList.Count - 1 do
+    begin
+      UserAppDataList[i] := Format(AppDataTemplate, [UserAppDataList[i]]);
+{$IFDEF DEBUG_USER_APP_DATA_LIST}
+{$IFDEF DEBUG}
+      DebugLog('  ' + UserAppDataList[i]);
+{$ENDIF}
+{$ENDIF}
+    end;
   end;
+end;
+
+function GetUserFromAppDataDirectory(const AppDataDirectory: TFileName): string;
+var
+  AppDataTemplate: TFileName;
+  TempLeft, TempRight: string;
+
+begin
+  AppDataTemplate := GetAppDataTemplate;
+  TempLeft := Left('%s', AppDataTemplate);
+  TempRight := Right('%s', AppDataTemplate);
+  Result := Trim(ExtractStr(TempLeft, TempRight, AppDataDirectory));
 end;
 
 function GetProgramName: string;
