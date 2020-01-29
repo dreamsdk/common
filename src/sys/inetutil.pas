@@ -173,9 +173,9 @@ var
     InterfaceIndexField: string;
 
   begin
-    BatchFileName := ChangeFileExt(SysUtils.GetTempFileName, '.cmd');
-    IpToMacFileName := ChangeFileExt(SysUtils.GetTempFileName, '-ip2mac.tmp');
-    MacToAdapterNameFileName := ChangeFileExt(SysUtils.GetTempFileName, '-mac2name.tmp');
+    BatchFileName := ChangeFileExt(GetTemporaryFileName, '.cmd');
+    IpToMacFileName := ChangeFileExt(GetTemporaryFileName, '-ip2mac.tmp');
+    MacToAdapterNameFileName := ChangeFileExt(GetTemporaryFileName, '-mac2name.tmp');
 
     InterfaceIndexField := EmptyStr;
     if IsWindowsVistaOrGreater then

@@ -54,6 +54,9 @@ uses
 {$ENDIF}
   FSTools;
 
+const
+  WMIC_TEMP_FILE = 'TempWmicBatchFile.bat';
+
 function ParseProcessParameters(const CommandLine: string): string;
 begin
   Result := EmptyStr;
@@ -70,7 +73,11 @@ begin
   try
     OurProcess.Executable := Executable;
     OurProcess.Parameters.Text := ParseProcessParameters(CommandLine);
+{$IFDEF RELEASE}
     OurProcess.ShowWindow := swoHide;
+{$ELSE}
+    OurProcess.ShowWindow := swoShowNormal;
+{$ENDIF}
     if SyncExec then
       OurProcess.Options := [poWaitOnExit];
     OurProcess.Execute;
@@ -177,12 +184,20 @@ begin
       OurProcess.Executable := Executable;
       OurProcess.Parameters.Text := ParseProcessParameters(CommandLine);
 
+{$IFDEF DEBUG}
+      WriteLn(OurProcess.Executable, ' ', CommandLine);
+{$ENDIF}
+
       { We cannot use poWaitOnExit here since we don't know the size of the output.
         On Linux the size of the output pipe is 2 kB; if the output data is more, we
         need to read the data. This isn't possible since we are waiting.
         So we get a deadlock here if we use poWaitOnExit. }
       OurProcess.Options := [poUsePipes, poStderrToOutput];
+{$IFDEF RELEASE}
       OurProcess.ShowWindow := swoHide;
+{$ELSE}
+      OurProcess.ShowWindow := swoShowNormal;
+{$ENDIF}
       OurProcess.Execute;
 
       ProcessId := OurProcess.ProcessID;
@@ -281,9 +296,9 @@ begin
   ProcessExitCode := -1;
   OutputBuffer := EmptyStr;
 
-  BatchFileName := ChangeFileExt(SysUtils.GetTempFileName, '.cmd');
-  ErrorLevelFileName := ChangeFileExt(SysUtils.GetTempFileName, '.err');
-  OutputFileName := ChangeFileExt(SysUtils.GetTempFileName, '.out');
+  BatchFileName := ChangeFileExt(GetTemporaryFileName, '.cmd');
+  ErrorLevelFileName := ChangeFileExt(GetTemporaryFileName, '.err');
+  OutputFileName := ChangeFileExt(GetTemporaryFileName, '.out');
 
   Buffer := TStringList.Create;
   try
@@ -346,8 +361,9 @@ begin
     TempBuffer := EmptyStr;
     ProcessExitCode := Default(Integer);
 
-    Result := RunSingleCommandUTF16(Format('wmic %s', [CommandLine]),
+    Result := RunSingleCommandUTF16(Format('echo. | wmic /interactive:off %s', [CommandLine]),
       TempBuffer, ProcessExitCode);
+    KillFile(WMIC_TEMP_FILE);
 
     if Result then
     begin
@@ -361,6 +377,9 @@ begin
     Buffer.Free;
   end;
 end;
+
+finalization
+  KillFile(WMIC_TEMP_FILE);
 
 end.
 

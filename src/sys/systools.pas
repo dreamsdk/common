@@ -542,5 +542,8 @@ begin
 {$ENDIF}
 end;
 
+initialization
+  Randomize;
+
 end.
 

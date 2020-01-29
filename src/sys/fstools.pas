@@ -52,6 +52,7 @@ function GetProgramName: string;
 function GetWorkingPath: TFileName;
 function GetUsersDirectory: TFileName;
 function GetAppDataListFromUsers(var UserAppDataList: TStringList): Boolean;
+function GetTemporaryFileName: TFileName;
 function GetUserFromAppDataDirectory(const AppDataDirectory: TFileName): string;
 function KillDirectory(const DirectoryName: TFileName): Boolean;
 function KillFile(const FileName: TFileName): Boolean;
@@ -401,6 +402,14 @@ begin
   Result := WorkingPath;
 end;
 
+function GetTemporaryFileName: TFileName;
+begin
+  Result := ChangeFileExt(SysUtils.GetTempFileName, Format('-%s-%d.tmp', [
+    GetProgramName,
+    Random($FFFF)
+  ]));
+end;
+
 { TFileListItem }
 
 constructor TFileListItem.Create(const AFileName: TFileName);
@@ -496,7 +505,7 @@ end;
 
 initialization
   WorkingPath := IncludeTrailingPathDelimiter(
-    LowerCase(ChangeFileExt(SysUtils.GetTempFileName, '-' + GetProgramName)));
+    LowerCase(ChangeFileExt(GetTemporaryFileName, '-' + GetProgramName)));
   ForceDirectories(WorkingPath);
 
 finalization

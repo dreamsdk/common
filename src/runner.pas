@@ -132,7 +132,7 @@ begin
 {$ENDIF}
 
   Result := UNKNOWN_EXIT_CODE;
-  fShellRunnerClientExitCodeTempFileName := SysUtils.GetTempFileName;
+  fShellRunnerClientExitCodeTempFileName := GetTemporaryFileName;
 
   FreeAndNil(fShellCommand);
   fShellCommand := TRunCommand.Create(True);
