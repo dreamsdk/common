@@ -70,7 +70,9 @@ begin
       MsgBoxDlg(0, 'DreamSDK Home directory is not found!', 'Fatal error', mtError, [mbOK]);
 {$ENDIF}
 {$ENDIF}
-      raise EHomeDirectoryNotFound.Create('DreamSDK Home directory is not found!');
+      raise EHomeDirectoryNotFound.CreateFmt('DreamSDK Home directory is not found: ', [
+        MsysBaseDirectory
+      ]);
     end;
   end;
 end;
