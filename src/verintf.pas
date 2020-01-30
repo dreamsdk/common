@@ -125,7 +125,7 @@ end;
 
 function IsVersionValid(const Version: string): Boolean;
 begin
-  Result := not IsInString(INVALID_VERSION, Version);
+  Result := not IsEmpty(Version) and not IsInString(INVALID_VERSION, Version);
 end;
 
 function RetrieveVersion(Executable, CommandLine, StartTag,
