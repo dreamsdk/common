@@ -50,30 +50,37 @@ begin
   if IsEmpty(InstallationBaseDirectory) then
   begin
     InstallationBaseDirectory := GetEnvironmentVariable(GetBaseEnvironmentVariableName);
-    if not DirectoryExists(InstallationBaseDirectory) then
-      InstallationBaseDirectory := GetApplicationPath + '..\..\..\..\'; // Fail-safe: this points to the X:\DreamSDK\ directory
-
-    if IsFirstRunMode then
-      InstallationBaseDirectory := GetFirstRunInstallationDirectory;
-
     if not IsEmpty(InstallationBaseDirectory) then
-      InstallationBaseDirectory := IncludeTrailingPathDelimiter(
-        ExpandFileName(InstallationBaseDirectory));
-
-    MsysBaseDirectory := InstallationBaseDirectory + MSYS_BASE_DIRECTORY;
-    ConfigurationDirectory := MsysBaseDirectory + SETTINGS_DIRECTORY;
-
-    if not DirectoryExists(MsysBaseDirectory) then
     begin
+      if not DirectoryExists(InstallationBaseDirectory) then
+        InstallationBaseDirectory := GetApplicationPath + '..\..\..\..\'; // Fail-safe: this points to the X:\DreamSDK\ directory
+
+      if IsFirstRunMode then
+        InstallationBaseDirectory := GetFirstRunInstallationDirectory;
+
+      if not IsEmpty(InstallationBaseDirectory) then
+        InstallationBaseDirectory := IncludeTrailingPathDelimiter(
+          ExpandFileName(InstallationBaseDirectory));
+
+      MsysBaseDirectory := InstallationBaseDirectory + MSYS_BASE_DIRECTORY;
+      ConfigurationDirectory := MsysBaseDirectory + SETTINGS_DIRECTORY;
+
+      if not DirectoryExists(MsysBaseDirectory) then
+      begin
 {$IFDEF RELEASE}
 {$IFDEF GUI}
-      MsgBoxDlg(0, 'DreamSDK Home directory is not found!', 'Fatal error', mtError, [mbOK]);
+        MsgBoxDlg(0, 'DreamSDK Home directory is not found!', 'Fatal error', mtError, [mbOK]);
 {$ENDIF}
 {$ENDIF}
-      raise EHomeDirectoryNotFound.CreateFmt('DreamSDK Home directory is not found: ', [
-        MsysBaseDirectory
-      ]);
-    end;
+        raise EHomeDirectoryNotFound.CreateFmt('DreamSDK Home directory is not found: ', [
+          MsysBaseDirectory
+        ]);
+      end;
+    end
+{$IFDEF DEBUG}
+    else
+      DebugLog('InstallationBaseDirectory empty, DreamSDK is NOT installed/detected');
+{$ENDIF}; // IsEmpty(InstallationBaseDirectory)
   end;
 end;
 
