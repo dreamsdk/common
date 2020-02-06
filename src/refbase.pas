@@ -43,44 +43,57 @@ end;
 
 procedure RetrieveBaseDirectories;
 const
+  MSYS_EXCEPTION_MESSAGE = 'DreamSDK Home directory is not found: "%s"';
   MSYS_BASE_DIRECTORY = 'msys\1.0\';
   SETTINGS_DIRECTORY = 'etc\dreamsdk\';
+
+var
+  MsysExceptionMessage: string;
 
 begin
   if IsEmpty(InstallationBaseDirectory) then
   begin
-    InstallationBaseDirectory := GetEnvironmentVariable(GetBaseEnvironmentVariableName);
-    if not IsEmpty(InstallationBaseDirectory) then
-    begin
-      if not DirectoryExists(InstallationBaseDirectory) then
-        InstallationBaseDirectory := GetApplicationPath + '..\..\..\..\'; // Fail-safe: this points to the X:\DreamSDK\ directory
+    // Handling Installation Home Base Directory (i.e. X:\DreamSDK\)
 
-      if IsFirstRunMode then
-        InstallationBaseDirectory := GetFirstRunInstallationDirectory;
-
-      if not IsEmpty(InstallationBaseDirectory) then
-        InstallationBaseDirectory := IncludeTrailingPathDelimiter(
-          ExpandFileName(InstallationBaseDirectory));
-
-      MsysBaseDirectory := InstallationBaseDirectory + MSYS_BASE_DIRECTORY;
-      ConfigurationDirectory := MsysBaseDirectory + SETTINGS_DIRECTORY;
-
-      if not DirectoryExists(MsysBaseDirectory) then
-      begin
-{$IFDEF RELEASE}
-{$IFDEF GUI}
-        MsgBoxDlg(0, 'DreamSDK Home directory is not found!', 'Fatal error', mtError, [mbOK]);
-{$ENDIF}
-{$ENDIF}
-        raise EHomeDirectoryNotFound.CreateFmt('DreamSDK Home directory is not found: ', [
-          MsysBaseDirectory
-        ]);
-      end;
-    end
-{$IFDEF DEBUG}
+    if IsFirstRunMode then
+      // Special mode: First Run
+      InstallationBaseDirectory := GetFirstRunInstallationDirectory
     else
-      DebugLog('InstallationBaseDirectory empty, DreamSDK is NOT installed/detected');
-{$ENDIF}; // IsEmpty(InstallationBaseDirectory)
+    begin
+      // Normal mode: Read from DREAMSDK_HOME environment variable
+      InstallationBaseDirectory := GetEnvironmentVariable(GetBaseEnvironmentVariableName);
+      if not IsEmpty(InstallationBaseDirectory)
+        and (not DirectoryExists(InstallationBaseDirectory)) then
+          InstallationBaseDirectory := GetApplicationPath + '..\..\..\..\'; // Fail-safe: this points to the X:\DreamSDK\ directory
+    end;
+
+    // If Home Base directory is not empty, then parse the path
+    if not IsEmpty(InstallationBaseDirectory) then
+      InstallationBaseDirectory := IncludeTrailingPathDelimiter(
+        ExpandFileName(InstallationBaseDirectory));
+
+    // Compute MSYS Base directory (i.e. '/')
+    MsysBaseDirectory := InstallationBaseDirectory + MSYS_BASE_DIRECTORY;
+
+    // Compute '/etc/dreamsdk' directory
+    ConfigurationDirectory := MsysBaseDirectory + SETTINGS_DIRECTORY;
+
+    // If the MSYS Base directory doesn't exist, then there is a issue somewhere!
+    if not DirectoryExists(MsysBaseDirectory) then
+    begin
+      MsysExceptionMessage := Format(MSYS_EXCEPTION_MESSAGE, [MsysBaseDirectory]);
+{$IFDEF RELEASE}
+      // Release
+{$IFDEF GUI}
+      MsgBoxDlg(0, sError, MsysExceptionMessage, mtError, [mbOK]);
+{$ELSE}
+      WriteLn(MsysExceptionMessage);
+{$ENDIF}
+{$ELSE}
+      // Debug
+      raise EHomeDirectoryNotFound.Create(MsysExceptionMessage);
+{$ENDIF}
+    end; // DirectoryExists MsysBaseDirectory
   end;
 end;
 

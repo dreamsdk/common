@@ -16,6 +16,7 @@ uses
 const
   WhiteSpaceStr = ' ';
   ArraySeparator = '|';
+  sError = 'Error';
 
   STRING_DATE_FORMAT = 'YYYY-MM-DD @ HH:mm:ss';
   ACL_RIGHT_FULL = 'F';
@@ -35,6 +36,7 @@ function ExtractStr(LeftSubStr, RightSubStr, S: string): string;
 function ExtremeRight(SubStr: string; S: string): string;
 function GetSubStrCount(SubStr, S: string): Integer;
 function GetEveryoneName: string;
+function GetFriendlyUserName(const UserName: string): string;
 function GetUserList(var UserList: TStringList): Boolean;
 function GetUserFullNameFromUserName(const UserName: string): string;
 function IsEmpty(const S: string): Boolean;
@@ -506,6 +508,17 @@ begin
   OutputBuffer := EmptyStr;
   if RunWmic(Format('UserAccount where Name=''%s'' get FullName', [UserName]), OutputBuffer) then
     Result := Trim(OutputBuffer);
+end;
+
+function GetFriendlyUserName(const UserName: string): string;
+var
+  CurrentUserFullName: string;
+
+begin
+  Result := UserName;
+  CurrentUserFullName := GetUserFullNameFromUserName(UserName);
+  if not IsEmpty(CurrentUserFullName) then
+    Result := Format('%s (%s)', [CurrentUserFullName, UserName]);
 end;
 
 function IsEmpty(const S: string): Boolean;
