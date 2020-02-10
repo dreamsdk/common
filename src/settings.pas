@@ -146,8 +146,6 @@ type
     fConfigurationFileNames: TFileList;
     fAvailableConfigurationFileNames: TFileList;
     fInstallationDirectory: TFileName;
-    function GetAvailableUsers: TStringList;
-    function GetInstalledUsers: TStringList;
     function GetRegistryFileName: TFileName;
     procedure SetBackupDirectory(AValue: TFileName);
     procedure SetExportLibraryInformation(AValue: Boolean);
@@ -156,6 +154,7 @@ type
   protected
     fInstalled: Boolean;
     fHomeDirectory: TFileName;
+    procedure HandleBackupDirectory;
   public
     constructor Create;
     destructor Destroy; override;
@@ -163,17 +162,17 @@ type
     function LoadConfiguration: Boolean;
     procedure SaveConfiguration;
 
-    // Code::Blocks Configuration Files (default.conf)
+    // Code::Blocks Available Users on this system (i.e. users that can use C::B)
+    property AvailableUsers: TStringList
+      read fAvailableUsers;
+
+    // Code::Blocks Configuration Files (e.g. 'default.conf' files)
     property ConfigurationFileNames: TFileList
       read fConfigurationFileNames;
 
-    // Code::Blocks Available Users
-    property AvailableUsers: TStringList
-      read GetAvailableUsers;
-
     // Code::Blocks Installed Users (if any)
     property InstalledUsers: TStringList
-      read GetInstalledUsers;
+      read fInstalledUsers;
 
     // Code::Blocks Installation Directory
     property InstallationDirectory: TFileName
@@ -189,10 +188,12 @@ type
     property RegistryFileName: TFileName
       read GetRegistryFileName;
 
+    // Used for C::B plugin
     property ExportLibraryInformation: Boolean
       read fExportLibraryInformation
       write SetExportLibraryInformation;
 
+    // Used for C::B plugin
     property ExportLibraryInformationPath: TFileName
       read fExportLibraryInformationPath;
 
@@ -210,11 +211,16 @@ type
   TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings
     = class(TDreamcastSoftwareDevelopmentCodeBlocksSettings)
   private
-    procedure InitializeDefaults;
+    procedure InitializeCodeBlocksInstallationDirectory;
+    procedure InitializeDefaults(const AutoLoad: Boolean);
+    procedure WriteRegistry;
   public
-    constructor Create;
-    procedure SaveInstall;
-    procedure SaveUninstall;
+    constructor Create; overload;
+    constructor Create(const AutoLoad: Boolean); overload;
+    procedure Assign(
+      ASource: TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings);
+    procedure Save(const AInstalled: Boolean);
+    function Refresh: Boolean;
   end;
 
   { TDreamcastSoftwareDevelopmentSettings }
@@ -308,9 +314,17 @@ end;
 
 { TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings }
 
+procedure TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings.InitializeCodeBlocksInstallationDirectory;
+begin
+  InstallationDirectory := DEFAULT_CODEBLOCKS_DIR_32;
+  if IsWindows64 then
+    InstallationDirectory := DEFAULT_CODEBLOCKS_DIR_64;
+end;
+
 // Define this to debug this procedure
 // {$DEFINE DEBUG_INITIALIZE_DEFAULTS}
-procedure TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings.InitializeDefaults;
+procedure TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings
+  .InitializeDefaults(const AutoLoad: Boolean);
 var
   UsersAppData: TStringList;
   i: Integer;
@@ -318,9 +332,7 @@ var
 
 begin
   // Code::Blocks Installation Directory
-  InstallationDirectory := DEFAULT_CODEBLOCKS_DIR_32;
-  if IsWindows64 then
-    InstallationDirectory := DEFAULT_CODEBLOCKS_DIR_64;
+  InitializeCodeBlocksInstallationDirectory;
 
   // Code::Blocks Configuration Files
   UsersAppData := TStringList.Create;
@@ -355,73 +367,118 @@ begin
 {$ENDIF}
 {$ENDIF};
     end;
+
   finally
     UsersAppData.Free;
   end;
+
+  // Code::Blocks Backup Directory
+  HandleBackupDirectory;
+
+  if AutoLoad then
+    LoadConfiguration;
 end;
 
 constructor TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings.Create;
 begin
   inherited Create;
-  InitializeDefaults;
+  InitializeDefaults(True);
 end;
 
-procedure TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings.SaveInstall;
+constructor TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings.Create(
+  const AutoLoad: Boolean);
 begin
-  fInstalled := True;
-  SaveConfiguration;
+  inherited Create;
+  InitializeDefaults(AutoLoad);
 end;
 
-procedure TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings.SaveUninstall;
+procedure TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings.Assign(
+  ASource: TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings);
 begin
-  fInstalled := False;
-  ExportLibraryInformation := False;
-  InstallationDirectory := EmptyStr;
-  BackupDirectory := EmptyStr;
+  fAvailableConfigurationFileNames.Assign(ASource.fAvailableConfigurationFileNames);
+  fAvailableUsers.Assign(ASource.AvailableUsers);
+  fBackupDirectory := ASource.BackupDirectory;
+  fConfigurationFileNames.Assign(ASource.ConfigurationFileNames);
+  fExportLibraryInformation := ASource.ExportLibraryInformation;
+  fExportLibraryInformationPath := ASource.ExportLibraryInformationPath;
+  fHomeDirectory := ASource.HomeDirectory;
+  fInstallationDirectory := ASource.InstallationDirectory;
+end;
+
+procedure TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings.Save(
+  const AInstalled: Boolean);
+
+  procedure SetInstalledUsers;
+  var
+    i: Integer;
+    UserName: string;
+
+  begin
+    fInstalledUsers.Clear;
+    if Installed then
+      for i := 0 to ConfigurationFileNames.Count - 1 do
+      begin
+        UserName := GetUserFromAppDataDirectory(ConfigurationFileNames[i]);
+        if not IsEmpty(UserName) then
+          UserName := GetFriendlyUserName(UserName)
+        else
+          UserName := Format('<%s>', [ExtractFileName(ConfigurationFileNames[i])]);
+        fInstalledUsers.Add(UserName);
+      end;
+  end;
+
+begin
+  fInstalled := AInstalled;
+  ExportLibraryInformation := AInstalled;
+
+  if AInstalled then
+    SetInstalledUsers
+  else
+  begin
+    fExportLibraryInformationPath := EmptyStr;
+    fBackupDirectory := EmptyStr;
+    fConfigurationFileNames.Clear;
+    fInstalledUsers.Clear;
+    InitializeCodeBlocksInstallationDirectory;
+  end;
+
+  WriteRegistry;
+end;
+
+function TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings.Refresh: Boolean;
+begin
+  LoadConfiguration;
+  if not Installed then
+    InitializeCodeBlocksInstallationDirectory;
+  WriteRegistry;
+  Result := LoadConfiguration;
+end;
+
+procedure TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings.WriteRegistry;
+
+  procedure SetAvailableUsers;
+  var
+    i: Integer;
+    UsersDirectory: TFileName;
+    CurrentUserName: string;
+
+  begin
+    fAvailableUsers.Clear;
+    UsersDirectory := GetUsersDirectory;
+    for i := 0 to fAvailableConfigurationFileNames.Count - 1 do
+    begin
+      CurrentUserName := ExtractStr(UsersDirectory, DirectorySeparator,
+        fAvailableConfigurationFileNames[i]);
+      fAvailableUsers.Add(GetFriendlyUserName(CurrentUserName));
+    end;
+  end;
+
+begin
+  SetAvailableUsers;
   SaveConfiguration;
 end;
 
 { TDreamcastSoftwareDevelopmentCodeBlocksSettings }
-
-function TDreamcastSoftwareDevelopmentCodeBlocksSettings
-  .GetAvailableUsers: TStringList;
-var
-  i: Integer;
-  UsersDirectory: TFileName;
-  CurrentUserName: string;
-
-begin
-  fAvailableUsers.Clear;
-  UsersDirectory := GetUsersDirectory;
-  for i := 0 to fAvailableConfigurationFileNames.Count - 1 do
-  begin
-    CurrentUserName := ExtractStr(UsersDirectory, DirectorySeparator,
-      fAvailableConfigurationFileNames[i]);
-    fAvailableUsers.Add(GetFriendlyUserName(CurrentUserName));
-  end;
-  Result := fAvailableUsers;
-end;
-
-function TDreamcastSoftwareDevelopmentCodeBlocksSettings
-  .GetInstalledUsers: TStringList;
-var
-  i: Integer;
-  UserName: string;
-
-begin
-  fInstalledUsers.Clear;
-  if Installed then
-    for i := 0 to ConfigurationFileNames.Count - 1 do
-    begin
-      UserName := GetUserFromAppDataDirectory(ConfigurationFileNames[i]);
-      if not IsEmpty(UserName) then
-        UserName := GetFriendlyUserName(UserName)
-      else
-        UserName := Format('<%s>', [ExtractFileName(ConfigurationFileNames[i])]);
-      fInstalledUsers.Add(UserName);
-    end;
-  Result := fInstalledUsers;
-end;
 
 function TDreamcastSoftwareDevelopmentCodeBlocksSettings
   .GetRegistryFileName: TFileName;
@@ -464,10 +521,7 @@ begin
   begin
     fHomeDirectory := ExcludeTrailingPathDelimiter(
       ParseInputFileSystemObject(AValue));
-
-    // Code::Blocks Backup Directory
-    if IsEmpty(fBackupDirectory) then
-      BackupDirectory := Format(DEFAULT_CODEBLOCKS_BACKUP_DIR, [fHomeDirectory]);
+    HandleBackupDirectory;
   end;
 end;
 
@@ -491,6 +545,12 @@ begin
   end;
 end;
 
+procedure TDreamcastSoftwareDevelopmentCodeBlocksSettings.HandleBackupDirectory;
+begin
+  if IsEmpty(fBackupDirectory) then
+    BackupDirectory := Format(DEFAULT_CODEBLOCKS_BACKUP_DIR, [fHomeDirectory]);
+end;
+
 constructor TDreamcastSoftwareDevelopmentCodeBlocksSettings.Create;
 begin
   fConfigurationFileNames := TFileList.Create;
@@ -498,6 +558,7 @@ begin
   fAvailableUsers := TStringList.Create;
   fInstalledUsers := TStringList.Create;
   HomeDirectory := GetInstallationBaseDirectory;
+  HandleBackupDirectory;
 end;
 
 destructor TDreamcastSoftwareDevelopmentCodeBlocksSettings.Destroy;
@@ -526,7 +587,7 @@ begin
         CONFIG_SECTION_GLOBAL_KEY_CODEBLOCKS, fInstalled);
 
       // Export Library Information
-      IniFile.ReadBool(CONFIG_SECTION_CODEBLOCKS,
+      fExportLibraryInformation := IniFile.ReadBool(CONFIG_SECTION_CODEBLOCKS,
         CONFIG_SECTION_CODEBLOCKS_KEY_EXPORT_LIBRARY_INFORMATION_ENABLED,
           ExportLibraryInformation);
 
@@ -551,13 +612,13 @@ begin
       Temp := IniFile.ReadString(CONFIG_SECTION_CODEBLOCKS,
         CONFIG_SECTION_CODEBLOCKS_KEY_USERS_AVAILABLE, EmptyStr);
       if not IsEmpty(Temp) then
-       StringListToString(AvailableUsers, ArraySeparator);
+       StringToStringList(Temp, ArraySeparator, AvailableUsers);
 
       // Users Installed
       Temp := IniFile.ReadString(CONFIG_SECTION_CODEBLOCKS,
         CONFIG_SECTION_CODEBLOCKS_KEY_USERS_INSTALLED, EmptyStr);
       if not IsEmpty(Temp) then
-       StringListToString(InstalledUsers, ArraySeparator);
+       StringToStringList(Temp, ArraySeparator, InstalledUsers);
 
       // Configuration File Names
       Temp := IniFile.ReadString(CONFIG_SECTION_CODEBLOCKS,
@@ -574,6 +635,14 @@ procedure TDreamcastSoftwareDevelopmentCodeBlocksSettings.SaveConfiguration;
 var
   IniFile: TIniFile;
 
+  procedure WriteString(const Section, Key, Value: string);
+  begin
+    if not IsEmpty(Value) then
+      IniFile.WriteString(Section, Key, Value)
+    else
+      IniFile.DeleteKey(Section, Key);
+  end;
+
 begin
   IniFile := TIniFile.Create(RegistryFileName);
   try
@@ -586,27 +655,27 @@ begin
       CONFIG_SECTION_CODEBLOCKS_KEY_EXPORT_LIBRARY_INFORMATION_ENABLED,
         ExportLibraryInformation);
 
-    IniFile.WriteString(CONFIG_SECTION_CODEBLOCKS,
+    WriteString(CONFIG_SECTION_CODEBLOCKS,
       CONFIG_SECTION_CODEBLOCKS_KEY_EXPORT_LIBRARY_INFORMATION_PATH,
         ExportLibraryInformationPath);
 
-    IniFile.WriteString(CONFIG_SECTION_CODEBLOCKS,
+    WriteString(CONFIG_SECTION_CODEBLOCKS,
       CONFIG_SECTION_CODEBLOCKS_KEY_INSTALLATION_PATH,
         InstallationDirectory);
 
-    IniFile.WriteString(CONFIG_SECTION_CODEBLOCKS,
+    WriteString(CONFIG_SECTION_CODEBLOCKS,
       CONFIG_SECTION_CODEBLOCKS_KEY_BACKUP_PATH,
         BackupDirectory);
 
-    IniFile.WriteString(CONFIG_SECTION_CODEBLOCKS,
+    WriteString(CONFIG_SECTION_CODEBLOCKS,
       CONFIG_SECTION_CODEBLOCKS_KEY_CONFIGURATION_FILENAMES,
         ConfigurationFileNames.GetItems(ArraySeparator));
 
-    IniFile.WriteString(CONFIG_SECTION_CODEBLOCKS,
+    WriteString(CONFIG_SECTION_CODEBLOCKS,
       CONFIG_SECTION_CODEBLOCKS_KEY_USERS_AVAILABLE,
         StringListToString(AvailableUsers, ArraySeparator));
 
-    IniFile.WriteString(CONFIG_SECTION_CODEBLOCKS,
+    WriteString(CONFIG_SECTION_CODEBLOCKS,
       CONFIG_SECTION_CODEBLOCKS_KEY_USERS_INSTALLED,
         StringListToString(InstalledUsers, ArraySeparator));
   finally

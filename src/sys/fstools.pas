@@ -38,6 +38,7 @@ type
     procedure Clear;
     procedure Add(const FileName: TFileName);
     procedure Add(const FileNames, Delimiter: string);
+    procedure Assign(ASource: TFileList);
     function GetItems(const Delimiter: string): string;
     procedure SetItems(const Values, Delimiter: string);
     property Count: Integer read GetCount;
@@ -48,12 +49,14 @@ function ExtractDirectoryName(const DirectoryName: string): string;
 function ExtractEmbeddedFileToWorkingPath(const ResourceName: string;
   const FileName: TFileName): TFileName;
 function GetApplicationPath: TFileName;
+function GetFileHash(const FileName: TFileName): string;
 function GetProgramName: string;
 function GetWorkingPath: TFileName;
 function GetUsersDirectory: TFileName;
 function GetAppDataListFromUsers(var UserAppDataList: TStringList): Boolean;
 function GetTemporaryFileName: TFileName;
 function GetUserFromAppDataDirectory(const AppDataDirectory: TFileName): string;
+function IsCorrectFileHash(const FileName: TFileName; const Hash: string): Boolean;
 function KillDirectory(const DirectoryName: TFileName): Boolean;
 function KillFile(const FileName: TFileName): Boolean;
 function LoadFileToString(const FileName: TFileName): string;
@@ -75,6 +78,7 @@ uses
   LConvEncoding,
   LazFileUtils,
   FileUtil,
+  MD5,
 {$IFDEF GUI}
   Forms,
 {$ENDIF}
@@ -91,6 +95,16 @@ var
 {$IFDEF LZMA_SUPPORT}
   SevenZipFileName: TFileName = '';
 {$ENDIF}
+
+function GetFileHash(const FileName: TFileName): string;
+begin
+  Result := MD5Print(MD5File(FileName));
+end;
+
+function IsCorrectFileHash(const FileName: TFileName; const Hash: string): Boolean;
+begin
+  Result := SameText(GetFileHash(FileName), Hash);
+end;
 
 function ExtractDirectoryName(const DirectoryName: string): string;
 begin
@@ -480,6 +494,12 @@ begin
   finally
     Buffer.Free;
   end;
+end;
+
+procedure TFileList.Assign(ASource: TFileList);
+begin
+  Clear;
+  SetItems(ASource.GetItems(ArraySeparator), ArraySeparator);
 end;
 
 function TFileList.GetItems(const Delimiter: string): string;

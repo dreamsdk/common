@@ -21,26 +21,54 @@ const
 function ExtractCurrentModuleVersion(UnknownValueIfEmpty: string): TModuleVersion;
 function ExtractModuleVersion(const FileName: TFileName;
   UnknownValueIfEmpty: string): TModuleVersion;
+function GetRegisteredVersion(const FileName: TFileName): string;
 function IsGetModuleVersionCommand: Boolean;
+function IsVersionValid(const Version: string): Boolean;
 function LoadModuleVersion(const FileName: TFileName; const ProcessId: Integer): TModuleVersion;
 procedure SaveModuleVersion; overload;
 procedure SaveModuleVersion(const FileName: TFileName; const ProcessId: Integer); overload;
 function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string): string;
-function RetrieveVersionWithFind(FindTargetFileName: TFileName; StartTag, EndTag: string): string;
-function IsVersionValid(const Version: string): Boolean;
+function RetrieveVersionWithFind(FindTargetFileName: TFileName;
+  StartTag, EndTag: string): string; overload;
+function RetrieveVersionWithFind(FindTargetFileName: TFileName;
+  StartTag, EndTag: string; EnableRegister: Boolean): string; overload;
+procedure SetRegisteredVersion(const FileName: TFileName; const Version: string);
 
 implementation
 
 uses
-  RefBase, SysTools, RunTools, Version, FirstRun;
+  IniFiles,
+  RefBase,
+  SysTools,
+  RunTools,
+  Version,
+  FirstRun,
+  FSTools;
 
 const
   GREP_FILE_SYSTEM_LOCATION = 'msys\1.0\bin\grep.exe';
   GET_MODULE_VERSION_SWITCH = '--internal-get-module-version';
+  VERSION_REGISTRY_FILE_SYSTEM_LOCATION = 'versions.conf';
 
 var
   GrepFileName: TFileName;
   ComSpecFileName: TFileName;
+  VersionInformationRegistry: TIniFile;
+
+function GetRegisteredVersion(const FileName: TFileName): string;
+begin
+  Result := VersionInformationRegistry.ReadString('Versions',
+    GetFileHash(FileName), EmptyStr);
+end;
+
+procedure SetRegisteredVersion(const FileName: TFileName; const Version: string);
+begin
+{$IFDEF DEBUG}
+  WriteLn('SetRegisteredVersion: ', FileName, ': ', Version);
+{$ENDIF}
+  VersionInformationRegistry.WriteString('Versions',
+    GetFileHash(FileName), Version);
+end;
 
 function IsGetModuleVersionCommand: Boolean;
 var
@@ -132,36 +160,67 @@ function RetrieveVersion(Executable, CommandLine, StartTag,
   EndTag: string): string;
 var
   Buffer: string;
+  UseRegister: Boolean;
 
 begin
   Result := EmptyStr;
-  try
-    Buffer := Run(Executable, CommandLine);
-    Result := Trim(ExtractStr(StartTag, EndTag, Buffer));
-  except
-    Result := INVALID_VERSION;
+
+  UseRegister := FileExists(Executable);
+
+  if UseRegister then
+    Result := GetRegisteredVersion(Executable);
+
+  if IsEmpty(Result) then
+  begin
+    try
+      Buffer := Run(Executable, CommandLine);
+      Result := Trim(ExtractStr(StartTag, EndTag, Buffer));
+      if UseRegister and (not IsEmpty(Result)) then
+        SetRegisteredVersion(Executable, Result);
+    except
+      Result := INVALID_VERSION;
+    end;
   end;
 end;
 
 function RetrieveVersionWithFind(FindTargetFileName: TFileName; StartTag,
   EndTag: string): string;
+begin
+  Result := RetrieveVersionWithFind(FindTargetFileName, StartTag, EndTag, True);
+end;
+
+function RetrieveVersionWithFind(FindTargetFileName: TFileName; StartTag,
+  EndTag: string; EnableRegister: Boolean): string;
 var
   CommandLine: string;
 
 begin
-  if FileExists(GrepFileName) then
+  Result := EmptyStr;
+
+  if EnableRegister then
+    Result := GetRegisteredVersion(FindTargetFileName);
+
+  if IsEmpty(Result) then
   begin
-    CommandLine := Format('/c type "%s" | "%s" --text "%s" ', [FindTargetFileName,
-      GrepFileName, StartTag]);
-    Result := RetrieveVersion('cmd', CommandLine, StartTag, EndTag);
-  end
-  else
-  begin
-    CommandLine := Format('"%s" %s', [StartTag, FindTargetFileName]);
-    Result := RetrieveVersion('find', CommandLine, StartTag, EndTag);
+    if (not IsWindowsVistaOrGreater) and FileExists(GrepFileName) then
+    begin
+      // Windows XP
+      CommandLine := Format('/c type "%s" | "%s" --text "%s" ', [FindTargetFileName,
+        GrepFileName, StartTag]);
+      Result := RetrieveVersion('cmd', CommandLine, StartTag, EndTag);
+    end
+    else
+    begin
+      // Windows Vista+
+      CommandLine := Format('"%s" %s', [StartTag, FindTargetFileName]);
+      Result := RetrieveVersion('find', CommandLine, StartTag, EndTag);
+    end;
+
+    if EnableRegister and (not IsEmpty(Result)) then
+      SetRegisteredVersion(FindTargetFileName, Result);
   end;
 
-  if (Result = '') then
+  if IsEmpty(Result) then
     Result := INVALID_VERSION;
 end;
 
@@ -217,6 +276,11 @@ end;
 initialization
   GrepFileName := GetInstallationBaseDirectory + GREP_FILE_SYSTEM_LOCATION;
   ComSpecFileName := GetEnvironmentVariable('COMSPEC');
+  VersionInformationRegistry := TIniFile.Create(
+    GetConfigurationDirectory + VERSION_REGISTRY_FILE_SYSTEM_LOCATION);
+
+finalization
+  VersionInformationRegistry.Free;
 
 end.
 
