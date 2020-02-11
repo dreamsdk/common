@@ -27,7 +27,9 @@ function IsVersionValid(const Version: string): Boolean;
 function LoadModuleVersion(const FileName: TFileName; const ProcessId: Integer): TModuleVersion;
 procedure SaveModuleVersion; overload;
 procedure SaveModuleVersion(const FileName: TFileName; const ProcessId: Integer); overload;
-function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string): string;
+function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string): string; overload;
+function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string;
+  EnableRegister: Boolean): string; overload;
 function RetrieveVersionWithFind(FindTargetFileName: TFileName;
   StartTag, EndTag: string): string; overload;
 function RetrieveVersionWithFind(FindTargetFileName: TFileName;
@@ -158,6 +160,12 @@ end;
 
 function RetrieveVersion(Executable, CommandLine, StartTag,
   EndTag: string): string;
+begin
+  Result := RetrieveVersion(Executable, CommandLine, StartTag, EndTag, True);
+end;
+
+function RetrieveVersion(Executable, CommandLine, StartTag,
+  EndTag: string; EnableRegister: Boolean): string;
 var
   Buffer: string;
   UseRegister: Boolean;
@@ -165,7 +173,7 @@ var
 begin
   Result := EmptyStr;
 
-  UseRegister := FileExists(Executable);
+  UseRegister := EnableRegister and FileExists(Executable);
 
   if UseRegister then
     Result := GetRegisteredVersion(Executable);

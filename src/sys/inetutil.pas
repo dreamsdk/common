@@ -45,6 +45,7 @@ function SanitizeMediaAccessControlAddress(MediaAccessControlAddress: string): s
 implementation
 
 uses
+  Registry,
   LazUTF8,
   SynaIP,
   FPHTTPClient,
@@ -52,7 +53,8 @@ uses
   SysTools,
   RunTools,
   FSTools,
-  Version;
+  Version,
+  RegTools;
 
 function ParseInternetProtocolAddress(const InputValue: string): string;
 var
@@ -186,7 +188,7 @@ var
       Buffer.Add('@echo off');
       Buffer.Add('wmic OS get Version > nul');
       // Get-WmiObject -Class Win32_NetworkAdapterConfiguration -Filter IPEnabled=TRUE -ComputerName . | Select MACAddress,IPSubnet,IPAddress | Export-Csv .\test.csv
-      Buffer.Add(Format('wmic NICCONFIG where "IPEnabled = True" get IPAddress,IPSubnet,MACAddress /FORMAT:CSV > "%s"', [IpToMacFileName]));
+      Buffer.Add(Format('wmic NICCONFIG get IPAddress,IPSubnet,MACAddress,SettingID /FORMAT:CSV > "%s"', [IpToMacFileName]));
       // Get-NetAdapter | Where-Object Name -like '*' | Select-Object IfIndex,MacAddress,Name | ConvertTo-Csv
       Buffer.Add(Format('wmic NIC where "NetConnectionID like ''%%%%''" get %sMACAddress,NetConnectionID /FORMAT:CSV > "%s"', [InterfaceIndexField, MacToAdapterNameFileName]));
 	    Buffer.Add(':check_files');
@@ -301,10 +303,52 @@ var
     end;
   end;
 
-  procedure HandleIpAddresses(const AIpIndex: Integer;
-    const AIpAddresses: string; const AIpSubnets: string);
+  procedure HandleIpAddressesFromGuid(const GUID: string; var AIpAddress,
+    AIpSubnet: string);
+  var
+    Reg: TRegistry;
+
+    function RetrieveValues(const KeyPath: string): Boolean;
+    begin
+      Result := False;
+      if Reg.OpenKey(Format(KeyPath, [GUID]), False) then
+      begin
+        if Reg.ValueExists('IPAddress') then
+          AIpAddress := RegistryReadMultiSzToSingle(Reg, 'IPAddress');
+        if Reg.ValueExists('SubnetMask') then
+          AIpSubnet := RegistryReadMultiSzToSingle(Reg, 'SubnetMask');
+      end;
+      Result := (not IsEmpty(AIpAddress)) and (not IsEmpty(AIpSubnet));
+    end;
+
+  begin
+{$IFDEF DEBUG}
+{$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
+    DebugLog('      Network Card GUID: ' + GUID);
+{$ENDIF}
+{$ENDIF}
+    AIpAddress := EmptyStr;
+    AIpSubnet := EmptyStr;
+    Reg := TRegistry.Create(KEY_READ);
+    try
+      Reg.RootKey := HKEY_LOCAL_MACHINE;
+      if not RetrieveValues('\SYSTEM\CurrentControlSet\Services\%s\Parameters\Tcpip') then // Win XP
+        RetrieveValues('\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\%s'); // Win 10
+    finally
+      FreeAndNil(Reg);
+    end;
+  end;
+
+  function IsUsableIpAddresses(const IpAddress: string): Boolean;
   const
     INVALID_IP_ADDRESS = '0.0.0.0';
+
+  begin
+    Result := (not IsEmpty(IpAddress)) and (not SameText(IpAddress, INVALID_IP_ADDRESS));
+  end;
+
+  procedure HandleIpAddresses(const AIpIndex: Integer;
+    const AIpAddresses, AIpSubnets, ANetworkCardGuid: string);
 
   var
     i, IpEntryIndex: Integer;
@@ -317,10 +361,32 @@ var
     IpAddresses: PIpAddresses;
 
   begin
+{$IFDEF DEBUG}
+{$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
+    WriteLn('  HandleIpAddresses ANetworkCardGuid: ', ANetworkCardGuid);
+{$ENDIF}
+{$ENDIF}
     ExtractedIpAddresses := ExtractStr('{', '}', AIpAddresses);
     ExtractedSubnets := ExtractStr('{', '}', AIpSubnets);
 
-    if ExtractedIpAddresses <> EmptyStr then
+{$IFDEF DEBUG}
+{$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
+    WriteLn('    Before processing: ExtractedIpAddresses: ', ExtractedIpAddresses);
+{$ENDIF}
+{$ENDIF}
+
+    if not IsUsableIpAddresses(ExtractedIpAddresses) then
+      // Fail-back: try to read from registry if possible
+      HandleIpAddressesFromGuid(ANetworkCardGuid, ExtractedIpAddresses, ExtractedSubnets);
+
+{$IFDEF DEBUG}
+{$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
+    WriteLn('    After processing: ExtractedIpAddresses: ', ExtractedIpAddresses,
+      ', ExtractedSubnets: ', ExtractedSubnets);
+{$ENDIF}
+{$ENDIF}
+
+    if not IsEmpty(ExtractedIpAddresses) then
     begin
       IpBuffer := TStringList.Create;
       SubnetBuffer := TStringList.Create;
@@ -333,33 +399,28 @@ var
           for i := 0 to IpBuffer.Count - 1 do
           begin
             CurrentIpAddress := IpBuffer[i];
-            if CurrentIpAddress <> INVALID_IP_ADDRESS then
+            CurrentIpSubnet := EmptyStr;
+
+            if IsUsableIpAddresses(CurrentIpAddress) then
             begin
               CurrentIpSubnet := SubnetBuffer[i]; // no parsing needed
 
-              if CurrentIpAddress <> EmptyStr then
-              begin
-{$IFDEF DEBUG}
-{$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
-                WriteLn('    ', CurrentIpAddress);
-{$ENDIF}
-{$ENDIF}
-                // Determine if the item is an IPv4 or IPv6
-                IpAddresses := @IPv4Addresses;
-                if IsIP6(CurrentIpAddress) then
-                  IpAddresses := @IPv6Addresses
-                else
-                  CurrentIpAddress := ParseInternetProtocolAddress(CurrentIpAddress); // Sanitize IPv4
+              // Determine if the item is an IPv4 or IPv6
+              IpAddresses := @IPv4Addresses;
+              if IsIP6(CurrentIpAddress) then
+                IpAddresses := @IPv6Addresses
+              else
+                CurrentIpAddress := ParseInternetProtocolAddress(CurrentIpAddress); // Sanitize IPv4
 
-                // Add a item to the array
-                IpEntryIndex := Length(IpAddresses^);
-                SetLength(IpAddresses^, IpEntryIndex + 1);
+              // Add a item to the array
+              IpEntryIndex := Length(IpAddresses^);
+              SetLength(IpAddresses^, IpEntryIndex + 1);
 
-                // Assign the values to the new item
-                IpAddresses^[IpEntryIndex].Address := CurrentIpAddress;
-                IpAddresses^[IpEntryIndex].Subnet := CurrentIpSubnet;
-              end;
+              // Assign the values to the new item
+              IpAddresses^[IpEntryIndex].Address := CurrentIpAddress;
+              IpAddresses^[IpEntryIndex].Subnet := CurrentIpSubnet;
             end;
+
           end;
         end;
 
@@ -372,7 +433,7 @@ var
 
   procedure ParseIpToMac;
   const
-    HEADER = 'Node,IPAddress,IPSubnet,MACAddress';
+    HEADER = 'Node,IPAddress,IPSubnet,MACAddress,SettingID';
 
   var
     i, j, StartIndex: Integer;
@@ -406,13 +467,62 @@ var
             WriteLn('  ', IpToMacBuffer[i]);
 {$ENDIF}
 {$ENDIF}
-            HandleIpAddresses(j, Buffer[1], Buffer[2]);
+            HandleIpAddresses(j, Buffer[1], Buffer[2], Buffer[4]);
           end;
         end;
       end;
      finally
        Buffer.Free;
      end;
+  end;
+
+  // Thanks http://delphi.cjcsoft.net/viewthread.php?tid=46612
+  procedure DeleteElement(
+    var WorkingNetworkCardAdapterList: TNetworkCardAdapterList;
+    const ItemIndex: Integer
+  );
+  var
+     ArrayLength, j : Integer;
+
+  begin
+    ArrayLength := Length(WorkingNetworkCardAdapterList);
+    if (ItemIndex < Low(WorkingNetworkCardAdapterList))
+      and (ItemIndex > High(WorkingNetworkCardAdapterList)) then
+        Exit; // out of bounds
+
+    // shift items if the requested item isn't the last
+    if (ItemIndex <> ArrayLength - 1) then
+      for j := ItemIndex to ArrayLength - 2 do
+        WorkingNetworkCardAdapterList[j] := WorkingNetworkCardAdapterList[j + 1];
+
+    // Remove one item
+    SetLength(WorkingNetworkCardAdapterList, ArrayLength - 1);
+  end;
+
+  procedure CleanupMacAddresses;
+  var
+    i: Integer;
+    Item: TNetworkCardAdapter;
+
+  begin
+    for i := High(ANetworkAdapterCardList) downto Low(ANetworkAdapterCardList) do
+    begin
+      Item := ANetworkAdapterCardList[i];
+{$IFDEF DEBUG}
+{$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
+      DebugLog('*** CleanupMacAddresses: Item = ' + Item.NetworkCardName);
+{$ENDIF}
+{$ENDIF}
+      if (Length(Item.IPv4Addresses) = 0) and (Length(Item.IPv6Addresses) = 0) then
+      begin
+{$IFDEF DEBUG}
+{$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
+        DebugLog('  Deleting ItemIndex = ' + IntToStr(i));
+{$ENDIF}
+{$ENDIF}
+        DeleteElement(ANetworkAdapterCardList, i);
+      end;
+    end;
   end;
 
 begin
@@ -433,6 +543,9 @@ begin
 
       // Extract IPv4 addresses for MAC addresses
       ParseIpToMac;
+
+      // Remove useless MAC addresses
+      CleanupMacAddresses;
     finally
       IpToMacBuffer.Free;
       MacToAdapterNameBuffer.Free;
