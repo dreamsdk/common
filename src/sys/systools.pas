@@ -80,13 +80,17 @@ begin
 
   CommandLine := 'echo Y | cacls "%s" /E /G "%s":%s';
   if IsWindowsVistaOrGreater then
-    CommandLine := 'icacls "%s" /q /c /t /grant %s:%s';
+    CommandLine := 'icacls "%s" /q /c /t /grant "%s":%s';
 
   CommandLine := Format(CommandLine, [
     ExcludeTrailingPathDelimiter(DirectoryFullPath),
     UserName,
     Rights
   ]);
+
+{$IFDEF DEBUG}
+  DebugLog('SetDirectoryRights: ' + CommandLine);
+{$ENDIF}
 
   Result := RunSingleCommand(CommandLine);
 {$ELSE}

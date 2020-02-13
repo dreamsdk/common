@@ -502,15 +502,14 @@ procedure TDreamcastSoftwareDevelopmentCodeBlocksSettings
   .SetExportLibraryInformation(AValue: Boolean);
 begin
   if (fExportLibraryInformation <> AValue) then
-  begin
     fExportLibraryInformation := AValue;
-    if AValue then
-    begin
-      if not DirectoryExists(ExportLibraryInformationPath) then
-        ForceDirectories(ExportLibraryInformationPath);
-      SetDirectoryRights(ExportLibraryInformationPath, GetEveryoneName,
-        ACL_RIGHT_FULL);
-    end;
+
+  if fExportLibraryInformation then
+  begin
+    if not DirectoryExists(ExportLibraryInformationPath) then
+      ForceDirectories(ExportLibraryInformationPath);
+    SetDirectoryRights(ExportLibraryInformationPath, GetEveryoneName,
+      ACL_RIGHT_FULL);
   end;
 end;
 
