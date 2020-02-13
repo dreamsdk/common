@@ -39,6 +39,7 @@ function GetEveryoneName: string;
 function GetFriendlyUserName(const UserName: string): string;
 function GetUserList(var UserList: TStringList): Boolean;
 function GetUserFullNameFromUserName(const UserName: string): string;
+procedure HandleLogonServerVariable(EnvironmentVariables: TStringList);
 function IsEmpty(const S: string): Boolean;
 function IsInString(const SubStr, S: string): Boolean;
 function IsProcessRunning(FileName: TFileName): Boolean;
@@ -553,6 +554,49 @@ begin
 begin
   raise EAbstractError.Create('IsProcessRunning is not implemented for this OS');
 {$ENDIF}
+end;
+
+procedure HandleLogonServerVariable(EnvironmentVariables: TStringList);
+const
+  COMPUTERNAME_ENVIRONMENT_VARIABLE = 'COMPUTERNAME';
+  LOGONSERVER_ENVIRONMENT_VARIABLE = 'LOGONSERVER';
+
+var
+  LogonServerIndex: Integer;
+  LogonServerValue,
+  Temp: string;
+
+begin
+{$IFDEF DEBUG}
+  DebugLog('### HandleLogonServerVariable ###');
+{$ENDIF}
+  if not Assigned(EnvironmentVariables) then
+    Exit;
+
+  LogonServerValue := '\\' +
+    SysUtils.GetEnvironmentVariable(COMPUTERNAME_ENVIRONMENT_VARIABLE);
+  LogonServerIndex := StringListSubstringIndexOf(EnvironmentVariables,
+    LOGONSERVER_ENVIRONMENT_VARIABLE + '=');
+
+  if LogonServerIndex <> -1 then
+  begin
+    Temp := Trim(Right('=', EnvironmentVariables[LogonServerIndex]));
+    if not IsEmpty(Temp) then
+    begin
+{$IFDEF DEBUG}
+      DebugLog(LOGONSERVER_ENVIRONMENT_VARIABLE + ' is OK: ' + Temp);
+{$ENDIF}
+      Exit; // Nothing to do
+    end;
+  end;
+
+{$IFDEF DEBUG}
+  DebugLog(LOGONSERVER_ENVIRONMENT_VARIABLE + ' is NOT OK, setting it to '
+    + LogonServerValue);
+{$ENDIF}
+
+  EnvironmentVariables.Add(
+    Format('%s=%s', [LOGONSERVER_ENVIRONMENT_VARIABLE, LogonServerValue]));
 end;
 
 initialization

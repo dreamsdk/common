@@ -185,6 +185,7 @@ begin
   OurProcess := {$IFDEF Windows}TProcess{$ELSE}TProcessUTF8{$ENDIF}.Create(nil);
   try
     // Initialize Environment context
+    HandleLogonServerVariable(fEnvironmentVariables);
     OurProcess.Environment.AddStrings(fEnvironmentVariables);
 
     // Handle working directory

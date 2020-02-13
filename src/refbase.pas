@@ -35,10 +35,26 @@ var
 
 function GetBaseEnvironmentVariableName: string;
 const
-  DREAMSDK_ENVIRONMENT_VARIABLE = {$IFDEF RELEASE}'DREAMSDK_HOME'{$ELSE}'DREAMSDK_HOME_DEBUG'{$ENDIF};
+  DREAMSDK_ENVIRONMENT_VARIABLE_RELEASE = 'DREAMSDK_HOME';
+{$IFDEF DEBUG}
+  DREAMSDK_ENVIRONMENT_VARIABLE_DEBUG = 'DREAMSDK_HOME_DEBUG';
+{$ENDIF}
 
 begin
-  Result := DREAMSDK_ENVIRONMENT_VARIABLE;
+  Result :=
+{$IFDEF DEBUG}
+    DREAMSDK_ENVIRONMENT_VARIABLE_DEBUG
+{$ELSE}
+    DREAMSDK_ENVIRONMENT_VARIABLE_RELEASE
+{$ENDIF}
+  ;
+
+{$IFDEF DEBUG}
+  if IsEmpty(GetEnvironmentVariable(Result)) then
+    Result := DREAMSDK_ENVIRONMENT_VARIABLE_RELEASE;
+
+  DebugLog('GetBaseEnvironmentVariableName: ' + Result);
+{$ENDIF}
 end;
 
 procedure RetrieveBaseDirectories;

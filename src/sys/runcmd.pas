@@ -2,6 +2,8 @@ unit RunCmd;
 
 {$mode objfpc}{$H+}
 
+// {$DEFINE DUMP_PROCESS_PIPE}
+
 interface
 
 uses
@@ -121,20 +123,38 @@ var
   BytesRead: Integer;
   NewLine: string;
 {$IFDEF DEBUG}
-{$IFDEF DUMP_PROCESS_PIPE}
   i: Integer;
-{$ENDIF}
+  TempBufferString: string;
 {$ENDIF}
 
 begin
   Buffer[0] := #0;
 
+{$IFDEF DEBUG}
+  DebugLog('  Executable: ' + Executable);
+  TempBufferString := StringListToString(Parameters, WhiteSpaceStr);
+  DebugLog('  Parameters: ' + TempBufferString);
+{$ENDIF}
+
   fProcess.Executable := Executable;
   fProcess.Parameters.AddStrings(Parameters);
+  HandleLogonServerVariable(fEnvironment);
   fProcess.Environment.AddStrings(fEnvironment);
+{$IFDEF DEBUG}
+  DebugLog('  Environment:');
+  for i := 0 to fEnvironment.Count - 1 do
+    DebugLog('    ' + fEnvironment[i]);
+{$ENDIF}
   fProcess.Options := [poUsePipes, poStderrToOutPut];
+{$IFDEF RELEASE}
   fProcess.ShowWindow := swoHide;
+{$ELSE}
+  fProcess.ShowWindow := swoShowDefault;
+{$ENDIF}
   fProcess.CurrentDirectory := WorkingDirectory;
+{$IFDEF DEBUG}
+  DebugLog('  WorkingDirectory: ' + WorkingDirectory);
+{$ENDIF}
   fProcess.Execute;
 
 {$IFDEF DEBUG}
