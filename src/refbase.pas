@@ -25,13 +25,13 @@ uses
 {$ENDIF}
 {$ENDIF}
   SysTools,
-  FirstRun,
   FSTools;
 
 var
   InstallationBaseDirectory,
   MsysBaseDirectory,
-  ConfigurationDirectory: TFileName;
+  ConfigurationDirectory,
+  CommandLineInstallationDirectory: TFileName;
 
 function GetBaseEnvironmentVariableName: string;
 const
@@ -69,18 +69,32 @@ var
 begin
   if IsEmpty(InstallationBaseDirectory) then
   begin
+{$IFDEF DEBUG}
+    DebugLog('RetrieveBaseDirectories');
+{$ENDIF}
     // Handling Installation Home Base Directory (i.e. X:\DreamSDK\)
 
-    if IsFirstRunMode then
+    if DirectoryExists(CommandLineInstallationDirectory) then
+    begin
       // Special mode: First Run
-      InstallationBaseDirectory := GetFirstRunInstallationDirectory
+      InstallationBaseDirectory := CommandLineInstallationDirectory;
+{$IFDEF DEBUG}
+      DebugLog('  IsFirstRunMode: ' + InstallationBaseDirectory);
+{$ENDIF}
+    end
     else
     begin
       // Normal mode: Read from DREAMSDK_HOME environment variable
       InstallationBaseDirectory := GetEnvironmentVariable(GetBaseEnvironmentVariableName);
+{$IFDEF DEBUG}
+      DebugLog('  InstallationBaseDirectory from environment variable: ' + InstallationBaseDirectory);
+{$ENDIF}
       if not IsEmpty(InstallationBaseDirectory)
         and (not DirectoryExists(InstallationBaseDirectory)) then
           InstallationBaseDirectory := GetApplicationPath + '..\..\..\..\'; // Fail-safe: this points to the X:\DreamSDK\ directory
+{$IFDEF DEBUG}
+      DebugLog('  InstallationBaseDirectory fail-safe: ' + InstallationBaseDirectory);
+{$ENDIF}
     end;
 
     // If Home Base directory is not empty, then parse the path
@@ -88,11 +102,23 @@ begin
       InstallationBaseDirectory := IncludeTrailingPathDelimiter(
         ExpandFileName(InstallationBaseDirectory));
 
+{$IFDEF DEBUG}
+      DebugLog('  InstallationBaseDirectory post-processing: ' + InstallationBaseDirectory);
+{$ENDIF}
+
     // Compute MSYS Base directory (i.e. '/')
     MsysBaseDirectory := InstallationBaseDirectory + MSYS_BASE_DIRECTORY;
 
+{$IFDEF DEBUG}
+    DebugLog('  MsysBaseDirectory: ' + MsysBaseDirectory);
+{$ENDIF}
+
     // Compute '/etc/dreamsdk' directory
     ConfigurationDirectory := MsysBaseDirectory + SETTINGS_DIRECTORY;
+
+{$IFDEF DEBUG}
+    DebugLog('  ConfigurationDirectory: ' + ConfigurationDirectory);
+{$ENDIF}
 
     // If the MSYS Base directory doesn't exist, then there is a issue somewhere!
     if not DirectoryExists(MsysBaseDirectory) then
@@ -131,10 +157,29 @@ begin
   Result := ConfigurationDirectory;
 end;
 
+procedure ParseParameters;
+const
+  DIR_SWITCH = '--home-dir';
+
+var
+  i: Integer;
+  Param: string;
+
+begin
+  for i := 1 to ParamCount do
+  begin
+    Param := LowerCase(ParamStr(i));
+    if IsInString(DIR_SWITCH, Param) then
+      CommandLineInstallationDirectory := ParamStr(i + 1);
+  end;
+end;
+
 initialization
   InstallationBaseDirectory := EmptyStr;
   MsysBaseDirectory := EmptyStr;
   ConfigurationDirectory := EmptyStr;
+  CommandLineInstallationDirectory := EmptyStr;
+  ParseParameters;
 
 end.
 

@@ -44,7 +44,6 @@ uses
   SysTools,
   RunTools,
   Version,
-  FirstRun,
   FSTools;
 
 const
