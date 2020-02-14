@@ -242,12 +242,18 @@ end;
 
 {$IFDEF DEBUG}
 procedure DebugLog(const Message: string);
+{$IFDEF GUI}
+const
+  sDebugLogTitle = 'DebugLog';
+{$ENDIF}
+
 begin
 {$IFDEF CONSOLE}
   WriteLn(Message);
 {$ELSE}
 {$IFDEF GUI}
-  MessageBox(Application.Handle, 'Debug', PChar(Message), MB_ICONINFORMATION + MB_OK);
+  MessageBox(Application.Handle, PChar(Trim(Message)), sDebugLogTitle,
+    MB_ICONINFORMATION + MB_OK);
 {$ENDIF}
 {$ENDIF}
 end;

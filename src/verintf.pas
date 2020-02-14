@@ -111,7 +111,14 @@ var
   DumpFileName: TFileName;
 
 begin
+{$IFDEF DEBUG}
+  DebugLog('SaveModuleVersion: ' + FileName + ', ProcessId: '
+    + IntToStr(ProcessId));
+{$ENDIF}
   DumpFileName := GetDumpVersionFileName(FileName, ProcessId);
+{$IFDEF DEBUG}
+  DebugLog('  DumpFileName: ' + DumpFileName);
+{$ENDIF}
   StringList := TStringList.Create;
   try
     StringList.Add(GetFileDescription);
@@ -122,6 +129,9 @@ begin
   finally
     StringList.Free;
   end;
+{$IFDEF DEBUG}
+  DebugLog('SaveModuleVersion is done!');
+{$ENDIF}
 end;
 
 function LoadModuleVersion(const FileName: TFileName;
@@ -283,11 +293,13 @@ end;
 initialization
   GrepFileName := GetInstallationBaseDirectory + GREP_FILE_SYSTEM_LOCATION;
   ComSpecFileName := GetEnvironmentVariable('COMSPEC');
-  VersionInformationRegistry := TIniFile.Create(
-    GetConfigurationDirectory + VERSION_REGISTRY_FILE_SYSTEM_LOCATION);
+  if DirectoryExists(GetConfigurationDirectory) then
+    VersionInformationRegistry := TIniFile.Create(
+      GetConfigurationDirectory + VERSION_REGISTRY_FILE_SYSTEM_LOCATION);
 
 finalization
-  VersionInformationRegistry.Free;
+  if Assigned(VersionInformationRegistry) then
+    VersionInformationRegistry.Free;
 
 end.
 
