@@ -11,10 +11,11 @@ unit Elevate;
 interface
 
 uses
-  Windows;
+  Windows, Classes;
 
 type
-  TElevatedProc = function(const ATaskName, AParameters: string; SourceHandle: THandle): Cardinal;
+  TElevatedProc = function(const ATaskName: string; AParameters: TStringList;
+    SourceHandle: THandle): Cardinal;
   TProcessMessagesMethod = procedure of object;
 
 var
@@ -25,6 +26,10 @@ var
 
 // Call this routine after you have assigned OnElevateProc
 procedure CheckForElevatedTask;
+
+procedure DecodeParameters(EncodedParameters: string;
+  DecodedParameters: TStringList);
+function EncodeParameters(DecodedParameters: TStringList): string;
 
 // Runs OnElevateProc under full administrator rights
 function RunElevated(
@@ -43,10 +48,24 @@ function IsRealOSError(ALastOSError: Cardinal): Boolean;
 implementation
 
 uses
-  SysUtils, Registry, ShellAPI, ComObj;
+  SysUtils, Registry, ShellAPI, ComObj, SysTools;
 
 const
   RunElevatedTaskSwitch = '0C3B68CC5F5B900B64D50CB7DF000FFC'; // some unique value, just a GUID with removed '[', ']', and '-'
+
+procedure DecodeParameters(EncodedParameters: string;
+  DecodedParameters: TStringList);
+begin
+  if Assigned(DecodedParameters) then
+    StringToStringList(EncodedParameters, ArraySeparator, DecodedParameters);
+end;
+
+function EncodeParameters(DecodedParameters: TStringList): string;
+begin
+  Result := EmptyStr;
+  if Assigned(DecodedParameters) then
+    Result := StringListToString(DecodedParameters, ArraySeparator);
+end;
 
 function CheckTokenMembership(
   TokenHandle: THandle;
@@ -73,6 +92,7 @@ var
   SEI: TShellExecuteInfo;
   Host: String;
   Args: String;
+  DecodedParameters: TStringList;
 
   function LocalShellExecuteEx: Boolean;
   begin
@@ -98,7 +118,15 @@ begin
   if IsElevated then
   begin
     if Assigned(OnElevateProc) then
-      Result := OnElevateProc(ATaskName, AParameters, ASourceWindowHandle)
+    begin
+      DecodedParameters := TStringList.Create;
+      try
+        DecodeParameters(AParameters, DecodedParameters);
+        Result := OnElevateProc(ATaskName, DecodedParameters, ASourceWindowHandle)
+      finally
+        DecodedParameters.Free;
+      end;
+    end
     else
       Result := ERROR_PROC_NOT_FOUND;
     Exit;
@@ -343,6 +371,8 @@ begin
 end;
 
 procedure CheckForElevatedTask;
+var
+  DecodedParameters: TStringList;
 
   function GetTaskName: string;
   begin
@@ -387,7 +417,15 @@ begin
       ExitCode := ERROR_ACCESS_DENIED
     else
     if Assigned(OnElevateProc) then
-      ExitCode := OnElevateProc(GetTaskName, GetArgsForElevatedTask, GetSourceHandle)
+    begin
+      DecodedParameters := TStringList.Create;
+      try
+        DecodeParameters(GetArgsForElevatedTask, DecodedParameters);
+        ExitCode := OnElevateProc(GetTaskName, DecodedParameters, GetSourceHandle);
+      finally
+        DecodedParameters.Free;
+      end;
+    end
     else
       ExitCode := ERROR_PROC_NOT_FOUND;
   except
