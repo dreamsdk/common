@@ -258,7 +258,7 @@ function SerialBaudrateToString(SerialBaudrate: TDreamcastToolSerialBaudrate): s
 implementation
 
 uses
-  RefBase, SysTools, Version;
+  RefBase, SysTools, Version, CBTools;
 
 const
   CONFIG_SETTINGS_SECTION_NAME = 'Settings';
@@ -278,7 +278,6 @@ const
 
   DEFAULT_CODEBLOCKS_DIR_64 = '%ProgramFiles(x86)%\CodeBlocks';
   DEFAULT_CODEBLOCKS_DIR_32 = '%ProgramFiles%\CodeBlocks';
-  DEFAULT_CODEBLOCKS_CONFIGURATION_FILE = '%sCodeBlocks\default.conf';
   DEFAULT_CODEBLOCKS_BACKUP_DIR = '%s\support\ide\codeblocks\';
 
 function SerialPortToString(SerialPort: TDreamcastToolSerialPort): string;
@@ -325,52 +324,13 @@ end;
 // {$DEFINE DEBUG_INITIALIZE_DEFAULTS}
 procedure TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings
   .InitializeDefaults(const AutoLoad: Boolean);
-var
-  UsersAppData: TStringList;
-  i: Integer;
-  CodeBlocksConfigurationFileName: TFileName;
-
 begin
   // Code::Blocks Installation Directory
   InitializeCodeBlocksInstallationDirectory;
 
   // Code::Blocks Configuration Files
-  UsersAppData := TStringList.Create;
-  try
-    GetAppDataListFromUsers(UsersAppData);
-
-    for i := 0 to UsersAppData.Count - 1 do
-    begin
-      CodeBlocksConfigurationFileName := Format(
-        DEFAULT_CODEBLOCKS_CONFIGURATION_FILE,
-        [ IncludeTrailingPathDelimiter(UsersAppData[i]) ]
-      );
-{$IFDEF DEBUG}
-{$IFDEF DEBUG_INITIALIZE_DEFAULTS}
-      Write(CodeBlocksConfigurationFileName, ' ... ');
-{$ENDIF}
-{$ENDIF}
-      if FileExists(CodeBlocksConfigurationFileName) then
-      begin
-{$IFDEF DEBUG}
-{$IFDEF DEBUG_INITIALIZE_DEFAULTS}
-        WriteLn('exist!');
-{$ENDIF}
-{$ENDIF}
-        ConfigurationFileNames.Add(CodeBlocksConfigurationFileName);
-        fAvailableConfigurationFileNames.Add(CodeBlocksConfigurationFileName);
-      end
-{$IFDEF DEBUG}
-{$IFDEF DEBUG_INITIALIZE_DEFAULTS}
-      else
-        WriteLn('doesn''t exist!')
-{$ENDIF}
-{$ENDIF};
-    end;
-
-  finally
-    UsersAppData.Free;
-  end;
+  GetCodeBlocksAvailableConfigurationFileNames(ConfigurationFileNames);
+  fAvailableConfigurationFileNames.Assign(ConfigurationFileNames);
 
   // Code::Blocks Backup Directory
   HandleBackupDirectory;
@@ -455,26 +415,9 @@ begin
 end;
 
 procedure TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings.WriteRegistry;
-
-  procedure SetAvailableUsers;
-  var
-    i: Integer;
-    UsersDirectory: TFileName;
-    CurrentUserName: string;
-
-  begin
-    fAvailableUsers.Clear;
-    UsersDirectory := GetUsersDirectory;
-    for i := 0 to fAvailableConfigurationFileNames.Count - 1 do
-    begin
-      CurrentUserName := ExtractStr(UsersDirectory, DirectorySeparator,
-        fAvailableConfigurationFileNames[i]);
-      fAvailableUsers.Add(GetFriendlyUserName(CurrentUserName));
-    end;
-  end;
-
 begin
-  SetAvailableUsers;
+  ConvertCodeBlocksConfigurationFileNamesToUsers(
+    fAvailableConfigurationFileNames, fAvailableUsers);
   SaveConfiguration;
 end;
 
