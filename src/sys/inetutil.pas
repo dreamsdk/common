@@ -186,11 +186,11 @@ var
     Buffer := TStringList.Create;
     try
       Buffer.Add('@echo off');
-      Buffer.Add('wmic OS get Version > nul');
+      Buffer.Add('echo. | wmic OS get Version > nul');
       // Get-WmiObject -Class Win32_NetworkAdapterConfiguration -Filter IPEnabled=TRUE -ComputerName . | Select MACAddress,IPSubnet,IPAddress | Export-Csv .\test.csv
-      Buffer.Add(Format('wmic NICCONFIG get IPAddress,IPSubnet,MACAddress,SettingID /FORMAT:CSV > "%s"', [IpToMacFileName]));
+      Buffer.Add(Format('echo. | wmic NICCONFIG get IPAddress,IPSubnet,MACAddress,SettingID /FORMAT:CSV > "%s"', [IpToMacFileName]));
       // Get-NetAdapter | Where-Object Name -like '*' | Select-Object IfIndex,MacAddress,Name | ConvertTo-Csv
-      Buffer.Add(Format('wmic NIC where "NetConnectionID like ''%%%%''" get %sMACAddress,NetConnectionID /FORMAT:CSV > "%s"', [InterfaceIndexField, MacToAdapterNameFileName]));
+      Buffer.Add(Format('echo. | wmic NIC where "NetConnectionID like ''%%%%''" get %sMACAddress,NetConnectionID /FORMAT:CSV > "%s"', [InterfaceIndexField, MacToAdapterNameFileName]));
 	    Buffer.Add(':check_files');
       Buffer.Add(Format('if not exist "%s" goto check_files', [IpToMacFileName]));
       Buffer.Add(Format('if not exist "%s" goto check_files', [MacToAdapterNameFileName]));
