@@ -14,9 +14,12 @@ uses
   {$ENDIF} ;
 
 const
+  TabStr = #9;
   WhiteSpaceStr = ' ';
   ArraySeparator = '|';
+
   sError = 'Error';
+  sDebugLogTitle = 'DebugLog';
 
   STRING_DATE_FORMAT = 'YYYY-MM-DD @ HH:mm:ss';
   ACL_RIGHT_FULL = 'F';
@@ -242,11 +245,6 @@ end;
 
 {$IFDEF DEBUG}
 procedure DebugLog(const Message: string);
-{$IFDEF GUI}
-const
-  sDebugLogTitle = 'DebugLog';
-{$ENDIF}
-
 begin
 {$IFDEF CONSOLE}
   WriteLn(Message);
