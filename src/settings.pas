@@ -18,6 +18,7 @@ const
   DEFAULT_KALLISTI_PORTS_URL = 'https://gitlab.com/simulant/community/kallistios-ports-nitro.git';
   DEFAULT_DREAMCAST_TOOL_SERIAL_URL = 'https://gitlab.com/simulant/community/dcload-serial-nitro.git';
   DEFAULT_DREAMCAST_TOOL_INTERNET_PROTOCOL_URL = 'https://gitlab.com/simulant/community/dcload-ip-nitro.git';
+  DEFAULT_RUBY_URL = 'https://github.com/mruby/mruby.git';
 
   // Dreamcast Tool
   DREAMCAST_TOOL_DEFAULT_KIND = 0;
@@ -65,6 +66,8 @@ type
     dtb57600,
     dtb115200
   );
+
+  TDreamcastSoftwareDevelopmentSettings = class;
 
   { TDreamcastSoftwareDevelopmentSettingsDreamcastTool }
   TDreamcastSoftwareDevelopmentSettingsDreamcastTool = class(TObject)
@@ -124,19 +127,28 @@ type
     fKallistiURL: string;
     fDreamcastToolSerialURL: string;
     fDreamcastToolInternetProtocolURL: string;
+    fRubyURL: string;
+    function GetDreamcastToolInternetProtocolURL: string;
+    function GetDreamcastToolSerialURL: string;
+    function GetKallistiPortsURL: string;
+    function GetKallistiURL: string;
+    function GetRubyURL: string;
+  protected
+    function GetURL(const FieldValue, DefaultFieldValue: string): string;
   public
     property KallistiURL: string
-      read fKallistiURL write fKallistiURL;
+      read GetKallistiURL write fKallistiURL;
     property KallistiPortsURL: string
-      read fKallistiPortsURL write fKallistiPortsURL;
+      read GetKallistiPortsURL write fKallistiPortsURL;
     property DreamcastToolSerialURL: string
-      read fDreamcastToolSerialURL write fDreamcastToolSerialURL;
+      read GetDreamcastToolSerialURL write fDreamcastToolSerialURL;
     property DreamcastToolInternetProtocolURL: string
-      read fDreamcastToolInternetProtocolURL write fDreamcastToolInternetProtocolURL;
+      read GetDreamcastToolInternetProtocolURL write fDreamcastToolInternetProtocolURL;
+    property RubyURL: string read GetRubyURL write fRubyURL;
   end;
 
-  { TDreamcastSoftwareDevelopmentCodeBlocksSettings }
-  TDreamcastSoftwareDevelopmentCodeBlocksSettings = class(TObject)
+  { TDreamcastSoftwareDevelopmentSettingsCodeBlocks }
+  TDreamcastSoftwareDevelopmentSettingsCodeBlocks = class(TObject)
   private
     fAvailableUsers: TStringList;
     fExportLibraryInformation: Boolean;
@@ -206,10 +218,9 @@ type
       read fInstalled;
   end;
 
-  { TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings }
-
-  TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings
-    = class(TDreamcastSoftwareDevelopmentCodeBlocksSettings)
+  { TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher }
+  TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher
+    = class(TDreamcastSoftwareDevelopmentSettingsCodeBlocks)
   private
     procedure InitializeCodeBlocksInstallationDirectory;
     procedure InitializeDefaults(const AutoLoad: Boolean);
@@ -218,9 +229,23 @@ type
     constructor Create; overload;
     constructor Create(const AutoLoad: Boolean); overload;
     procedure Assign(
-      ASource: TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings);
+      ASource: TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher);
     procedure Save(const AInstalled: Boolean);
     function Refresh: Boolean;
+  end;
+
+  { TDreamcastSoftwareDevelopmentSettingsRuby }
+  TDreamcastSoftwareDevelopmentSettingsRuby = class(TObject)
+  private
+    fOwner: TDreamcastSoftwareDevelopmentSettings;
+    fEnabled: Boolean;
+    procedure SetEnabled(AValue: Boolean);
+  protected
+    procedure LoadConfiguration(IniFile: TIniFile);
+    procedure SaveConfiguration(IniFile: TIniFile);
+  public
+    constructor Create(AOwner: TDreamcastSoftwareDevelopmentSettings);
+    property Enabled: Boolean read fEnabled write SetEnabled;
   end;
 
   { TDreamcastSoftwareDevelopmentSettings }
@@ -230,6 +255,7 @@ type
     fInstallPath: TFileName;
     fProgressWindowAutoClose: Boolean;
     fRepositories: TDreamcastSoftwareDevelopmentSettingsRepositories;
+    fRuby: TDreamcastSoftwareDevelopmentSettingsRuby;
     fUseMinTTY: Boolean;
     fDreamcastTool: TDreamcastSoftwareDevelopmentSettingsDreamcastTool;
   protected
@@ -237,6 +263,7 @@ type
   public
     constructor Create;
     destructor Destroy; override;
+
     function LoadConfiguration: Boolean;
     procedure SaveConfiguration;
 
@@ -249,6 +276,7 @@ type
       write fProgressWindowAutoClose;
     property Repositories: TDreamcastSoftwareDevelopmentSettingsRepositories
       read fRepositories;
+    property Ruby: TDreamcastSoftwareDevelopmentSettingsRuby read fRuby;
   end;
 
 function GetDefaultCodeBlocksBackupDirectory: TFileName;
@@ -261,24 +289,31 @@ uses
   RefBase, SysTools, Version, CBTools;
 
 const
-  CONFIG_SETTINGS_SECTION_NAME = 'Settings';
-  CONFIG_DREAMCAST_TOOL_SECTION_NAME = 'DreamcastTool';
-
-  CONFIG_SECTION_GLOBAL = 'Global';
-  CONFIG_SECTION_GLOBAL_KEY_CODEBLOCKS = 'CodeBlocks';
-
-  CONFIG_SECTION_CODEBLOCKS = 'CodeBlocks';
-  CONFIG_SECTION_CODEBLOCKS_KEY_EXPORT_LIBRARY_INFORMATION_ENABLED = 'ExportLibraryInformation';
-  CONFIG_SECTION_CODEBLOCKS_KEY_EXPORT_LIBRARY_INFORMATION_PATH = 'ExportLibraryInformationPath';
-  CONFIG_SECTION_CODEBLOCKS_KEY_CONFIGURATION_FILENAMES = 'ConfigurationFileNames';
-  CONFIG_SECTION_CODEBLOCKS_KEY_INSTALLATION_PATH = 'InstallationPath';
-  CONFIG_SECTION_CODEBLOCKS_KEY_BACKUP_PATH = 'BackupPath';
-  CONFIG_SECTION_CODEBLOCKS_KEY_USERS_INSTALLED = 'InstalledUsers';
-  CONFIG_SECTION_CODEBLOCKS_KEY_USERS_AVAILABLE = 'AvailableUsers';
-
   DEFAULT_CODEBLOCKS_DIR_64 = '%ProgramFiles(x86)%\CodeBlocks';
   DEFAULT_CODEBLOCKS_DIR_32 = '%ProgramFiles%\CodeBlocks';
   DEFAULT_CODEBLOCKS_BACKUP_DIR = '%s\support\ide\codeblocks\';
+
+  // dreamsdk.conf: sections
+  CONFIG_DREAMSDK_SECTION_SETTINGS = 'Settings';
+  CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL = 'DreamcastTool';
+
+  // dreamsdk.conf: section Ruby
+  CONFIG_DREAMSDK_SECTION_RUBY = 'Ruby';
+  CONFIG_DREAMSDK_SECTION_RUBY_KEY_ENABLED = 'Enabled';
+
+  // ide.conf: section Global
+  CONFIG_IDE_SECTION_GLOBAL = 'Global';
+  CONFIG_IDE_SECTION_GLOBAL_KEY_CODEBLOCKS = 'CodeBlocks';
+
+  // ide.conf: section Code::Blocks
+  CONFIG_IDE_SECTION_CODEBLOCKS = 'CodeBlocks';
+  CONFIG_IDE_SECTION_CODEBLOCKS_KEY_EXPORT_LIBRARY_INFORMATION_ENABLED = 'ExportLibraryInformation';
+  CONFIG_IDE_SECTION_CODEBLOCKS_KEY_EXPORT_LIBRARY_INFORMATION_PATH = 'ExportLibraryInformationPath';
+  CONFIG_IDE_SECTION_CODEBLOCKS_KEY_CONFIGURATION_FILENAMES = 'ConfigurationFileNames';
+  CONFIG_IDE_SECTION_CODEBLOCKS_KEY_INSTALLATION_PATH = 'InstallationPath';
+  CONFIG_IDE_SECTION_CODEBLOCKS_KEY_BACKUP_PATH = 'BackupPath';
+  CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_INSTALLED = 'InstalledUsers';
+  CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_AVAILABLE = 'AvailableUsers';
 
 function SerialPortToString(SerialPort: TDreamcastToolSerialPort): string;
 var
@@ -311,9 +346,75 @@ begin
       '%' + GetBaseEnvironmentVariableName + '%']);
 end;
 
-{ TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings }
+{ TDreamcastSoftwareDevelopmentSettingsRuby }
 
-procedure TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings.InitializeCodeBlocksInstallationDirectory;
+procedure TDreamcastSoftwareDevelopmentSettingsRuby.SetEnabled(AValue: Boolean);
+begin
+  if fEnabled <> AValue then
+  begin
+    fEnabled := AValue;
+    fOwner.SaveConfiguration;
+  end;
+end;
+
+procedure TDreamcastSoftwareDevelopmentSettingsRuby.LoadConfiguration(
+  IniFile: TIniFile);
+begin
+  fEnabled := IniFile.ReadBool(CONFIG_DREAMSDK_SECTION_RUBY,
+    CONFIG_DREAMSDK_SECTION_RUBY_KEY_ENABLED, fEnabled);
+end;
+
+procedure TDreamcastSoftwareDevelopmentSettingsRuby.SaveConfiguration(
+  IniFile: TIniFile);
+begin
+  IniFile.WriteBool(CONFIG_DREAMSDK_SECTION_RUBY,
+    CONFIG_DREAMSDK_SECTION_RUBY_KEY_ENABLED, fEnabled);
+end;
+
+constructor TDreamcastSoftwareDevelopmentSettingsRuby.Create(
+  AOwner: TDreamcastSoftwareDevelopmentSettings);
+begin
+  fOwner := AOwner;
+end;
+
+{ TDreamcastSoftwareDevelopmentSettingsRepositories }
+
+function TDreamcastSoftwareDevelopmentSettingsRepositories.GetDreamcastToolInternetProtocolURL: string;
+begin
+  Result := GetURL(fDreamcastToolInternetProtocolURL, DEFAULT_DREAMCAST_TOOL_INTERNET_PROTOCOL_URL);
+end;
+
+function TDreamcastSoftwareDevelopmentSettingsRepositories.GetDreamcastToolSerialURL: string;
+begin
+  Result := GetURL(fDreamcastToolSerialURL, DEFAULT_DREAMCAST_TOOL_SERIAL_URL);
+end;
+
+function TDreamcastSoftwareDevelopmentSettingsRepositories.GetKallistiPortsURL: string;
+begin
+  Result := GetURL(fKallistiPortsURL, DEFAULT_KALLISTI_PORTS_URL);
+end;
+
+function TDreamcastSoftwareDevelopmentSettingsRepositories.GetKallistiURL: string;
+begin
+  Result := GetURL(fKallistiURL, DEFAULT_KALLISTI_URL);
+end;
+
+function TDreamcastSoftwareDevelopmentSettingsRepositories.GetRubyURL: string;
+begin
+  Result := GetURL(fRubyURL, DEFAULT_RUBY_URL);
+end;
+
+function TDreamcastSoftwareDevelopmentSettingsRepositories.GetURL(
+  const FieldValue, DefaultFieldValue: string): string;
+begin
+  Result := FieldValue;
+  if IsEmpty(FieldValue) then
+    Result := DefaultFieldValue;
+end;
+
+{ TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher }
+
+procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher.InitializeCodeBlocksInstallationDirectory;
 begin
   InstallationDirectory := DEFAULT_CODEBLOCKS_DIR_32;
   if IsWindows64 then
@@ -322,7 +423,7 @@ end;
 
 // Define this to debug this procedure
 // {$DEFINE DEBUG_INITIALIZE_DEFAULTS}
-procedure TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings
+procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher
   .InitializeDefaults(const AutoLoad: Boolean);
 begin
   // Code::Blocks Installation Directory
@@ -339,21 +440,21 @@ begin
     LoadConfiguration;
 end;
 
-constructor TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings.Create;
+constructor TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher.Create;
 begin
   inherited Create;
   InitializeDefaults(True);
 end;
 
-constructor TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings.Create(
+constructor TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher.Create(
   const AutoLoad: Boolean);
 begin
   inherited Create;
   InitializeDefaults(AutoLoad);
 end;
 
-procedure TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings.Assign(
-  ASource: TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings);
+procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher.Assign(
+  ASource: TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher);
 begin
   fAvailableConfigurationFileNames.Assign(ASource.fAvailableConfigurationFileNames);
   fAvailableUsers.Assign(ASource.AvailableUsers);
@@ -365,7 +466,7 @@ begin
   fInstallationDirectory := ASource.InstallationDirectory;
 end;
 
-procedure TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings.Save(
+procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher.Save(
   const AInstalled: Boolean);
 
   procedure SetInstalledUsers;
@@ -405,7 +506,7 @@ begin
   WriteRegistry;
 end;
 
-function TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings.Refresh: Boolean;
+function TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher.Refresh: Boolean;
 begin
   LoadConfiguration;
   if not Installed then
@@ -414,16 +515,16 @@ begin
   Result := LoadConfiguration;
 end;
 
-procedure TDreamcastSoftwareDevelopmentCodeBlocksPatcherSettings.WriteRegistry;
+procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher.WriteRegistry;
 begin
   ConvertCodeBlocksConfigurationFileNamesToUsers(
     fAvailableConfigurationFileNames, fAvailableUsers);
   SaveConfiguration;
 end;
 
-{ TDreamcastSoftwareDevelopmentCodeBlocksSettings }
+{ TDreamcastSoftwareDevelopmentSettingsCodeBlocks }
 
-function TDreamcastSoftwareDevelopmentCodeBlocksSettings
+function TDreamcastSoftwareDevelopmentSettingsCodeBlocks
   .GetRegistryFileName: TFileName;
 const
   IDE_CONFIGURATION_FILE = 'msys\1.0\etc\dreamsdk\ide.conf';
@@ -433,7 +534,7 @@ begin
     + IDE_CONFIGURATION_FILE;
 end;
 
-procedure TDreamcastSoftwareDevelopmentCodeBlocksSettings
+procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocks
   .SetBackupDirectory(AValue: TFileName);
 begin
   if (fBackupDirectory <> AValue) then
@@ -441,7 +542,7 @@ begin
       ParseInputFileSystemObject(AValue));
 end;
 
-procedure TDreamcastSoftwareDevelopmentCodeBlocksSettings
+procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocks
   .SetExportLibraryInformation(AValue: Boolean);
 begin
   if (fExportLibraryInformation <> AValue) then
@@ -456,7 +557,7 @@ begin
   end;
 end;
 
-procedure TDreamcastSoftwareDevelopmentCodeBlocksSettings
+procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocks
   .SetHomeDirectory(AValue: TFileName);
 begin
   if fHomeDirectory <> AValue then
@@ -467,7 +568,7 @@ begin
   end;
 end;
 
-procedure TDreamcastSoftwareDevelopmentCodeBlocksSettings
+procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocks
   .SetInstallationDirectory(AValue: TFileName);
 const
   IDE_EXPORT_LIB_INFO_DIR = 'share\CodeBlocks\templates\wizard\dc\libinfo\';
@@ -487,13 +588,13 @@ begin
   end;
 end;
 
-procedure TDreamcastSoftwareDevelopmentCodeBlocksSettings.HandleBackupDirectory;
+procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocks.HandleBackupDirectory;
 begin
   if IsEmpty(fBackupDirectory) then
     BackupDirectory := Format(DEFAULT_CODEBLOCKS_BACKUP_DIR, [fHomeDirectory]);
 end;
 
-constructor TDreamcastSoftwareDevelopmentCodeBlocksSettings.Create;
+constructor TDreamcastSoftwareDevelopmentSettingsCodeBlocks.Create;
 begin
   fConfigurationFileNames := TFileList.Create;
   fAvailableConfigurationFileNames := TFileList.Create;
@@ -503,7 +604,7 @@ begin
   HandleBackupDirectory;
 end;
 
-destructor TDreamcastSoftwareDevelopmentCodeBlocksSettings.Destroy;
+destructor TDreamcastSoftwareDevelopmentSettingsCodeBlocks.Destroy;
 begin
   fAvailableConfigurationFileNames.Free;
   fInstalledUsers.Free;
@@ -512,10 +613,10 @@ begin
   inherited Destroy;
 end;
 
-function TDreamcastSoftwareDevelopmentCodeBlocksSettings
+function TDreamcastSoftwareDevelopmentSettingsCodeBlocks
   .LoadConfiguration: Boolean;
 var
-  IniFile: TIniFile;
+  IniFile: TIniFile; // ide.conf
   Temp: string;
 
 begin
@@ -525,46 +626,46 @@ begin
     IniFile := TIniFile.Create(GetRegistryFileName);
     try
       // Global C::B
-      fInstalled := IniFile.ReadBool(CONFIG_SECTION_GLOBAL,
-        CONFIG_SECTION_GLOBAL_KEY_CODEBLOCKS, fInstalled);
+      fInstalled := IniFile.ReadBool(CONFIG_IDE_SECTION_GLOBAL,
+        CONFIG_IDE_SECTION_GLOBAL_KEY_CODEBLOCKS, fInstalled);
 
       // Export Library Information
-      fExportLibraryInformation := IniFile.ReadBool(CONFIG_SECTION_CODEBLOCKS,
-        CONFIG_SECTION_CODEBLOCKS_KEY_EXPORT_LIBRARY_INFORMATION_ENABLED,
+      fExportLibraryInformation := IniFile.ReadBool(CONFIG_IDE_SECTION_CODEBLOCKS,
+        CONFIG_IDE_SECTION_CODEBLOCKS_KEY_EXPORT_LIBRARY_INFORMATION_ENABLED,
           ExportLibraryInformation);
 
       // Export Library Information Path
       fExportLibraryInformationPath := IniFile.ReadString(
-        CONFIG_SECTION_CODEBLOCKS,
-        CONFIG_SECTION_CODEBLOCKS_KEY_EXPORT_LIBRARY_INFORMATION_PATH,
+        CONFIG_IDE_SECTION_CODEBLOCKS,
+        CONFIG_IDE_SECTION_CODEBLOCKS_KEY_EXPORT_LIBRARY_INFORMATION_PATH,
         ExportLibraryInformationPath);
 
       // Installation Directory
       InstallationDirectory :=
-        IniFile.ReadString(CONFIG_SECTION_CODEBLOCKS,
-          CONFIG_SECTION_CODEBLOCKS_KEY_INSTALLATION_PATH,
+        IniFile.ReadString(CONFIG_IDE_SECTION_CODEBLOCKS,
+          CONFIG_IDE_SECTION_CODEBLOCKS_KEY_INSTALLATION_PATH,
             InstallationDirectory);
 
       // Backup Directory
       BackupDirectory :=
-        IniFile.ReadString(CONFIG_SECTION_CODEBLOCKS,
-          CONFIG_SECTION_CODEBLOCKS_KEY_BACKUP_PATH, BackupDirectory);
+        IniFile.ReadString(CONFIG_IDE_SECTION_CODEBLOCKS,
+          CONFIG_IDE_SECTION_CODEBLOCKS_KEY_BACKUP_PATH, BackupDirectory);
 
       // Users Available
-      Temp := IniFile.ReadString(CONFIG_SECTION_CODEBLOCKS,
-        CONFIG_SECTION_CODEBLOCKS_KEY_USERS_AVAILABLE, EmptyStr);
+      Temp := IniFile.ReadString(CONFIG_IDE_SECTION_CODEBLOCKS,
+        CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_AVAILABLE, EmptyStr);
       if not IsEmpty(Temp) then
        StringToStringList(Temp, ArraySeparator, AvailableUsers);
 
       // Users Installed
-      Temp := IniFile.ReadString(CONFIG_SECTION_CODEBLOCKS,
-        CONFIG_SECTION_CODEBLOCKS_KEY_USERS_INSTALLED, EmptyStr);
+      Temp := IniFile.ReadString(CONFIG_IDE_SECTION_CODEBLOCKS,
+        CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_INSTALLED, EmptyStr);
       if not IsEmpty(Temp) then
        StringToStringList(Temp, ArraySeparator, InstalledUsers);
 
       // Configuration File Names
-      Temp := IniFile.ReadString(CONFIG_SECTION_CODEBLOCKS,
-        CONFIG_SECTION_CODEBLOCKS_KEY_CONFIGURATION_FILENAMES, EmptyStr);
+      Temp := IniFile.ReadString(CONFIG_IDE_SECTION_CODEBLOCKS,
+        CONFIG_IDE_SECTION_CODEBLOCKS_KEY_CONFIGURATION_FILENAMES, EmptyStr);
       if not IsEmpty(Temp) then
         ConfigurationFileNames.SetItems(Temp, ArraySeparator);
     finally
@@ -573,9 +674,9 @@ begin
   end;
 end;
 
-procedure TDreamcastSoftwareDevelopmentCodeBlocksSettings.SaveConfiguration;
+procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocks.SaveConfiguration;
 var
-  IniFile: TIniFile;
+  IniFile: TIniFile; // ide.conf
 
   procedure WriteString(const Section, Key, Value: string);
   begin
@@ -589,36 +690,36 @@ begin
   IniFile := TIniFile.Create(RegistryFileName);
   try
     // Global C::B
-    IniFile.WriteBool(CONFIG_SECTION_GLOBAL,
-      CONFIG_SECTION_GLOBAL_KEY_CODEBLOCKS, Installed);
+    IniFile.WriteBool(CONFIG_IDE_SECTION_GLOBAL,
+      CONFIG_IDE_SECTION_GLOBAL_KEY_CODEBLOCKS, Installed);
 
     // Settings for C::B
-    IniFile.WriteBool(CONFIG_SECTION_CODEBLOCKS,
-      CONFIG_SECTION_CODEBLOCKS_KEY_EXPORT_LIBRARY_INFORMATION_ENABLED,
+    IniFile.WriteBool(CONFIG_IDE_SECTION_CODEBLOCKS,
+      CONFIG_IDE_SECTION_CODEBLOCKS_KEY_EXPORT_LIBRARY_INFORMATION_ENABLED,
         ExportLibraryInformation);
 
-    WriteString(CONFIG_SECTION_CODEBLOCKS,
-      CONFIG_SECTION_CODEBLOCKS_KEY_EXPORT_LIBRARY_INFORMATION_PATH,
+    WriteString(CONFIG_IDE_SECTION_CODEBLOCKS,
+      CONFIG_IDE_SECTION_CODEBLOCKS_KEY_EXPORT_LIBRARY_INFORMATION_PATH,
         ExportLibraryInformationPath);
 
-    WriteString(CONFIG_SECTION_CODEBLOCKS,
-      CONFIG_SECTION_CODEBLOCKS_KEY_INSTALLATION_PATH,
+    WriteString(CONFIG_IDE_SECTION_CODEBLOCKS,
+      CONFIG_IDE_SECTION_CODEBLOCKS_KEY_INSTALLATION_PATH,
         InstallationDirectory);
 
-    WriteString(CONFIG_SECTION_CODEBLOCKS,
-      CONFIG_SECTION_CODEBLOCKS_KEY_BACKUP_PATH,
+    WriteString(CONFIG_IDE_SECTION_CODEBLOCKS,
+      CONFIG_IDE_SECTION_CODEBLOCKS_KEY_BACKUP_PATH,
         BackupDirectory);
 
-    WriteString(CONFIG_SECTION_CODEBLOCKS,
-      CONFIG_SECTION_CODEBLOCKS_KEY_CONFIGURATION_FILENAMES,
+    WriteString(CONFIG_IDE_SECTION_CODEBLOCKS,
+      CONFIG_IDE_SECTION_CODEBLOCKS_KEY_CONFIGURATION_FILENAMES,
         ConfigurationFileNames.GetItems(ArraySeparator));
 
-    WriteString(CONFIG_SECTION_CODEBLOCKS,
-      CONFIG_SECTION_CODEBLOCKS_KEY_USERS_AVAILABLE,
+    WriteString(CONFIG_IDE_SECTION_CODEBLOCKS,
+      CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_AVAILABLE,
         StringListToString(AvailableUsers, ArraySeparator));
 
-    WriteString(CONFIG_SECTION_CODEBLOCKS,
-      CONFIG_SECTION_CODEBLOCKS_KEY_USERS_INSTALLED,
+    WriteString(CONFIG_IDE_SECTION_CODEBLOCKS,
+      CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_INSTALLED,
         StringListToString(InstalledUsers, ArraySeparator));
   finally
     IniFile.Free;
@@ -631,72 +732,72 @@ procedure TDreamcastSoftwareDevelopmentSettingsDreamcastTool.LoadConfiguration(
   IniFile: TIniFile);
 begin
   fDreamcastToolKind := TDreamcastToolKind(IniFile.ReadInteger(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'Kind',
     DREAMCAST_TOOL_DEFAULT_KIND
   ));
   fAttachConsoleFileserver := IniFile.ReadBool(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'AttachConsoleFileserver',
     DREAMCAST_TOOL_DEFAULT_ATTACH_CONSOLE_FILESERVER
   );
   fClearScreenBeforeDownload := IniFile.ReadBool(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'ClearScreenBeforeDownload',
     DREAMCAST_TOOL_DEFAULT_CLEAR_SCREEN_BEFORE_DOWNLOAD
   );
   fInternetProtocolAddress := IniFile.ReadString(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'InternetProtocolAddress',
     DREAMCAST_TOOL_DEFAULT_INTERNET_PROTOCOL_ADDRESS
   );
   fMediaAccessControlEnabled := IniFile.ReadBool(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'MediaAccessControlEnabled',
     DREAMCAST_TOOL_DEFAULT_MEDIA_ACCESS_CONTROL_ENABLED
   );
   fMediaAccessControlAddress := IniFile.ReadString(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'MediaAccessControlAddress',
     DREAMCAST_TOOL_DEFAULT_MEDIA_ACCESS_CONTROL_ADDRESS
   );
   fHostMediaAccessControlAddress := IniFile.ReadString(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'HostMediaAccessControlAddress',
     DREAMCAST_TOOL_DEFAULT_MEDIA_ACCESS_CONTROL_ADDRESS
   );
   fSerialDumbTerminal := IniFile.ReadBool(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'SerialDumbTerminal',
     DREAMCAST_TOOL_DEFAULT_SERIAL_DUMB_TERMINAL
   );
   fSerialExternalClock := IniFile.ReadBool(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'SerialExternalClock',
     DREAMCAST_TOOL_DEFAULT_SERIAL_EXTERNAL_CLOCK
   );
   fSerialBaudrate := TDreamcastToolSerialBaudrate(IniFile.ReadInteger(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'SerialBaudrate',
     DREAMCAST_TOOL_DEFAULT_SERIAL_BAUDRATE
   ));
   fSerialBaudrateAlternate := IniFile.ReadBool(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'SerialBaudrateAlternate',
     DREAMCAST_TOOL_DEFAULT_SERIAL_BAUDRATE_ALTERNATE
   );
   fSerialPort := TDreamcastToolSerialPort(IniFile.ReadInteger(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'SerialPort',
     DREAMCAST_TOOL_DEFAULT_SERIAL_PORT
   ));
   fCustomExecutable := IniFile.ReadString(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'CustomExecutable',
     DREAMCAST_TOOL_DEFAULT_CUSTOM_EXECUTABLE
   );
   fCustomArguments := IniFile.ReadString(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'CustomArguments',
     DREAMCAST_TOOL_DEFAULT_CUSTOM_ARGUMENTS
   );
@@ -706,72 +807,72 @@ procedure TDreamcastSoftwareDevelopmentSettingsDreamcastTool.SaveConfiguration(
   IniFile: TIniFile);
 begin
   IniFile.WriteInteger(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'Kind',
     Integer(fDreamcastToolKind)
   );
   IniFile.WriteBool(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'AttachConsoleFileserver',
     fAttachConsoleFileserver
   );
   IniFile.WriteBool(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'ClearScreenBeforeDownload',
     fClearScreenBeforeDownload
   );
   IniFile.WriteString(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'InternetProtocolAddress',
     fInternetProtocolAddress
   );
   IniFile.WriteBool(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'MediaAccessControlEnabled',
     fMediaAccessControlEnabled
   );
   IniFile.WriteString(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'MediaAccessControlAddress',
     fMediaAccessControlAddress
   );
   IniFile.WriteString(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'HostMediaAccessControlAddress',
     fHostMediaAccessControlAddress
   );
   IniFile.WriteBool(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'SerialDumbTerminal',
     fSerialDumbTerminal
   );
   IniFile.WriteBool(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'SerialExternalClock',
     fSerialExternalClock
   );
   IniFile.WriteInteger(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'SerialBaudrate',
     Integer(fSerialBaudrate)
   );
   IniFile.WriteBool(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'SerialBaudrateAlternate',
     fSerialBaudrateAlternate
   );
   IniFile.WriteInteger(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'SerialPort',
     Integer(fSerialPort)
   );
   IniFile.WriteString(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'CustomExecutable',
     fCustomExecutable
   );
   IniFile.WriteString(
-    CONFIG_DREAMCAST_TOOL_SECTION_NAME,
+    CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'CustomArguments',
     fCustomArguments
   );
@@ -794,6 +895,7 @@ end;
 
 constructor TDreamcastSoftwareDevelopmentSettings.Create;
 begin
+  fRuby := TDreamcastSoftwareDevelopmentSettingsRuby.Create(Self);
   fRepositories := TDreamcastSoftwareDevelopmentSettingsRepositories.Create;
   fDreamcastTool := TDreamcastSoftwareDevelopmentSettingsDreamcastTool.Create;
 end;
@@ -802,6 +904,7 @@ destructor TDreamcastSoftwareDevelopmentSettings.Destroy;
 begin
   fRepositories.Free;
   fDreamcastTool.Free;
+  fRuby.Free;
   inherited Destroy;
 end;
 
@@ -818,25 +921,27 @@ begin
     DefaultInstallationPath := ExpandFileName(GetApplicationPath + '..\..\..\..\');
     fInstallPath := IncludeTrailingPathDelimiter(
       IniFile.ReadString(
-        CONFIG_SETTINGS_SECTION_NAME,
+        CONFIG_DREAMSDK_SECTION_SETTINGS,
         'InstallPath',
         DefaultInstallationPath
       )
     );
 
     fUseMintty := IniFile.ReadBool(
-      CONFIG_SETTINGS_SECTION_NAME,
+      CONFIG_DREAMSDK_SECTION_SETTINGS,
       'UseMinTTY',
       False
     );
 
     fProgressWindowAutoClose := IniFile.ReadBool(
-      CONFIG_SETTINGS_SECTION_NAME,
+      CONFIG_DREAMSDK_SECTION_SETTINGS,
       'ProgressWindowAutoClose',
       True
     );
 
     DreamcastTool.LoadConfiguration(IniFile);
+
+    Ruby.LoadConfiguration(IniFile);
 
     Result := True;
   finally
@@ -853,22 +958,24 @@ begin
   try
     // Settings
     IniFile.WriteString(
-      CONFIG_SETTINGS_SECTION_NAME,
+      CONFIG_DREAMSDK_SECTION_SETTINGS,
       'InstallPath',
       fInstallPath
     );
     IniFile.WriteBool(
-      CONFIG_SETTINGS_SECTION_NAME,
+      CONFIG_DREAMSDK_SECTION_SETTINGS,
       'UseMinTTY',
       fUseMintty
     );
     IniFile.WriteBool(
-      CONFIG_SETTINGS_SECTION_NAME,
+      CONFIG_DREAMSDK_SECTION_SETTINGS,
       'ProgressWindowAutoClose',
       fProgressWindowAutoClose
     );
 
     DreamcastTool.SaveConfiguration(IniFile);
+
+    Ruby.SaveConfiguration(IniFile);
   finally
     IniFile.Free;
   end;

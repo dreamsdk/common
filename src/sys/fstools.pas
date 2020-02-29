@@ -54,6 +54,7 @@ function GetProgramName: string;
 function GetWorkingPath: TFileName;
 function GetUsersDirectory: TFileName;
 function GetAppDataListFromUsers(var UserAppDataList: TStringList): Boolean;
+function GetFileDate(const FileName: TFileName): TDateTime;
 function GetTemporaryFileName: TFileName;
 function GetUserFromAppDataDirectory(const AppDataDirectory: TFileName): string;
 function IsCorrectFileHash(const FileName: TFileName; const Hash: string): Boolean;
@@ -422,6 +423,20 @@ begin
     GetProgramName,
     Random($FFFF)
   ]));
+end;
+
+function GetFileDate(const FileName: TFileName): TDateTime;
+const
+  c_UnassignedDate = -693594;
+
+var
+  BuildDate: Integer;
+
+begin
+  Result := c_UnassignedDate;
+  BuildDate := FileAge(FileName);
+  if BuildDate <> -1 then
+    Result := FileDateToDateTime(BuildDate);
 end;
 
 { TFileListItem }

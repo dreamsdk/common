@@ -15,7 +15,6 @@ type
   TNewLineEvent = procedure(Sender: TObject; NewLine: string) of object;
 
   { TRunCommand }
-
   TRunCommand = class(TThread)
   private
     fProcessEnd: Boolean;
