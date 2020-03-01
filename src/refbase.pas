@@ -68,14 +68,18 @@ end;
 
 procedure RetrieveBaseDirectories;
 const
+{$IFNDEF DISABLE_REFBASE_WARNING}
   MSYS_EXCEPTION_MESSAGE = 'DreamSDK Home directory is not found. ' +
     'InstallationBaseDirectory: "%s", ConfigurationDirectory: "%s", ' +
     'ConfigurationDirectory: "%s", CommandLineInstallationDirectory: "%s".';
+{$ENDIF}
   MSYS_BASE_DIRECTORY = 'msys\1.0\';
   SETTINGS_DIRECTORY = 'etc\dreamsdk\';
 
+{$IFNDEF DISABLE_REFBASE_WARNING}
 var
   MsysExceptionMessage: string;
+{$ENDIF}
 
 begin
   if IsEmpty(InstallationBaseDirectory) then
