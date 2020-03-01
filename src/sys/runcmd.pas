@@ -29,6 +29,7 @@ type
     fWorkingDirectory: TFileName;
     function GetExitCode: Integer;
     procedure InitializeProcess;
+    procedure HandleHomeVariable;
     procedure SyncSendNewLineEvent;
     procedure SendNewLine(const NewLine: string; ProcessEnd: Boolean);
   protected
@@ -53,7 +54,7 @@ type
 implementation
 
 uses
-  SysTools;
+  SysTools, RefBase;
 
 { TRunCommand }
 
@@ -65,6 +66,15 @@ begin
   fProcess := {$IFDEF Windows}TProcess{$ELSE}TProcessUTF8{$ENDIF}.Create(nil);
   for i := 1 to GetEnvironmentVariableCount do
     fProcess.Environment.Add(GetEnvironmentString(i));
+end;
+
+procedure TRunCommand.HandleHomeVariable;
+begin
+  // define DREAMSDK_HOME if value is not defined
+  if not IsDefinedInstallationBaseDirectoryVariable then
+    fEnvironment.Add(Format('%s=%s', [
+      GetBaseEnvironmentVariableName, GetInstallationBaseDirectory])
+    );
 end;
 
 function TRunCommand.GetExitCode: Integer;
@@ -138,6 +148,7 @@ begin
   fProcess.Executable := Executable;
   fProcess.Parameters.AddStrings(Parameters);
   HandleLogonServerVariable(fEnvironment);
+  HandleHomeVariable;
   fProcess.Environment.AddStrings(fEnvironment);
 {$IFDEF DEBUG}
   DebugLog('  Environment:');

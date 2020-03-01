@@ -14,6 +14,7 @@ function GetBaseEnvironmentVariableName: string;
 function GetConfigurationDirectory: TFileName;
 function GetInstallationBaseDirectory: TFileName;
 function GetMSysBaseDirectory: TFileName;
+function IsDefinedInstallationBaseDirectoryVariable: Boolean;
 
 implementation
 
@@ -55,6 +56,16 @@ begin
 {$ENDIF}
 end;
 
+function GetRawInstallationBaseDirectory: TFileName;
+begin
+  Result := GetEnvironmentVariable(GetBaseEnvironmentVariableName);
+end;
+
+function IsDefinedInstallationBaseDirectoryVariable: Boolean;
+begin
+  Result := not IsEmpty(GetRawInstallationBaseDirectory);
+end;
+
 procedure RetrieveBaseDirectories;
 const
   MSYS_EXCEPTION_MESSAGE = 'DreamSDK Home directory is not found. ' +
@@ -85,7 +96,7 @@ begin
     else
     begin
       // Normal mode: Read from DREAMSDK_HOME environment variable
-      InstallationBaseDirectory := GetEnvironmentVariable(GetBaseEnvironmentVariableName);
+      InstallationBaseDirectory := GetRawInstallationBaseDirectory;
 {$IFDEF DEBUG}
       DebugLog('  InstallationBaseDirectory from environment variable: ' + InstallationBaseDirectory);
 {$ENDIF}
@@ -121,6 +132,7 @@ begin
 {$ENDIF}
     end;
 
+{$IFNDEF DISABLE_REFBASE_WARNING}
     // If the MSYS Base directory doesn't exist, then there is a issue somewhere!
     if (not DirectoryExists(InstallationBaseDirectory))
       or (not DirectoryExists(MsysBaseDirectory))
@@ -143,6 +155,7 @@ begin
       raise EHomeDirectoryNotFound.Create(MsysExceptionMessage);
 {$ENDIF}
     end; // DirectoryExists MsysBaseDirectory
+{$ENDIF}
   end;
 end;
 
