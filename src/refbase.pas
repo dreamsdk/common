@@ -87,8 +87,8 @@ begin
 {$IFDEF DEBUG}
     DebugLog('RetrieveBaseDirectories');
 {$ENDIF}
-    // Handling Installation Home Base Directory (i.e. X:\DreamSDK\)
 
+    // Handling Installation Home Base Directory (i.e. X:\DreamSDK\)
     if DirectoryExists(CommandLineInstallationDirectory) then
     begin
       // Special mode: First Run
@@ -104,13 +104,17 @@ begin
 {$IFDEF DEBUG}
       DebugLog('  InstallationBaseDirectory from environment variable: ' + InstallationBaseDirectory);
 {$ENDIF}
+
+{$IFNDEF DISABLE_REFBASE_FAILSAFE}
+      // Fail-safe: this points to the X:\DreamSDK\ directory
       if IsEmpty(InstallationBaseDirectory)
         or (not DirectoryExists(InstallationBaseDirectory)) then
-          InstallationBaseDirectory := GetApplicationPath + '..\..\..\..\'; // Fail-safe: this points to the X:\DreamSDK\ directory
+          InstallationBaseDirectory := GetApplicationPath + '..\..\..\..\';
 {$IFDEF DEBUG}
       DebugLog('  InstallationBaseDirectory fail-safe: ' + InstallationBaseDirectory);
 {$ENDIF}
-    end;
+{$ENDIF}
+    end; // InstallationBaseDirectory
 
     // If Home Base directory is not empty, then parse the path
     if not IsEmpty(InstallationBaseDirectory) then
@@ -181,6 +185,7 @@ begin
   Result := ConfigurationDirectory;
 end;
 
+{$IFNDEF DISABLE_REFBASE_HOME_DIR_OVERRIDE}
 procedure ParseParameters;
 const
   DIR_SWITCH = '--home-dir';
@@ -197,13 +202,16 @@ begin
       CommandLineInstallationDirectory := ParamStr(i + 1);
   end;
 end;
+{$ENDIF}
 
 initialization
   InstallationBaseDirectory := EmptyStr;
   MsysBaseDirectory := EmptyStr;
   ConfigurationDirectory := EmptyStr;
   CommandLineInstallationDirectory := EmptyStr;
+{$IFNDEF DISABLE_REFBASE_HOME_DIR_OVERRIDE}
   ParseParameters;
+{$ENDIF}
 
 end.
 

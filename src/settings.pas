@@ -158,6 +158,7 @@ type
     fConfigurationFileNames: TFileList;
     fAvailableConfigurationFileNames: TFileList;
     fInstallationDirectory: TFileName;
+    function GetHomeDirectory: TFileName;
     function GetRegistryFileName: TFileName;
     procedure SetBackupDirectory(AValue: TFileName);
     procedure SetExportLibraryInformation(AValue: Boolean);
@@ -211,7 +212,7 @@ type
 
     // DreamSDK Home
     property HomeDirectory: TFileName
-      read fHomeDirectory
+      read GetHomeDirectory
       write SetHomeDirectory;
 
     property Installed: Boolean
@@ -414,7 +415,8 @@ end;
 
 { TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher }
 
-procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher.InitializeCodeBlocksInstallationDirectory;
+procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher
+  .InitializeCodeBlocksInstallationDirectory;
 begin
   InstallationDirectory := DEFAULT_CODEBLOCKS_DIR_32;
   if IsWindows64 then
@@ -530,8 +532,16 @@ const
   IDE_CONFIGURATION_FILE = 'msys\1.0\etc\dreamsdk\ide.conf';
 
 begin
-  Result := IncludeTrailingPathDelimiter(fHomeDirectory)
+  Result := IncludeTrailingPathDelimiter(HomeDirectory)
     + IDE_CONFIGURATION_FILE;
+end;
+
+function TDreamcastSoftwareDevelopmentSettingsCodeBlocks.GetHomeDirectory: TFileName;
+begin
+  Result := fHomeDirectory;
+{$IFDEF DEBUG}
+//  DebugLog('GetHomeDirectory: ' + Result);
+{$ENDIF}
 end;
 
 procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocks
@@ -590,8 +600,7 @@ end;
 
 procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocks.HandleBackupDirectory;
 begin
-  if IsEmpty(fBackupDirectory) then
-    BackupDirectory := Format(DEFAULT_CODEBLOCKS_BACKUP_DIR, [fHomeDirectory]);
+  BackupDirectory := Format(DEFAULT_CODEBLOCKS_BACKUP_DIR, [HomeDirectory]);
 end;
 
 constructor TDreamcastSoftwareDevelopmentSettingsCodeBlocks.Create;
