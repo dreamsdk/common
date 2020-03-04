@@ -284,7 +284,7 @@ begin
     Buffer := TStringList.Create;
     try
       Buffer.LoadFromFile(FileName);
-      if IsInString(OldValue, Buffer.Text) and (not IsInString(NewValue, Buffer.Text)) then
+      if IsInString(OldValue, Buffer.Text) then
       begin
         Buffer.Text := StringReplace(Buffer.Text, OldValue, NewValue, [rfReplaceAll]);
         Buffer.SaveToFile(FileName);
