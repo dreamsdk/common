@@ -14,7 +14,6 @@ uses
   Controls,
   ExtCtrls;
 
-function MsgBoxWrapStr: string;
 procedure ImageToForm(FormHandle: THandle; Image: TImage; TransparentColor: TColor);
 function IsAeroEnabled: Boolean;
 procedure SetControlMultilineLabel(Control: TWinControl);
@@ -89,13 +88,6 @@ begin
 {$ELSE}
 begin
 {$ENDIF}
-end;
-
-function MsgBoxWrapStr: string;
-begin
-  Result := ' ';
-  if not IsWindowsVistaOrGreater then
-    Result := sLineBreak;
 end;
 
 end.

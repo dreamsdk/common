@@ -12,11 +12,13 @@ function MsgBoxDlg(Handle: THandle; const aCaption: string; const aMsg: string;
   DefaultButton: TMsgDlgBtn): TModalResult; overload;
 function MsgBoxDlg(Handle: THandle; const aCaption: string; const aMsg: string;
   DlgType: TMsgDlgType; Buttons: TMsgDlgButtons): TModalResult; overload;
+function MsgBoxDlgTranslateString(const AText: string): string;
+function MsgBoxDlgWrapStr: string;
 
 implementation
 
 uses
-  Windows;
+  Windows, SysTools, Version;
 
 function DlgTypeToMsgBox(DlgType: TMsgDlgType): Integer;
 begin
@@ -74,6 +76,18 @@ function MsgBoxDlg(Handle: THandle; const aCaption: string; const aMsg: string;
   DlgType: TMsgDlgType; Buttons: TMsgDlgButtons): TModalResult; overload;
 begin
   Result := MsgBoxDlg(Handle, aCaption, aMsg, DlgType, Buttons, mbClose);
+end;
+
+function MsgBoxDlgWrapStr: string;
+begin
+  Result := WhiteSpaceStr;
+  if not IsWindowsVistaOrGreater then
+    Result := sLineBreak;
+end;
+
+function MsgBoxDlgTranslateString(const AText: string): string;
+begin
+  Result := StringReplace(AText, '\n', MsgBoxDlgWrapStr, [rfReplaceAll]);
 end;
 
 end.
