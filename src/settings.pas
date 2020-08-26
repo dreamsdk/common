@@ -64,7 +64,9 @@ type
     dtb19200,
     dtb38400,
     dtb57600,
-    dtb115200
+    dtb115200,
+    dtb500000,
+    dtb1500000
   );
 
   TDreamcastSoftwareDevelopmentSettings = class;
@@ -338,6 +340,8 @@ begin
     dtb38400: Result := '38400';
     dtb57600: Result := '57600';
     dtb115200: Result := '115200';
+    dtb500000: Result := '500000';
+    dtb1500000: Result := '1500000';
   end;
 end;
 
