@@ -12,8 +12,8 @@ implementation
 uses
   Windows;
 
-(* TODO *)
-
+// Thanks to Thomas Stutz
+// https://www.swissdelphicenter.ch/en/showcode.php?id=1431
 procedure ReadREG_MULTI_SZ(const CurrentKey: HKey; const Subkey, ValueName: string;
   Strings: TStrings);
 var
@@ -69,10 +69,9 @@ begin
         end
       end
       else
-        raise ERegistryException.Create('Stringlist expected/ String Liste erwartet...')
+        raise ERegistryException.Create('StringList expected')
     else
-      raise ERegistryException.Create('Cannot Read MULTI_SZ Value/'+
-        'Kann den MULTI_SZ Wert nicht lesen...');
+      raise ERegistryException.Create('Cannot read REG_MULTI_SZ value');
   end;
 end;
 
