@@ -16,8 +16,8 @@ const
   // Repositories
   DEFAULT_KALLISTI_URL = 'https://git.code.sf.net/p/cadcdev/kallistios';
   DEFAULT_KALLISTI_PORTS_URL = 'https://git.code.sf.net/p/cadcdev/kos-ports';
-  DEFAULT_DREAMCAST_TOOL_SERIAL_URL = 'https://gitlab.com/simulant/community/dcload-serial-nitro.git';
-  DEFAULT_DREAMCAST_TOOL_INTERNET_PROTOCOL_URL = 'https://gitlab.com/simulant/community/dcload-ip-nitro.git';
+  DEFAULT_DREAMCAST_TOOL_SERIAL_URL = 'https://gitlab.com/kallistios/dcload-serial.git';
+  DEFAULT_DREAMCAST_TOOL_INTERNET_PROTOCOL_URL = 'https://gitlab.com/kallistios/dcload-ip.git';
   DEFAULT_RUBY_URL = 'https://github.com/mruby/mruby.git';
 
   // Dreamcast Tool
