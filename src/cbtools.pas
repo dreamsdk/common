@@ -74,15 +74,34 @@ end;
 function GetCodeBlocksDefaultInstallationDirectory: TFileName;
 const
   DEFAULT_CODEBLOCKS_DIR = '%ProgramFiles%\CodeBlocks';
+  DEFAULT_CODEBLOCKS_DIR_64 = '%ProgramW6432%\CodeBlocks';
   DEFAULT_CODEBLOCKS_DIR_32_ON_64 = '%ProgramFiles(x86)%\CodeBlocks';
 
 var
+  Directory,
+  Directory32On64: TFileName;
   IsDirectoryExist,
   IsDirectoryExist32On64: Boolean;
 
 begin
-  IsDirectoryExist := DirectoryExists(ParseInputFileSystemObject(DEFAULT_CODEBLOCKS_DIR));
-  IsDirectoryExist32On64 := DirectoryExists(ParseInputFileSystemObject(DEFAULT_CODEBLOCKS_DIR_32_ON_64));
+  Directory := ParseInputFileSystemObject(DEFAULT_CODEBLOCKS_DIR);
+  Directory32On64 := EmptyStr;
+  if IsWindows64 then
+  begin
+    Directory := ParseInputFileSystemObject(DEFAULT_CODEBLOCKS_DIR_64);
+    Directory32On64 := ParseInputFileSystemObject(DEFAULT_CODEBLOCKS_DIR_32_ON_64);
+  end;
+
+{$IFDEF DEBUG}
+  WriteLn('Directory: ', Directory, ', Directory32On64: ', Directory32On64);
+{$ENDIF}
+
+  IsDirectoryExist := DirectoryExists(Directory);
+  IsDirectoryExist32On64 := DirectoryExists(Directory32On64);
+
+{$IFDEF DEBUG}
+  WriteLn('IsDirectoryExist: ', IsDirectoryExist, ', IsDirectoryExist32On64: ', IsDirectoryExist32On64);
+{$ENDIF}
 
   Result := DEFAULT_CODEBLOCKS_DIR;
   if IsWindows64 then
