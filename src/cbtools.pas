@@ -8,7 +8,8 @@ uses
 type
   TCodeBlocksVersion = (cbvUndefined, cbv1712, cbv2003x86, cbv2003x64);
 
-  function GetCodeBlocksVersion(const InstallationDirectory: TFileName): TCodeBlocksVersion;
+function GetCodeBlocksVersion(InstallationDirectory: TFileName;
+  const ExpandInstallationDirectory: Boolean = True): TCodeBlocksVersion;
 function CodeBlocksVersionToString(const CodeBlocksVersion: TCodeBlocksVersion): string;
 procedure ConvertCodeBlocksConfigurationFileNamesToUsers(
   ConfigurationFileNames: TFileList; AvailableUsers: TStringList);
@@ -49,6 +50,7 @@ const
 
 function CodeBlocksVersionToString(const CodeBlocksVersion: TCodeBlocksVersion): string;
 begin
+  Result := EmptyStr;
   case CodeBlocksVersion of
     cbvUndefined:
       Result := '(Unknown)';
@@ -161,7 +163,8 @@ begin
   end;
 end;
 
-function GetCodeBlocksVersion(const InstallationDirectory: TFileName): TCodeBlocksVersion;
+function GetCodeBlocksVersion(InstallationDirectory: TFileName;
+  const ExpandInstallationDirectory: Boolean = True): TCodeBlocksVersion;
 var
   i: Integer;
   CheckerFileName: TFileName;
@@ -170,6 +173,9 @@ var
 
 begin
   Result := cbvUndefined;
+
+  if ExpandInstallationDirectory then
+    InstallationDirectory := ParseInputFileSystemObject(InstallationDirectory);
 
   CheckerFileName := IncludeTrailingPathDelimiter(InstallationDirectory)
     + CODEBLOCKS_ORIGINAL_FILE_CHECKER;
