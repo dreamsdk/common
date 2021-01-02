@@ -192,7 +192,7 @@ begin
     Result := cbvUnknown; // C::B is installed but version is unknown (atm)
     CheckerFileHash := LowerCase(MD5Print(MD5File(CheckerFileName)));
     i := Low(CODEBLOCKS_SUPPORTED_HASHES);
-    while (Result = cbvUndefined) and (i <= High(CODEBLOCKS_SUPPORTED_HASHES)) do
+    while (Result = cbvUnknown) and (i <= High(CODEBLOCKS_SUPPORTED_HASHES)) do
     begin
       FileInfo := CODEBLOCKS_SUPPORTED_HASHES[i];
       if (FileInfo.MD5HashString = CheckerFileHash) then
