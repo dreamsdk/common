@@ -6,7 +6,13 @@ uses
   Classes, SysUtils, FSTools;
 
 type
-  TCodeBlocksVersion = (cbvUndefined, cbv1712, cbv2003x86, cbv2003x64);
+  TCodeBlocksVersion = (
+    cbvUndefined,   // C::B is not installed/detected
+    cbvUnknown,     // C::B is installed but version is unknown
+    cbv1712,        // C::B 17.12 (x86 only)
+    cbv2003x86,     // C::B 20.03 (x86)
+    cbv2003x64      // C::B 20.03 (x64)
+  );
 
 function GetCodeBlocksVersion(InstallationDirectory: TFileName;
   const ExpandInstallationDirectory: Boolean = True): TCodeBlocksVersion;
@@ -53,6 +59,8 @@ begin
   Result := EmptyStr;
   case CodeBlocksVersion of
     cbvUndefined:
+      Result := '(Undefined)';
+    cbvUnknown:
       Result := '(Unknown)';
     cbv1712:
       Result := '17.12';
@@ -65,24 +73,23 @@ end;
 
 function GetCodeBlocksDefaultInstallationDirectory: TFileName;
 const
-  DEFAULT_CODEBLOCKS_DIR_64 = '%ProgramFiles(x86)%\CodeBlocks';
-  DEFAULT_CODEBLOCKS_DIR_32 = '%ProgramFiles%\CodeBlocks';
+  DEFAULT_CODEBLOCKS_DIR = '%ProgramFiles%\CodeBlocks';
+  DEFAULT_CODEBLOCKS_DIR_32_ON_64 = '%ProgramFiles(x86)%\CodeBlocks';
 
 var
-  IsDirectory32Exist,
-  IsDirectory64Exist: Boolean;
+  IsDirectoryExist,
+  IsDirectoryExist32On64: Boolean;
 
 begin
-  IsDirectory32Exist := DirectoryExists(ParseInputFileSystemObject(DEFAULT_CODEBLOCKS_DIR_32));
-  IsDirectory64Exist := DirectoryExists(ParseInputFileSystemObject(DEFAULT_CODEBLOCKS_DIR_64));
+  IsDirectoryExist := DirectoryExists(ParseInputFileSystemObject(DEFAULT_CODEBLOCKS_DIR));
+  IsDirectoryExist32On64 := DirectoryExists(ParseInputFileSystemObject(DEFAULT_CODEBLOCKS_DIR_32_ON_64));
 
-  Result := DEFAULT_CODEBLOCKS_DIR_32;
+  Result := DEFAULT_CODEBLOCKS_DIR;
   if IsWindows64 then
   begin
-    Result := DEFAULT_CODEBLOCKS_DIR_64;
     // If for some reason, the user have a 64-bit OS but installed the C::B 32-bit release
-    if not IsDirectory64Exist and IsDirectory32Exist then
-      Result := DEFAULT_CODEBLOCKS_DIR_32;
+    if not IsDirectoryExist and IsDirectoryExist32On64 then
+      Result := DEFAULT_CODEBLOCKS_DIR_32_ON_64;
   end;
 end;
 
@@ -172,7 +179,7 @@ var
   FileInfo: TCodeBlocksSupportedVersion;
 
 begin
-  Result := cbvUndefined;
+  Result := cbvUndefined; // C::B is not installed/detected
 
   if ExpandInstallationDirectory then
     InstallationDirectory := ParseInputFileSystemObject(InstallationDirectory);
@@ -182,13 +189,14 @@ begin
 
   if FileExists(CheckerFileName) then
   begin
+    Result := cbvUnknown; // C::B is installed but version is unknown (atm)
     CheckerFileHash := LowerCase(MD5Print(MD5File(CheckerFileName)));
     i := Low(CODEBLOCKS_SUPPORTED_HASHES);
     while (Result = cbvUndefined) and (i <= High(CODEBLOCKS_SUPPORTED_HASHES)) do
     begin
       FileInfo := CODEBLOCKS_SUPPORTED_HASHES[i];
       if (FileInfo.MD5HashString = CheckerFileHash) then
-        Result := FileInfo.Version;
+        Result := FileInfo.Version; // we found the C::B version and it's supported!
       Inc(i);
     end;
   end;
