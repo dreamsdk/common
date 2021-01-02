@@ -292,8 +292,6 @@ uses
   RefBase, SysTools, Version, CBTools;
 
 const
-  DEFAULT_CODEBLOCKS_DIR_64 = '%ProgramFiles(x86)%\CodeBlocks';
-  DEFAULT_CODEBLOCKS_DIR_32 = '%ProgramFiles%\CodeBlocks';
   DEFAULT_CODEBLOCKS_BACKUP_DIR = '%s\support\ide\codeblocks\';
 
   // dreamsdk.conf: sections
@@ -422,9 +420,7 @@ end;
 procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher
   .InitializeCodeBlocksInstallationDirectory;
 begin
-  InstallationDirectory := DEFAULT_CODEBLOCKS_DIR_32;
-  if IsWindows64 then
-    InstallationDirectory := DEFAULT_CODEBLOCKS_DIR_64;
+  InstallationDirectory := GetCodeBlocksDefaultInstallationDirectory;
 end;
 
 // Define this to debug this procedure
