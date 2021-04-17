@@ -31,7 +31,11 @@ function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string): str
 function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string;
   EnableRegister: Boolean): string; overload;
 function RetrieveVersionWithFind(FindTargetFileName: TFileName;
+  Tag: string): string; overload;
+function RetrieveVersionWithFind(FindTargetFileName: TFileName;
   StartTag, EndTag: string): string; overload;
+function RetrieveVersionWithFind(FindTargetFileName: TFileName;
+  Tag: string; EnableRegister: Boolean): string; overload;
 function RetrieveVersionWithFind(FindTargetFileName: TFileName;
   StartTag, EndTag: string; EnableRegister: Boolean): string; overload;
 procedure SetRegisteredVersion(const FileName: TFileName; const Version: string);
@@ -191,13 +195,30 @@ begin
   begin
     try
       Buffer := Run(Executable, CommandLine);
-      Result := Trim(ExtractStr(StartTag, EndTag, Buffer));
+
+      Result := Buffer;
+      if not IsEmpty(EndTag) then
+        Result := ExtractStr(StartTag, EndTag, Buffer);
+      Result := Trim(Result);
+
       if UseRegister and (not IsEmpty(Result)) then
         SetRegisteredVersion(Executable, Result);
     except
       Result := INVALID_VERSION;
     end;
   end;
+end;
+
+function RetrieveVersionWithFind(FindTargetFileName: TFileName;
+  Tag: string): string; overload;
+begin
+  Result := RetrieveVersionWithFind(FindTargetFileName, Tag, EmptyStr, True);
+end;
+
+function RetrieveVersionWithFind(FindTargetFileName: TFileName;
+  Tag: string; EnableRegister: Boolean): string; overload;
+begin
+  Result := RetrieveVersionWithFind(FindTargetFileName, Tag, EmptyStr, EnableRegister);
 end;
 
 function RetrieveVersionWithFind(FindTargetFileName: TFileName; StartTag,
