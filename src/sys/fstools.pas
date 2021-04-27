@@ -2,19 +2,10 @@ unit FSTools; // File System Tools
 
 {$mode objfpc}{$H+}
 
-{$IFDEF LZMA_SUPPORT}
-{$R fstools.rc}
-{$ENDIF}
-
 interface
 
 uses
   Classes, SysUtils;
-
-{$IFDEF LZMA_SUPPORT}
-const
-  EMBEDDED_7ZIP = 'SEVENZIP';
-{$ENDIF}
 
 type
   { TFileListItem }
@@ -67,7 +58,6 @@ function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string): B
 procedure SaveStringToFile(const InString: string; FileName: TFileName);
 function SystemToUnixPath(const UnixPathName: TFileName): TFileName;
 function UncompressZipFile(const FileName, OutputDirectory: TFileName): Boolean;
-{$IFDEF LZMA_SUPPORT}function UncompressLzmaFile(const FileName, OutputDirectory: TFileName): Boolean;{$ENDIF}
 function UnixPathToSystem(const PathName: TFileName): TFileName;
 
 implementation
@@ -84,18 +74,11 @@ uses
   Forms,
 {$ENDIF}
   Zipper,
-  SysTools
-{$IFDEF LZMA_SUPPORT}
-  ,RunTools
-{$ENDIF}
-  ;
+  SysTools;
 
 var
   ApplicationPath: TFileName = '';
   WorkingPath: TFileName = '';
-{$IFDEF LZMA_SUPPORT}
-  SevenZipFileName: TFileName = '';
-{$ENDIF}
 
 function GetFileHash(const FileName: TFileName): string;
 begin
@@ -376,29 +359,6 @@ begin
   Result := GetWorkingPath + FileName;
   ExtractEmbeddedResourceToFile(ResourceName, Result);
 end;
-
-{$IFDEF LZMA_SUPPORT}
-function UncompressLzmaFile(const FileName, OutputDirectory: TFileName): Boolean;
-const
-  SEVENZIP_FILE = '7za.exe';
-  SUCCESS_MESSAGE = 'Everything is Ok';
-
-var
-  Buffer: string;
-
-begin
-  Result := False;
-  if not FileExists(SevenZipFileName) then
-    SevenZipFileName := ExtractEmbeddedFileToWorkingPath(EMBEDDED_7ZIP, SEVENZIP_FILE);
-  try
-    Buffer := Run(SevenZipFileName, Format('x "%s" -o"%s" -y',
-      [FileName, OutputDirectory]));
-    Result := IsInString(SUCCESS_MESSAGE, Buffer);
-  except
-    Result := False;
-  end;
-end;
-{$ENDIF}
 
 function UnixPathToSystem(const PathName: TFileName): TFileName;
 begin

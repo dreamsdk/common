@@ -5,7 +5,7 @@ unit Runner;
 interface
 
 uses
-  Classes, SysUtils, Settings, RunCmd;
+  Classes, SysUtils, Settings, RunCmdEx;
 
 const
   UNKNOWN_EXIT_CODE = -1;
@@ -15,7 +15,7 @@ type
   TDreamcastSoftwareDevelopmentKitRunner = class(TObject)
   private
     fShellRunnerClientExitCodeTempFileName: TFileName;
-    fShellCommand: TRunCommand;
+    fShellCommand: TRunCommandEx;
     fExecutableMinTTY: TFileName;
     fExecutableShell: TFileName;
     fEnvironmentVariables: TStringList;
@@ -135,7 +135,7 @@ begin
   fShellRunnerClientExitCodeTempFileName := GetTemporaryFileName;
 
   FreeAndNil(fShellCommand);
-  fShellCommand := TRunCommand.Create(True);
+  fShellCommand := TRunCommandEx.Create(True);
 
   // Handle working directory
   if (WorkingDirectory <> EmptyStr) then
