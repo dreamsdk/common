@@ -13,10 +13,10 @@ const
   EMBEDDED_7ZIP = 'SEVENZIP';
 
 type
-  TProgressValueEvent = procedure(Sender: TObject; const CurrentValue: Integer;
+  TSevenZipProgressValueEvent = procedure(Sender: TObject; const CurrentValue: Integer;
     const TotalValue: Integer) of object;
-  TProgressRecordEvent = procedure(Sender: TObject; const RecordNode: string) of object;
-  TTerminateEvent = procedure(Sender: TObject; const Success: Boolean) of object;
+  TSevenZipProgressRecordEvent = procedure(Sender: TObject; const RecordNode: string) of object;
+  TSevenZipTerminateEvent = procedure(Sender: TObject; const Success: Boolean) of object;
 
   { TSevenZipCommanderOperationItem }
   TSevenZipCommanderOperationItem = class(TObject)
@@ -49,7 +49,7 @@ type
   { TSevenZipCommander }
   TSevenZipCommander = class(TObject)
   private
-    fProgressRecord: TProgressRecordEvent;
+    fProgressRecord: TSevenZipProgressRecordEvent;
     fSevenZipProcess: TRunCommand;
     fCurrentTaskIndex: Integer;
     fTaskSuccess: Boolean;
@@ -57,8 +57,9 @@ type
     fOldCurrentValue: Integer;
     fTotalValue: Integer;
     fOperationList: TSevenZipCommanderOperationList;
-    fProgress: TProgressValueEvent;
-    fTerminate: TTerminateEvent;
+    fProgress: TSevenZipProgressValueEvent;
+    fTerminate: TSevenZipTerminateEvent;
+    function GetActive: Boolean;
     function GetCurrentOperation: TSevenZipCommanderOperationItem;
     function GetOperationTerminated: Boolean;
     procedure HandleNewLine(Sender: TObject; NewLine: string);
@@ -78,11 +79,12 @@ type
     procedure Execute;
     procedure Pause;
     procedure Resume;
+    property Active: Boolean read GetActive;
     property Operations: TSevenZipCommanderOperationList read fOperationList;
-    property OnProgress: TProgressValueEvent read fProgress write fProgress;
-    property OnProgressRecord: TProgressRecordEvent
+    property OnProgress: TSevenZipProgressValueEvent read fProgress write fProgress;
+    property OnProgressRecord: TSevenZipProgressRecordEvent
       read fProgressRecord write fProgressRecord;
-    property OnTerminate: TTerminateEvent read fTerminate write fTerminate;
+    property OnTerminate: TSevenZipTerminateEvent read fTerminate write fTerminate;
   end;
 
 function UncompressLzmaFile(const FileName, OutputDirectory: TFileName): Boolean;
@@ -99,7 +101,7 @@ uses
 const
   SEVENZIP_FILE = '7za.exe';
   SUCCESS_MESSAGE = 'Everything is Ok';
-  RECORD_NODE_TERMINATED = '##TERMINATED##';
+  RECORD_NODE_TERMINATED = '#|#TERMINATED#|#';
 
 var
   SevenZipFileName: TFileName = '';
@@ -216,6 +218,11 @@ begin
     Result := Operations[fCurrentTaskIndex];
 end;
 
+function TSevenZipCommander.GetActive: Boolean;
+begin
+  Result := fCurrentTaskIndex <> -1;
+end;
+
 function TSevenZipCommander.GetOperationTerminated: Boolean;
 begin
   Result := (fCurrentTaskIndex > (Operations.Count - 1))
@@ -227,7 +234,10 @@ begin
   if (not OperationTerminated) then
     CreateTask
   else if Assigned(fTerminate) then
+  begin
+    fCurrentTaskIndex := -1;
     fTerminate(Self, fOperationSuccess);
+  end;
 end;
 
 procedure TSevenZipCommander.SendProgressEvent(const Value: Integer);
@@ -238,7 +248,7 @@ begin
   if Assigned(fProgress) and (fOldCurrentValue <> Value) then
   begin
 {$IFDEF DEBUG}
-    WriteLn(Value);
+    WriteLn('SevenZip Progress: ', Value, '%');
 {$ENDIF}
     NewTotalValue := (Value div Operations.Count);
     if (Value >= 100) then
