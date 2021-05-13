@@ -25,6 +25,7 @@ const
   ACL_RIGHT_FULL = 'F';
 
 type
+  TPortableExecutableBitness = (pebUnknown, peb16, peb32, peb64);
   TIntegerList = specialize TFPGList<Integer>;
   TStringIntegerMap = specialize TFPGMap<string, Integer>;
 
@@ -39,7 +40,10 @@ function ExtractStr(LeftSubStr, RightSubStr, S: string): string;
 function ExtremeRight(SubStr: string; S: string): string;
 function GetSubStrCount(SubStr, S: string): Integer;
 function GetEveryoneName: string;
+function GetFileLocationInSystemPath(const FileName: TFileName): TFileName;
 function GetFriendlyUserName(const UserName: string): string;
+function GetPortableExecutableBitness(const APath: WideString): TPortableExecutableBitness;
+function GetPortableExecutableBitness(const APath: TFileName): TPortableExecutableBitness;
 function GetUserList(var UserList: TStringList): Boolean;
 function GetUserFullNameFromUserName(const UserName: string): string;
 procedure HandleLogonServerVariable(EnvironmentVariables: TStringList);
@@ -70,7 +74,57 @@ uses
   Forms,
 {$ENDIF}
   RunTools,
+  FSTools,
   Version;
+
+// Thanks ASerge
+// See: https://forum.lazarus.freepascal.org/index.php?topic=36834.0
+function GetPortableExecutableBitness(const APath: WideString): TPortableExecutableBitness;
+const
+  IMAGE_NT_OPTIONAL_HDR32_MAGIC = $10b;
+  IMAGE_NT_OPTIONAL_HDR64_MAGIC = $20b;
+
+var
+  HFile, HFileMap: THandle;
+  PMapView: Pointer;
+  PIDH: PImageDosHeader;
+  PINTH: PImageNtHeaders;
+
+begin
+  Result := pebUnknown;
+  HFile := CreateFileW(PWideChar(APath), GENERIC_READ, FILE_SHARE_READ, nil,
+    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+  if HFile = INVALID_HANDLE_VALUE then
+    Exit;
+  HFileMap  := CreateFileMapping(HFile, nil, PAGE_READONLY, 0, 0, nil);
+  CloseHandle(HFile);
+  if HFileMap = 0 then
+    Exit;
+  PMapView := MapViewOfFile(HFileMap, FILE_MAP_READ, 0, 0, 0);
+  CloseHandle(HFileMap);
+  if PMapView = nil then
+    Exit;
+  PIDH := PImageDosHeader(PMapView);
+  if PIDH^.e_magic = IMAGE_DOS_SIGNATURE then
+  begin
+    PINTH := PImageNtHeaders(PAnsiChar(PMapView) + PIDH^._lfanew);
+    if PINTH^.Signature <> IMAGE_NT_SIGNATURE then
+      Result := peb16
+    else
+      case PINTH^.OptionalHeader.Magic of
+        IMAGE_NT_OPTIONAL_HDR32_MAGIC:
+          Result := peb32;
+        IMAGE_NT_OPTIONAL_HDR64_MAGIC:
+          Result := peb64;
+      end;
+  end;
+  UnmapViewOfFile(PMapView);
+end;
+
+function GetPortableExecutableBitness(const APath: TFileName): TPortableExecutableBitness;
+begin
+  Result := GetPortableExecutableBitness(WideString(APath));
+end;
 
 function SetDirectoryRights(const DirectoryFullPath: TFileName;
   const UserName, Rights: string): Boolean;
@@ -605,6 +659,47 @@ begin
 
   EnvironmentVariables.Add(
     Format('%s=%s', [LOGONSERVER_ENVIRONMENT_VARIABLE, LogonServerValue]));
+end;
+
+function GetFileLocationInSystemPath(const FileName: TFileName): TFileName;
+var
+  Buffer: TStringList;
+  BatchFileName: TFileName;
+
+begin
+  // Generating the whereis.bat utility
+  // WhereIS by Claus (https://superuser.com/a/544988/436364)
+  BatchFileName := ChangeFileExt(GetTemporaryFileName, '.bat');
+  Buffer := TStringList.Create;
+  try
+    Buffer.Add('@echo off');
+    Buffer.Add('setlocal EnableDelayedExpansion');
+    Buffer.Add('set var_a=%1');
+    Buffer.Add('call :sub %var_a%');
+    Buffer.Add('if exist %var_b% goto exit');
+    Buffer.Add('for %%i in ( .com .exe .cmd .bat ) do (');
+    Buffer.Add(' call :sub %var_a%%%i');
+    Buffer.Add(' if exist !var_b! goto exit');
+    Buffer.Add(')');
+    Buffer.Add('set "var_a="');
+    Buffer.Add('set "var_b="');
+    Buffer.Add('exit /b 1');
+    Buffer.Add(':sub');
+    Buffer.Add('set var_b=%~$PATH:1');
+    Buffer.Add('goto :EOF');
+    Buffer.Add(':exit');
+    Buffer.Add('echo %var_b%');
+    Buffer.Add('set "var_a="');
+    Buffer.Add('set "var_b="');
+    Buffer.Add('exit /b 0');
+    Buffer.SaveToFile(BatchFileName);
+  finally
+    Buffer.Free;
+  end;
+
+  Result := Trim(Run(BatchFileName, FileName));
+
+  KillFile(BatchFileName);
 end;
 
 initialization

@@ -5,7 +5,8 @@ unit FSTools; // File System Tools
 interface
 
 uses
-  Classes, SysUtils;
+  Classes,
+  SysUtils;
 
 type
   { TFileListItem }
@@ -499,6 +500,7 @@ begin
 end;
 
 initialization
+  Randomize;
   WorkingPath := IncludeTrailingPathDelimiter(
     LowerCase(ChangeFileExt(GetTemporaryFileName, '-' + GetProgramName)));
   ForceDirectories(WorkingPath);
