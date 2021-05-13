@@ -52,7 +52,6 @@ type
     fProgressRecord: TSevenZipProgressRecordEvent;
     fSevenZipProcess: TRunCommand;
     fCurrentTaskIndex: Integer;
-    fTaskSuccess: Boolean;
     fOperationSuccess: Boolean;
     fOldCurrentValue: Integer;
     fTotalValue: Integer;
@@ -102,6 +101,7 @@ const
   SEVENZIP_FILE = '7za.exe';
   SUCCESS_MESSAGE = 'Everything is Ok';
   RECORD_NODE_TERMINATED = '#|#TERMINATED#|#';
+  PERCENT_MAX_VALUE = 100;
 
 var
   SevenZipFileName: TFileName = '';
@@ -168,8 +168,11 @@ end;
 
 procedure TSevenZipCommander.HandleNewLine(Sender: TObject; NewLine: string);
 const
-  PERCENT_MAX_VALUE = 100;
   PROGRESS_LINE = '% ';
+
+var
+  Value: Integer;
+  CurrentFile: string;
 
   function ParseValue(LeftStr, RightStr, Str: string): Integer;
   var
@@ -196,18 +199,14 @@ const
   end;
 
 begin
-  fTaskSuccess := fTaskSuccess or IsInString(SUCCESS_MESSAGE, NewLine);
-  if fTaskSuccess then
-  begin
-    // Operation is completed
-    SendProgressEvent(PERCENT_MAX_VALUE);
-    SendProgressRecord(RECORD_NODE_TERMINATED);
-  end
-  else if IsInString(PROGRESS_LINE, NewLine) then
+  if IsInString(PROGRESS_LINE, NewLine)
+    and (not IsInString(SUCCESS_MESSAGE, NewLine)) then
   begin
     // Send progress event
-    SendProgressEvent(ExtractValue);
-    SendProgressRecord(ExtractCurrentFile);
+    Value := ExtractValue;
+    CurrentFile := ExtractCurrentFile;
+    SendProgressEvent(Value);
+    SendProgressRecord(CurrentFile);
   end;
 end;
 
@@ -230,7 +229,23 @@ begin
 end;
 
 procedure TSevenZipCommander.HandleTerminate(Sender: TObject);
+var
+  TaskSuccess: Boolean;
+
 begin
+{$IFDEF DEBUG}
+  WriteLn('SevenZip ExitCode: ', fSevenZipProcess.ExitCode);
+{$ENDIF}
+
+  SendProgressEvent(PERCENT_MAX_VALUE);
+
+  TaskSuccess := (fSevenZipProcess.ExitCode = 0);
+  fOperationSuccess := fOperationSuccess and TaskSuccess;
+
+{$IFDEF DEBUG}
+  WriteLn('SevenZip Success: ', fOperationSuccess, ' (Task: ', TaskSuccess, ')');
+{$ENDIF}
+
   if (not OperationTerminated) then
     CreateTask
   else if Assigned(fTerminate) then
@@ -251,12 +266,10 @@ begin
     WriteLn('SevenZip Progress: ', Value, '%');
 {$ENDIF}
     NewTotalValue := (Value div Operations.Count);
-    if (Value >= 100) then
+    if (Value >= PERCENT_MAX_VALUE) then
     begin
       Inc(fTotalValue, NewTotalValue);
       NewTotalValue := 0;
-      fOperationSuccess := fOperationSuccess and fTaskSuccess;
-      fTaskSuccess := False;
     end;
     fProgress(Self, Value, fTotalValue + NewTotalValue);
     fOldCurrentValue := Value;
@@ -278,7 +291,6 @@ begin
   FreeAndNil(fSevenZipProcess);
 
   fOldCurrentValue := 0;
-  fTaskSuccess := False;
 
   fSevenZipProcess := TRunCommand.Create(True);
 
