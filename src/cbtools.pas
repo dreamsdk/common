@@ -3,7 +3,13 @@ unit CBTools;
 interface
 
 uses
-  Classes, SysUtils, FSTools;
+  Classes,
+  SysUtils,
+  FSTools;
+
+const
+  CODEBLOCKS_PATCHER_ERROR_TAG = 'Error: ';
+  CODEBLOCKS_PATCHER_ERROR_SEPARATOR = '#||#';
 
 type
   TCodeBlocksVersion = (
@@ -19,10 +25,13 @@ function GetCodeBlocksVersion(InstallationDirectory: TFileName;
 function CodeBlocksVersionToString(const CodeBlocksVersion: TCodeBlocksVersion): string;
 procedure ConvertCodeBlocksConfigurationFileNamesToUsers(
   ConfigurationFileNames: TFileList; AvailableUsers: TStringList);
-procedure GetCodeBlocksAvailableConfigurationFileNames(
-  ConfigurationFileNames: TFileList);
+function GetCodeBlocksAvailableConfigurationFileNames(
+  ConfigurationFileNames: TFileList): Boolean;
+function GetCodeBlocksConfigurationFileNames(AvailableConfigurationFileNames: TFileList;
+  MissingConfigurationFileNames: TFileList): Boolean;
 procedure GetCodeBlocksAvailableUsers(AvailableUsers: TStringList);
 function GetCodeBlocksDefaultInstallationDirectory: TFileName;
+procedure InitializeCodeBlocksProfiles;
 
 implementation
 
@@ -112,8 +121,24 @@ begin
   end;
 end;
 
-procedure GetCodeBlocksAvailableConfigurationFileNames(
-  ConfigurationFileNames: TFileList);
+function GetCodeBlocksAvailableConfigurationFileNames(
+  ConfigurationFileNames: TFileList): Boolean;
+var
+  Dummy: TFileList;
+
+begin
+  Dummy := TFileList.Create;
+  try
+    Result := GetCodeBlocksConfigurationFileNames(ConfigurationFileNames, Dummy);
+  finally
+    Dummy.Free;
+  end;
+end;
+
+function GetCodeBlocksConfigurationFileNames(
+  AvailableConfigurationFileNames: TFileList;
+  MissingConfigurationFileNames: TFileList
+): Boolean;
 const
   DEFAULT_CODEBLOCKS_CONFIGURATION_FILE = '%sCodeBlocks\default.conf';
 
@@ -125,7 +150,7 @@ var
 begin
   UsersAppData := TStringList.Create;
   try
-    GetAppDataListFromUsers(UsersAppData);
+    Result := GetAppDataListFromUsers(UsersAppData);
 
     for i := 0 to UsersAppData.Count - 1 do
     begin
@@ -141,12 +166,15 @@ begin
 {$IFDEF DEBUG}
         WriteLn('exist!');
 {$ENDIF}
-        ConfigurationFileNames.Add(CodeBlocksConfigurationFileName);
+        AvailableConfigurationFileNames.Add(CodeBlocksConfigurationFileName);
       end
-{$IFDEF DEBUG}
       else
+      begin
+{$IFDEF DEBUG}
         WriteLn('doesn''t exist!')
 {$ENDIF};
+        MissingConfigurationFileNames.Add(CodeBlocksConfigurationFileName);
+      end;
     end;
 
   finally
@@ -218,6 +246,46 @@ begin
         Result := FileInfo.Version; // we found the C::B version and it's supported!
       Inc(i);
     end;
+  end;
+end;
+
+procedure InitializeCodeBlocksProfiles;
+var
+  MissingConfigurationFileNames,
+  Unused: TFileList;
+  i: Integer;
+  MissingConfigurationFileName,
+  MissingConfigurationPathName: TFileName;
+
+begin
+{$IFDEF DEBUG}
+  WriteLn('InitializeProfiles');
+{$ENDIF}
+  MissingConfigurationFileNames := TFileList.Create;
+  Unused := TFileList.Create;
+  try
+    GetCodeBlocksConfigurationFileNames(Unused, MissingConfigurationFileNames);
+    for i := 0 to MissingConfigurationFileNames.Count - 1 do
+    begin
+      MissingConfigurationFileName := MissingConfigurationFileNames[i];
+
+{$IFDEF DEBUG}
+      WriteLn('  + ', MissingConfigurationFileName);
+{$ENDIF}
+
+      MissingConfigurationPathName := ExtractFilePath(MissingConfigurationFileName);
+
+      ForceDirectories(MissingConfigurationPathName);
+      SaveStringToFile(
+        '<?xml version="1.0" encoding="utf-8" standalone="yes" ?>' +
+        '<CodeBlocksConfig version="1">' +
+        '</CodeBlocksConfig>',
+        MissingConfigurationFileName
+      );
+    end;
+  finally
+    Unused.Free;
+    MissingConfigurationFileNames.Free;
   end;
 end;
 
