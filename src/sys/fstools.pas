@@ -57,6 +57,8 @@ function LoadUTF16FileToString(const FileName: TFileName): string;
 function ParseInputFileSystemObject(const Parameter: TFileName): TFileName;
 function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string): Boolean;
 procedure SaveStringToFile(const InString: string; FileName: TFileName);
+function SetDirectoryRights(const DirectoryFullPath: TFileName;
+  const UserName, Rights: string): Boolean;
 function SystemToUnixPath(const UnixPathName: TFileName): TFileName;
 function UncompressZipFile(const FileName, OutputDirectory: TFileName): Boolean;
 function UnixPathToSystem(const PathName: TFileName): TFileName;
@@ -75,7 +77,9 @@ uses
   Forms,
 {$ENDIF}
   Zipper,
-  SysTools;
+  SysTools,
+  RunTools,
+  Version;
 
 var
   ApplicationPath: TFileName = '';
@@ -398,6 +402,38 @@ begin
   BuildDate := FileAge(FileName);
   if BuildDate <> -1 then
     Result := FileDateToDateTime(BuildDate);
+end;
+
+function SetDirectoryRights(const DirectoryFullPath: TFileName;
+  const UserName, Rights: string): Boolean;
+var
+  CommandLine: string;
+
+begin
+{$IFDEF Windows}
+  Result := False;
+
+  CommandLine := 'echo Y | cacls "%s" /E /G "%s":%s';
+  if IsWindowsVistaOrGreater then
+    CommandLine := 'icacls "%s" /q /c /t /grant "%s":%s';
+
+  CommandLine := Format(CommandLine, [
+    ExcludeTrailingPathDelimiter(DirectoryFullPath),
+    UserName,
+    Rights
+  ]);
+
+{$IFDEF DEBUG}
+  DebugLog('SetDirectoryRights: ' + CommandLine);
+{$ENDIF}
+
+  Result := RunSingleCommand(CommandLine);
+{$ELSE}
+  Result := False;
+{$IFDEF DEBUG}
+  WriteLn('SetDirectoryRights: Not implemented');
+{$ENDIF}
+{$ENDIF}
 end;
 
 { TFileListItem }

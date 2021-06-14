@@ -630,6 +630,12 @@ var
 
 begin
   Result := FileExists(RegistryFileName);
+
+{$IFDEF DEBUG}
+  DebugLog('LoadConfiguration: ' + BoolToStr(Result));
+  DebugLog('  RegistryFileName: ' + RegistryFileName);
+{$ENDIF}
+
   if Result then
   begin
     IniFile := TIniFile.Create(GetRegistryFileName);

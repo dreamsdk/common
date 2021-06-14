@@ -60,8 +60,6 @@ procedure StringToStringList(const S, Delimiter: string; SL: TStringList);
 function StringListToString(SL: TStringList; const Delimiter: string): string;
 function StringListSubstringIndexOf(SL: TStringList; const SubStr: string): Integer;
 function SuppressUselessWhiteSpaces(const S: string): string;
-function SetDirectoryRights(const DirectoryFullPath: TFileName;
-  const UserName, Rights: string): Boolean;
 
 implementation
 
@@ -124,38 +122,6 @@ end;
 function GetPortableExecutableBitness(const APath: TFileName): TPortableExecutableBitness;
 begin
   Result := GetPortableExecutableBitness(WideString(APath));
-end;
-
-function SetDirectoryRights(const DirectoryFullPath: TFileName;
-  const UserName, Rights: string): Boolean;
-var
-  CommandLine: string;
-
-begin
-{$IFDEF Windows}
-  Result := False;
-
-  CommandLine := 'echo Y | cacls "%s" /E /G "%s":%s';
-  if IsWindowsVistaOrGreater then
-    CommandLine := 'icacls "%s" /q /c /t /grant "%s":%s';
-
-  CommandLine := Format(CommandLine, [
-    ExcludeTrailingPathDelimiter(DirectoryFullPath),
-    UserName,
-    Rights
-  ]);
-
-{$IFDEF DEBUG}
-  DebugLog('SetDirectoryRights: ' + CommandLine);
-{$ENDIF}
-
-  Result := RunSingleCommand(CommandLine);
-{$ELSE}
-  Result := False;
-{$IFDEF DEBUG}
-  WriteLn('SetDirectoryRights: Not implemented');
-{$ENDIF}
-{$ENDIF}
 end;
 
 function GetUserList(var UserList: TStringList): Boolean;
