@@ -57,8 +57,10 @@ function LeftNRight(SubStr, S: string; N: Integer): string;
 function Right(SubStr: string; S: string): string;
 function StartsWith(const SubStr, S: string): Boolean;
 procedure StringToStringList(const S, Delimiter: string; SL: TStringList);
-function StringListToString(SL: TStringList; const Delimiter: string): string;
+function StringListToString(SL: TStringList; const Delimiter: string;
+  const IgnoreBlank: Boolean = True): string;
 function StringListSubstringIndexOf(SL: TStringList; const SubStr: string): Integer;
+procedure StringListRemoveDuplicates(SL: TStringList; ProcessFromEnd: Boolean = False);
 function SuppressUselessWhiteSpaces(const S: string): string;
 
 implementation
@@ -277,11 +279,22 @@ begin
 end;
 {$ENDIF}
 
-function StringListToString(SL: TStringList; const Delimiter: string): string;
+function StringListToString(SL: TStringList; const Delimiter: string;
+  const IgnoreBlank: Boolean = True): string;
+var
+  Buffer: string;
+
 begin
   Result := EmptyStr;
   if Assigned(SL) then
-    Result := Trim(StringReplace(Trim(SL.Text), sLineBreak, Delimiter, [rfReplaceAll]));
+  begin
+    Buffer := SL.Text;
+    if IgnoreBlank then
+      Buffer := Trim(Buffer);
+    Result := StringReplace(Buffer, sLineBreak, Delimiter, [rfReplaceAll]);
+    if IgnoreBlank then
+      Result := Trim(Result);
+  end;
 end;
 
 procedure StringToStringList(const S, Delimiter: string; SL: TStringList);
@@ -667,6 +680,57 @@ begin
 
   KillFile(BatchFileName);
 end;
+
+{$PUSH}
+{$WARN 6058 OFF}
+procedure StringListRemoveDuplicates(SL: TStringList; ProcessFromEnd: Boolean = False);
+var
+  Dict: TStringIntegerMap;
+  i: Integer;
+  Indexes: TIntegerList;
+
+  function ProcessItem(const ItemIndex: Integer): Integer;
+  var
+    Value: string;
+    Dummy: Integer;
+
+  begin
+    Result := -1;
+    Value := SL[ItemIndex];
+    if not Dict.Find(Value, Dummy) then
+      Dict.Add(Value, 0)
+    else
+      Result := ItemIndex;
+  end;
+
+begin
+  Dict := TStringIntegerMap.Create;
+  try
+    Dict.Sorted := True;
+    if ProcessFromEnd then
+    begin
+      for i := SL.Count - 1 downto 0 do
+        if ProcessItem(i) <> -1 then
+          SL.Delete(i);
+    end
+    else
+    begin
+      Indexes := TIntegerList.Create;
+      try
+        for i := 0 to SL.Count - 1 do
+          if ProcessItem(i) <> -1 then
+            Indexes.Add(i);
+        for i := Indexes.Count - 1 downto 0 do
+          SL.Delete(Indexes[i]);
+      finally
+        Indexes.Free;
+      end;
+    end;
+  finally
+    Dict.Free;
+  end;
+end;
+{$POP}
 
 initialization
   Randomize;
