@@ -18,6 +18,7 @@ type
   TRunCommand = class(TThread)
   private
     fAbortRequested: Boolean;
+    fPipeOpened: Boolean;
     fProcessEnd: Boolean;
     fPartialLine: string;
     fBufferOutput: TStringList;
@@ -30,7 +31,7 @@ type
     fWorkingDirectory: TFileName;
     function GetExitCode: Integer;
     procedure InitializeProcess;
-    function IsValidNewLine(NewLine: string): Boolean;
+    function IsValidNewLine(const NewLine: string): Boolean;
     procedure SyncSendNewLineEvent;
     procedure SendNewLine(const NewLine: string; ProcessEnd: Boolean);
   protected
@@ -77,10 +78,9 @@ begin
     fProcess.Environment.Add(GetEnvironmentString(i));
 end;
 
-function TRunCommand.IsValidNewLine(NewLine: string): Boolean;
+function TRunCommand.IsValidNewLine(const NewLine: string): Boolean;
 begin
-  NewLine := Trim(NewLine);
-  Result := (NewLine <> EmptyStr) and (not StartsWith(EscapeStr, NewLine));
+  Result := (Trim(NewLine) <> EmptyStr);
 end;
 
 function TRunCommand.GetExitCode: Integer;
@@ -121,10 +121,11 @@ begin
   end;
 end;
 
-procedure TRunCommand.SendNewLine(const NewLine: string;
-  ProcessEnd: Boolean);
+procedure TRunCommand.SendNewLine(const NewLine: string; ProcessEnd: Boolean);
 begin
   fNewLineBuffer := AdjustLineBreaks(NewLine);
+  if (not fPipeOpened) then
+    fNewLineBuffer := Left(EscapeStr, fNewLineBuffer);
   fProcessEnd := ProcessEnd;
   Synchronize(@SyncSendNewLineEvent);
 end;
@@ -179,6 +180,7 @@ begin
   DebugLog('  WorkingDirectory: ' + WorkingDirectory);
 {$ENDIF}
 
+  fPipeOpened := True;
   fProcess.Execute;
 
 {$IFDEF DEBUG}
@@ -255,6 +257,7 @@ begin
     end;
 {$ENDIF}
 {$ENDIF}
+    fPipeOpened := False;
     fProcess.Terminate(AExitCode);
   end;
 end;
