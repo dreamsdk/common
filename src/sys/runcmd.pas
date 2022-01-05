@@ -17,6 +17,7 @@ type
   { TRunCommand }
   TRunCommand = class(TThread)
   private
+    fAbortRequested: Boolean;
     fProcessEnd: Boolean;
     fPartialLine: string;
     fBufferOutput: TStringList;
@@ -29,6 +30,7 @@ type
     fWorkingDirectory: TFileName;
     function GetExitCode: Integer;
     procedure InitializeProcess;
+    function IsValidNewLine(NewLine: string): Boolean;
     procedure SyncSendNewLineEvent;
     procedure SendNewLine(const NewLine: string; ProcessEnd: Boolean);
   protected
@@ -53,6 +55,13 @@ type
 implementation
 
 uses
+{$IFDEF RELEASE}
+{$IFDEF Windows}
+  JwaWinBase,
+  JwaWinNT,
+  JwaWinCon,
+{$ENDIF}
+{$ENDIF}
   SysTools;
 
 { TRunCommand }
@@ -62,9 +71,16 @@ var
   i: Integer;
 
 begin
+  fAbortRequested := False;
   fProcess := {$IFDEF Windows}TProcess{$ELSE}TProcessUTF8{$ENDIF}.Create(nil);
   for i := 1 to GetEnvironmentVariableCount do
     fProcess.Environment.Add(GetEnvironmentString(i));
+end;
+
+function TRunCommand.IsValidNewLine(NewLine: string): Boolean;
+begin
+  NewLine := Trim(NewLine);
+  Result := (NewLine <> EmptyStr) and (not StartsWith(EscapeStr, NewLine));
 end;
 
 function TRunCommand.GetExitCode: Integer;
@@ -127,6 +143,7 @@ var
 {$ENDIF}
 
 begin
+  fAbortRequested := False;
   Buffer[0] := #0;
 
 {$IFDEF DEBUG}
@@ -139,27 +156,35 @@ begin
   fProcess.Parameters.AddStrings(Parameters);
   HandleLogonServerVariable(fEnvironment);
   fProcess.Environment.AddStrings(fEnvironment);
+
 {$IFDEF DEBUG}
   DebugLog('  Environment:');
   for i := 0 to fEnvironment.Count - 1 do
     DebugLog('    ' + fEnvironment[i]);
 {$ENDIF}
-  fProcess.Options := [poUsePipes, poStderrToOutPut];
+
+  // NoConsole / NewProcessGroup are used for handling CTRL+BREAK signals without exiting our app
+  // UsePipes / StdErrToOutput for getting stream in real time
+  fProcess.Options := [poNoConsole, poNewProcessGroup, poUsePipes, poStdErrToOutput];
+
 {$IFDEF RELEASE}
   fProcess.ShowWindow := swoHide;
 {$ELSE}
   fProcess.ShowWindow := swoShowDefault;
 {$ENDIF}
+
   fProcess.CurrentDirectory := WorkingDirectory;
+
 {$IFDEF DEBUG}
   DebugLog('  WorkingDirectory: ' + WorkingDirectory);
 {$ENDIF}
+
   fProcess.Execute;
 
 {$IFDEF DEBUG}
+  DebugLog('  Process ID: ' + IntToStr(fProcess.ProcessID));
 {$IFDEF DUMP_PROCESS_PIPE}
   i := 0;
-  WriteLn('PID: ', fProcess.ProcessID);
 {$ENDIF}
 {$ENDIF}
 
@@ -176,22 +201,60 @@ begin
 {$ENDIF}
 {$ENDIF}
     SetString(NewLine, PChar(@Buffer[0]), BytesRead);
-    if Trim(NewLine) <> EmptyStr then
+    if IsValidNewLine(NewLine) then
       SendNewLine(NewLine, False);
   until (BytesRead = 0);
 
-  if Trim(fPartialLine) <> EmptyStr then
+  if IsValidNewLine(fPartialLine) then
     SendNewLine(fPartialLine, True);
 end;
 
 procedure TRunCommand.KillRunningProcess;
+{$IFDEF RELEASE}
+{$IFDEF Windows}
+const
+  CTRL_BREAK_EVENT_TIMEOUT = 1000;
+{$ENDIF}
+{$ENDIF}
+
 var
   AExitCode: Integer;
+{$IFDEF RELEASE}
+{$IFDEF Windows}
+  ProcessHandle: THandle;
+  ProcessID: LongWord;
+{$ENDIF}
+{$ENDIF}
 
 begin
   AExitCode := -1;
-  if Assigned(fProcess) then
+  if Assigned(fProcess) and (fProcess.Running) then
   begin
+{$IFDEF RELEASE}
+{$IFDEF Windows}
+    {
+      This code is only working on RELEASE mode.
+      Indeed, the SIGINT signal sent destroy the console created in DEBUG mode.
+      Since the DEBUG mode is not intended to be distributed, it's safe to do
+      this only in RELEASE mode.
+      See: https://docs.microsoft.com/en-us/windows/console/ctrl-c-and-ctrl-break-signals
+    }
+    ProcessID := fProcess.ProcessID;
+    ProcessHandle := OpenProcess(JwaWinNT.SYNCHRONIZE, False, ProcessID);
+	  if ProcessHandle <> INVALID_HANDLE_VALUE then
+    begin
+      if AttachConsole(ProcessID) then
+      begin
+        SetConsoleCtrlHandler(nil, True);
+        // Send CTRL+BREAK event to all children processes
+        GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, ProcessID);
+        WaitForSingleObject(ProcessHandle, CTRL_BREAK_EVENT_TIMEOUT);
+        FreeConsole;
+      end;
+      CloseHandle(ProcessHandle);
+    end;
+{$ENDIF}
+{$ENDIF}
     fProcess.Terminate(AExitCode);
   end;
 end;
@@ -217,7 +280,11 @@ end;
 procedure TRunCommand.Abort;
 begin
   KillRunningProcess;
-  Terminate;
+  if (not fAbortRequested) then
+  begin
+    fAbortRequested := True;
+    Terminate;
+  end;
 end;
 
 procedure TRunCommand.Pause;

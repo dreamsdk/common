@@ -15,6 +15,7 @@ uses
 
 const
   TabStr = #9;
+  EscapeStr = #27;
   WhiteSpaceStr = ' ';
   ArraySeparator = '|';
 
@@ -479,7 +480,7 @@ begin
   Result := EmptyStr;
   OwnerName := Default(TWindowsString);
   DomainName := Default(TWindowsString);
-  OwnerType := Default(SID_NAME_USE);
+  OwnerType := SidTypeUnknown;
   cbSize := SizeOf(OwnerName);
 
   if LookupAccountSid(nil, OwnerSID, OwnerName, cbSize, DomainName, cbSize, OwnerType) then

@@ -56,7 +56,8 @@ function LoadFileToString(const FileName: TFileName): string;
 function LoadUTF16FileToString(const FileName: TFileName): string;
 function ParseInputFileSystemObject(const Parameter: TFileName): TFileName;
 function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string): Boolean;
-procedure SaveStringToFile(const InString: string; FileName: TFileName);
+procedure SaveStringToFile(const InString: string; FileName: TFileName); overload;
+procedure SaveStringToFile(const InString: string; FileName: TFileName; const Append: Boolean); overload;
 function SetDirectoryRights(const DirectoryFullPath: TFileName;
   const UserName, Rights: string): Boolean;
 function SystemToUnixPath(const UnixPathName: TFileName): TFileName;
@@ -320,18 +321,25 @@ begin
   end;
 end;
 
-procedure SaveStringToFile(const InString: string; FileName: TFileName);
+procedure SaveStringToFile(const InString: string; FileName: TFileName; const Append: Boolean);
 var
   Buffer: TStringList;
 
 begin
   Buffer := TStringList.Create;
   try
+    if Append and FileExists(FileName) then
+      Buffer.LoadFromFile(FileName);
     Buffer.Add(InString);
     Buffer.SaveToFile(FileName);
   finally
     Buffer.Free;
   end;
+end;
+
+procedure SaveStringToFile(const InString: string; FileName: TFileName); overload;
+begin
+  SaveStringToFile(InString, FileName, False);
 end;
 
 function GetApplicationPath: TFileName;
