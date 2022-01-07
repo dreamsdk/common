@@ -57,7 +57,9 @@ function StartsWith(const SubStr, S: string): Boolean;
 procedure StringToStringList(const S, Delimiter: string; SL: TStringList);
 function StringListToString(SL: TStringList; const Delimiter: string;
   const IgnoreBlank: Boolean = True): string;
-function StringListSubstringIndexOf(SL: TStringList; const SubStr: string): Integer;
+function StringListSubstringIndexOf(SL: TStringList; SubStr: string): Integer; overload;
+function StringListSubstringIndexOf(SL: TStringList; SubStr: string;
+  CaseSensitive: Boolean): Integer; overload;
 procedure StringListRemoveDuplicates(SL: TStringList; ProcessFromEnd: Boolean = False);
 function SuppressUselessWhiteSpaces(const S: string): string;
 
@@ -252,18 +254,33 @@ begin
     SL.Text := StringReplace(Trim(S), Delimiter, sLineBreak, [rfReplaceAll]);
 end;
 
-function StringListSubstringIndexOf(SL: TStringList; const SubStr: string): Integer;
+function StringListSubstringIndexOf(SL: TStringList;
+  SubStr: string): Integer; overload;
+begin
+  Result := StringListSubstringIndexOf(SL, SubStr, True);
+end;
+
+function StringListSubstringIndexOf(SL: TStringList; SubStr: string;
+  CaseSensitive: Boolean): Integer; overload;
 var
   i: Integer;
+  Str: string;
 
 begin
   Result := -1;
+
+  if not CaseSensitive then
+    SubStr := LowerCase(SubStr);
+
   if Assigned(SL) then
   begin
     i := 0;
     while (i < SL.Count) and (Result = -1) do
     begin
-      if IsInString(SubStr, SL[i]) then
+      Str := SL[i];
+      if not CaseSensitive then
+        Str := LowerCase(Str);
+      if IsInString(SubStr, Str) then
         Result := i;
       Inc(i);
     end;
