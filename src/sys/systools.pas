@@ -597,6 +597,7 @@ var
 begin
   // Generating the whereis.bat utility
   // WhereIS by Claus (https://superuser.com/a/544988/436364)
+  // Fixed by Gurce
   BatchFileName := ChangeFileExt(GetTemporaryFileName, '.bat');
   Buffer := TStringList.Create;
   try
@@ -604,7 +605,7 @@ begin
     Buffer.Add('setlocal EnableDelayedExpansion');
     Buffer.Add('set var_a=%1');
     Buffer.Add('call :sub %var_a%');
-    Buffer.Add('if exist %var_b% goto exit');
+    Buffer.Add('if exist "%var_b%" goto exit');
     Buffer.Add('for %%i in ( .com .exe .cmd .bat ) do (');
     Buffer.Add(' call :sub %var_a%%%i');
     Buffer.Add(' if exist !var_b! goto exit');
