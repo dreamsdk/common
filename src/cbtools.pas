@@ -114,11 +114,13 @@ begin
 
   Result := DEFAULT_CODEBLOCKS_DIR;
   if IsWindows64 then
-  begin
-    // If for some reason, the user have a 64-bit OS but installed the C::B 32-bit release
-    if not IsDirectoryExist and IsDirectoryExist32On64 then
-      Result := DEFAULT_CODEBLOCKS_DIR_32_ON_64;
-  end;
+    Result := DEFAULT_CODEBLOCKS_DIR_64;
+  // If for some reason, the user have a 64-bit OS but installed the C::B 32-bit release
+  if (not IsDirectoryExist) and IsWindows64 and IsDirectoryExist32On64 then
+    Result := DEFAULT_CODEBLOCKS_DIR_32_ON_64;
+{$IFDEF DEBUG}
+  WriteLn('> GetCodeBlocksDefaultInstallationDirectory: ', Result);
+{$ENDIF}
 end;
 
 function GetCodeBlocksAvailableConfigurationFileNames(
