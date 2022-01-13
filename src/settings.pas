@@ -169,7 +169,7 @@ type
   protected
     fInstalled: Boolean;
     fHomeDirectory: TFileName;
-    procedure HandleBackupDirectory;
+    procedure HandleDynamicDirectories;
   public
     constructor Create;
     destructor Destroy; override;
@@ -292,7 +292,11 @@ uses
   RefBase, SysTools, Version, CBTools;
 
 const
+  // Code::Blocks Backup Directory (for previous install)
   DEFAULT_CODEBLOCKS_BACKUP_DIR = '%s\support\ide\codeblocks\';
+
+  // Export Library Path for DreamSDK Wizard for Code::Blocks
+  EXPORT_LIBRARY_INFORMATION_DIR = '%s\msys\1.0\etc\dreamsdk\ide\codeblocks\';
 
   // dreamsdk.conf: sections
   CONFIG_DREAMSDK_SECTION_SETTINGS = 'Settings';
@@ -435,8 +439,8 @@ begin
   GetCodeBlocksAvailableConfigurationFileNames(ConfigurationFileNames);
   fAvailableConfigurationFileNames.Assign(ConfigurationFileNames);
 
-  // Code::Blocks Backup Directory
-  HandleBackupDirectory;
+  // Code::Blocks Backup and Export Directories
+  HandleDynamicDirectories;
 
   if AutoLoad then
     LoadConfiguration;
@@ -574,33 +578,24 @@ begin
   begin
     fHomeDirectory := ExcludeTrailingPathDelimiter(
       ParseInputFileSystemObject(AValue));
-    HandleBackupDirectory;
+    HandleDynamicDirectories;
   end;
 end;
 
 procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocks
   .SetInstallationDirectory(AValue: TFileName);
-const
-  IDE_EXPORT_LIB_INFO_DIR = 'share\CodeBlocks\templates\wizard\dc\libinfo\';
-
 begin
   if fInstallationDirectory <> AValue then
   begin
     fInstallationDirectory := IncludeTrailingPathDelimiter(
       ParseInputFileSystemObject(AValue));
-
-    // Export Library Information
-    if not IsEmpty(fInstallationDirectory) then
-      fExportLibraryInformationPath := fInstallationDirectory
-        + IDE_EXPORT_LIB_INFO_DIR
-    else
-      fExportLibraryInformationPath := EmptyStr;
   end;
 end;
 
-procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocks.HandleBackupDirectory;
+procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocks.HandleDynamicDirectories;
 begin
   BackupDirectory := Format(DEFAULT_CODEBLOCKS_BACKUP_DIR, [HomeDirectory]);
+  fExportLibraryInformationPath := Format(EXPORT_LIBRARY_INFORMATION_DIR, [HomeDirectory]);
 end;
 
 constructor TDreamcastSoftwareDevelopmentSettingsCodeBlocks.Create;
@@ -610,7 +605,7 @@ begin
   fAvailableUsers := TStringList.Create;
   fInstalledUsers := TStringList.Create;
   HomeDirectory := GetInstallationBaseDirectory;
-  HandleBackupDirectory;
+  HandleDynamicDirectories;
 end;
 
 destructor TDreamcastSoftwareDevelopmentSettingsCodeBlocks.Destroy;
