@@ -17,20 +17,61 @@ uses
 procedure ImageToForm(FormHandle: THandle; Image: TImage; TransparentColor: TColor);
 function IsAeroEnabled: Boolean;
 procedure SetControlMultilineLabel(Control: TWinControl);
+procedure FindProcessWindows(ProcessID: LongWord; Handles: TList);
+procedure SetWindowIconForProcessId(const ProcessID: LongWord;
+  const IconResourceName: string); overload;
+procedure SetWindowIconForProcessId(const ProcessID: LongWord); overload;
 
 implementation
 
 uses
   Version;
+
+type
+  PFindWindowsStruct = ^TFindWindowsStruct;
+  TFindWindowsStruct = record
+    ProcessID: LongWord;
+    HandleList: TList;
+  end;
+
+function EnumWindowsProc(WinHandle: THandle; lParam: LPARAM): LongBool; stdcall;
+var
+  dwProcessId: LongWord;
+  
+begin
+  Result := False;
+  dwProcessId := 0;
+  if lParam <> 0 then
+  begin
+    GetWindowThreadProcessId(WinHandle, dwProcessId);
+    with PFindWindowsStruct(lParam)^ do
+	    if dwProcessID = ProcessID then
+        HandleList.Add(Pointer(WinHandle));
+    Result:= True;
+  end;
+end;
+
+// https://delphi.developpez.com/faq/?page=Systeme-moins-Divers#Comment-recuperer-les-handles-des-fenetres-d-un-processus
+procedure FindProcessWindows(ProcessID: LongWord; Handles: TList);
+var
+  FindWindowsStruct: TFindWindowsStruct;
+  
+begin
+  FindWindowsStruct.ProcessID := ProcessID;
+  FindWindowsStruct.HandleList := Handles;
+  EnumWindows(@EnumWindowsProc, LongWord(@FindWindowsStruct));
+end; 
 	
 function IsAeroEnabled: Boolean;
 {$IFDEF Windows}
 type
   TDwmIsCompositionEnabledFunc = function(out pfEnabled: BOOL): HRESULT; stdcall;
+
 var
   IsEnabled: BOOL;
   ModuleHandle: HMODULE;
   DwmIsCompositionEnabledFunc: TDwmIsCompositionEnabledFunc;
+
 begin
   Result := False;
   if IsWindowsVistaOrGreater then // Vista or Windows 7+
@@ -88,6 +129,42 @@ begin
 {$ELSE}
 begin
 {$ENDIF}
+end;
+
+procedure SetWindowIconForProcessId(const ProcessID: LongWord;
+  const IconResourceName: string); overload;
+var
+  WinHandles: TList;
+  BigIcon,
+  SmallIcon: HICON;
+  WinHandle: THandle;
+  i: Integer;
+
+begin
+  WinHandles := TList.Create;
+  try
+    // Load icons
+    BigIcon := LoadImage(hInstance, PChar(IconResourceName), IMAGE_ICON,
+      GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), 0);
+    SmallIcon := LoadImage(hInstance, PChar(IconResourceName), IMAGE_ICON,
+      GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
+
+    // Set icons for all window associated to that ProcessID
+    FindProcessWindows(ProcessID, WinHandles);
+    for i:= 0 to WinHandles.Count - 1 do
+    begin
+      WinHandle := THandle(WinHandles[i]);
+      SendMessage(WinHandle, WM_SETICON, ICON_BIG, LParam(BigIcon));
+      SendMessage(WinHandle, WM_SETICON, ICON_SMALL, LParam(SmallIcon));
+    end;
+  finally
+    WinHandles.Free;
+  end;
+end;
+
+procedure SetWindowIconForProcessId(const ProcessID: LongWord); overload;
+begin
+  SetWindowIconForProcessId(ProcessID, 'MAINICON');
 end;
 
 end.

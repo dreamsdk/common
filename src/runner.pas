@@ -14,6 +14,7 @@ type
   { TDreamcastSoftwareDevelopmentKitRunner }
   TDreamcastSoftwareDevelopmentKitRunner = class(TObject)
   private
+    fInteractiveShell: Boolean;
     fShellRunnerClientExitCodeTempFileName: TFileName;
     fShellCommand: TRunCommandEx;
     fExecutableMinTTY: TFileName;
@@ -37,6 +38,7 @@ type
     procedure StartShell;
     function StartShellCommand(const CommandLine: string): Integer;
     property Healthy: Boolean read GetHealthy;
+    property InteractiveShell: Boolean read fInteractiveShell write fInteractiveShell;
     property WorkingDirectory: TFileName read fWorkingDirectory write SetWorkingDirectory;
   end;
 
@@ -52,7 +54,8 @@ uses
 {$IF Defined(Unix) OR Defined(Darwin)}
   , UTF8Process,
 {$ENDIF}
-  FSTools;
+  FSTools,
+  UITools;
 
 resourcestring
   MSYSShellNotFound             = 'MinGW/MSYS is not properly installed.';
@@ -96,7 +99,8 @@ var
 begin
   if fWorkingDirectory <> AValue then
   begin
-    Temp := IncludeTrailingPathDelimiter(ExpandFileName( ExpandEnvironmentStrings( Trim( AValue ) ) ));
+    Temp := IncludeTrailingPathDelimiter(ExpandFileName(
+      ExpandEnvironmentStrings( Trim( AValue ) ) ));
     if DirectoryExists(Temp) then
       fWorkingDirectory := Temp;
   end;
@@ -199,6 +203,9 @@ begin
     if Settings.UseMinTTY then
     begin
       OurProcess.Executable := fExecutableMinTTY;
+      // Setting up DreamSDK icon for MinTTY...
+      if InteractiveShell then
+        OurProcess.Parameters.Add(Format('-i "%s"', [ParamStr(0)]));
       OurProcess.Parameters.Add('/bin/bash');
       OurProcess.Parameters.Add('-l');
     end
@@ -211,6 +218,14 @@ begin
 
     // Execute our process
     OurProcess.Execute;
+
+    // Setting up DreamSDK icon for Shell...
+    if (not Settings.UseMinTTY) and InteractiveShell then
+    begin
+      Delay(100);
+      SetWindowIconForProcessId(OurProcess.ProcessID);
+      OurProcess.WaitOnExit;
+    end;
   finally
     OurProcess.Free;
   end;
@@ -227,6 +242,7 @@ end;
 
 constructor TDreamcastSoftwareDevelopmentKitRunner.Create;
 begin
+  fInteractiveShell := False;
   fEnvironmentVariables := TStringList.Create;
   fSettings := TDreamcastSoftwareDevelopmentSettings.Create;
   Settings.LoadConfiguration;
