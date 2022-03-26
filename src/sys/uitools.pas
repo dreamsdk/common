@@ -17,10 +17,12 @@ uses
 procedure ImageToForm(FormHandle: THandle; Image: TImage; TransparentColor: TColor);
 function IsAeroEnabled: Boolean;
 procedure SetControlMultilineLabel(Control: TWinControl);
-procedure FindProcessWindows(ProcessID: LongWord; Handles: TList);
+function FindProcessWindows(ProcessID: LongWord; Handles: TList): Boolean;
 procedure SetWindowIconForProcessId(const ProcessID: LongWord;
   const IconResourceName: string); overload;
 procedure SetWindowIconForProcessId(const ProcessID: LongWord); overload;
+function GetWindowTitle(const AWindowHandle: THandle): string;
+function SetWindowTitle(const AWindowHandle: THandle; const NewTitle: string): Boolean;
 
 implementation
 
@@ -52,14 +54,14 @@ begin
 end;
 
 // https://delphi.developpez.com/faq/?page=Systeme-moins-Divers#Comment-recuperer-les-handles-des-fenetres-d-un-processus
-procedure FindProcessWindows(ProcessID: LongWord; Handles: TList);
+function FindProcessWindows(ProcessID: LongWord; Handles: TList): Boolean;
 var
   FindWindowsStruct: TFindWindowsStruct;
   
 begin
   FindWindowsStruct.ProcessID := ProcessID;
   FindWindowsStruct.HandleList := Handles;
-  EnumWindows(@EnumWindowsProc, LongWord(@FindWindowsStruct));
+  Result := EnumWindows(@EnumWindowsProc, LongWord(@FindWindowsStruct));
 end; 
 	
 function IsAeroEnabled: Boolean;
@@ -165,6 +167,29 @@ end;
 procedure SetWindowIconForProcessId(const ProcessID: LongWord); overload;
 begin
   SetWindowIconForProcessId(ProcessID, 'MAINICON');
+end;
+
+function GetWindowTitle(const AWindowHandle: THandle): string;
+var
+  TitleLength: Integer;
+  Title: string;
+
+begin
+  Result := EmptyStr;
+  Title := EmptyStr;
+  TitleLength := GetWindowTextLength(AWindowHandle);
+  if TitleLength <> 0 then
+  begin
+    SetLength(Title, TitleLength);
+    GetWindowText(AWindowHandle, PChar(Title), TitleLength + 1);
+    Result := PChar(Title);
+  end;
+end;
+
+function SetWindowTitle(const AWindowHandle: THandle;
+  const NewTitle: string): Boolean;
+begin
+  Result := SetWindowText(AWindowHandle, PChar(NewTitle))
 end;
 
 end.
