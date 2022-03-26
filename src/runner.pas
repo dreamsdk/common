@@ -5,7 +5,11 @@ unit Runner;
 interface
 
 uses
-  Classes, SysUtils, Settings, RunCmdEx;
+  Classes,
+  SysUtils,
+  Settings,
+  RunCmdEx,
+  SysTools;
 
 const
   UNKNOWN_EXIT_CODE = -1;
@@ -14,6 +18,8 @@ type
   { TDreamcastSoftwareDevelopmentKitRunner }
   TDreamcastSoftwareDevelopmentKitRunner = class(TObject)
   private
+    fWindowHandles: TList;
+    fWindowTextMap: TIntegerStringMap;
     fInteractiveShell: Boolean;
     fShellRunnerClientExitCodeTempFileName: TFileName;
     fShellCommand: TRunCommandEx;
@@ -22,14 +28,17 @@ type
     fEnvironmentVariables: TStringList;
     fSettings: TDreamcastSoftwareDevelopmentSettings;
     fWorkingDirectory: TFileName;
+    fShellProcessID: LongWord;
     procedure InitializeEnvironment;
     function GetHealthy: Boolean;
     procedure RetrieveEnvironmentVariables;
     procedure HandleNewLine(Sender: TObject; NewLine: string);
     procedure HandleTerminate(Sender: TObject);
     procedure SetWorkingDirectory(AValue: TFileName);
+    function UpdateWindowTitle: Boolean;
   protected
     function GetClientExitCode: Integer;
+    procedure WatchShellWindowTitle(const ShellProcessId: LongWord);
     property Settings: TDreamcastSoftwareDevelopmentSettings read fSettings;
   public
     constructor Create;
@@ -49,7 +58,6 @@ uses
 {$IFDEF Windows}
   Windows,
 {$ENDIF}
-  SysTools,
   Process,
 {$IF Defined(Unix) OR Defined(Darwin)}
   , UTF8Process,
@@ -100,7 +108,7 @@ begin
   if fWorkingDirectory <> AValue then
   begin
     Temp := IncludeTrailingPathDelimiter(ExpandFileName(
-      ExpandEnvironmentStrings( Trim( AValue ) ) ));
+      SysTools.ExpandEnvironmentStrings( Trim( AValue ) ) ));
     if DirectoryExists(Temp) then
       fWorkingDirectory := Temp;
   end;
@@ -121,6 +129,73 @@ begin
     finally
       Buffer.Free;
       SysUtils.DeleteFile(fShellRunnerClientExitCodeTempFileName);
+    end;
+  end;
+end;
+
+procedure TDreamcastSoftwareDevelopmentKitRunner.WatchShellWindowTitle(
+  const ShellProcessId: LongWord);
+var
+  ProcessAlive: Boolean;
+
+begin
+  ProcessAlive := True;
+  fShellProcessId := ShellProcessId;
+  fWindowHandles := TList.Create;
+  try
+    Delay(100);
+    while ProcessAlive do
+    begin
+      ProcessAlive := FindProcessWindows(fShellProcessID, fWindowHandles)
+        and (fWindowHandles.Count > 0);
+      if ProcessAlive then
+      begin
+        ProcessAlive := UpdateWindowTitle;
+        Sleep(1);
+        fWindowHandles.Clear;
+      end;
+    end;
+  finally
+    fWindowHandles.Free;
+  end;
+end;
+
+function TDreamcastSoftwareDevelopmentKitRunner.UpdateWindowTitle: Boolean;
+const
+  OLD_TAG = 'MINGW32';
+  NEW_TAG = 'DreamSDK';
+
+var
+  WinHandle: THandle;
+  i, j: Integer;
+  CurrentWinText,
+  SavedWinText: string;
+
+begin
+  Result := True;
+  for i:= 0 to fWindowHandles.Count - 1 do
+  begin
+    WinHandle := THandle(fWindowHandles[i]);
+
+    SavedWinText := EmptyStr;
+    CurrentWinText := GetWindowTitle(WinHandle);
+    Result := not IsEmpty(CurrentWinText);
+
+    if Result then
+    begin
+      j := fWindowTextMap.IndexOf(WinHandle);
+      if j = -1 then
+        j := fWindowTextMap.Add(WinHandle, CurrentWinText)
+      else
+        SavedWinText := fWindowTextMap.Data[j];
+
+      if not SameText(CurrentWinText, SavedWinText) then
+      begin
+        CurrentWinText := StringReplace(CurrentWinText, OLD_TAG, NEW_TAG, []);
+        fWindowTextMap.Data[j] := CurrentWinText;
+        Result := Result and SetWindowTitle(WinHandle, CurrentWinText);
+        SetWindowIconForProcessId(fShellProcessID);
+      end;
     end;
   end;
 end;
@@ -182,6 +257,7 @@ end;
 procedure TDreamcastSoftwareDevelopmentKitRunner.StartShell;
 var
   OurProcess: {$IFDEF Windows}TProcess{$ELSE}TProcessUTF8{$ENDIF};
+  ProcessId: LongWord;
 
 begin
   RetrieveEnvironmentVariables;
@@ -219,12 +295,24 @@ begin
     // Execute our process
     OurProcess.Execute;
 
-    // Setting up DreamSDK icon for Shell...
-    if (not Settings.UseMinTTY) and InteractiveShell then
+    // Setting up DreamSDK icon and title window...
+    if InteractiveShell then
     begin
-      Delay(100);
-      SetWindowIconForProcessId(OurProcess.ProcessID);
-      OurProcess.WaitOnExit;
+      if Settings.UseMinTTY then
+      begin
+        // MinTTY
+        OurProcess.WaitOnExit;
+        ProcessId := GetProcessIdFromParentProcessId(OurProcess.ProcessID);
+        WatchShellWindowTitle(ProcessId);
+        WaitForProcessId(ProcessId);
+      end
+      else
+      begin
+        // Windows Terminal
+        ProcessId := OurProcess.ProcessID;
+        WatchShellWindowTitle(ProcessId);
+        OurProcess.WaitOnExit;
+      end;
     end;
   finally
     OurProcess.Free;
@@ -242,6 +330,7 @@ end;
 
 constructor TDreamcastSoftwareDevelopmentKitRunner.Create;
 begin
+  fWindowTextMap := TIntegerStringMap.Create;
   fInteractiveShell := False;
   fEnvironmentVariables := TStringList.Create;
   fSettings := TDreamcastSoftwareDevelopmentSettings.Create;
@@ -254,6 +343,7 @@ begin
   FreeAndNil(fShellCommand);
   fEnvironmentVariables.Free;
   fSettings.Free;
+  fWindowTextMap.Free;
   inherited Destroy;
 end;
 
