@@ -28,6 +28,7 @@ const
 type
   TIntegerList = specialize TFPGList<Integer>;
   TStringIntegerMap = specialize TFPGMap<string, Integer>;
+  TIntegerStringMap = specialize TFPGMap<Integer, string>;
 
 {$IFDEF DEBUG}procedure DebugLog(const Message: string);{$ENDIF}
 {$IFDEF GUI}procedure Delay(Milliseconds: Integer);{$ENDIF}
@@ -42,6 +43,8 @@ function GetSubStrCount(SubStr, S: string): Integer;
 function GetEveryoneName: string;
 function GetFileLocationInSystemPath(const FileName: TFileName): TFileName;
 function GetFriendlyUserName(const UserName: string): string;
+function GetParentProcessIdFromProcessId(const ProcessId: LongWord): LongWord;
+function GetProcessIdFromParentProcessId(const ParentProcessId: LongWord): LongWord;
 function GetUserList(var UserList: TStringList): Boolean;
 function GetUserFullNameFromUserName(const UserName: string): string;
 procedure HandleLogonServerVariable(EnvironmentVariables: TStringList);
@@ -62,6 +65,7 @@ function StringListSubstringIndexOf(SL: TStringList; SubStr: string;
   CaseSensitive: Boolean): Integer; overload;
 procedure StringListRemoveDuplicates(SL: TStringList; ProcessFromEnd: Boolean = False);
 function SuppressUselessWhiteSpaces(const S: string): string;
+procedure WaitForProcessId(const ProcessId: LongWord);
 
 implementation
 
@@ -646,6 +650,69 @@ begin
   Result := Trim(Run(BatchFileName, FileName));
 
   KillFile(BatchFileName);
+end;
+
+function GetParentProcessIdFromProcessId(const ProcessId: LongWord): LongWord;
+var
+  ContinueLoop: Boolean;
+  SnapshotHandle: THandle;
+  ProcessEntry32: TProcessEntry32;
+
+begin
+  Result := 0;
+
+  SnapshotHandle := CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  ProcessEntry32.dwSize := SizeOf(ProcessEntry32);
+
+  ContinueLoop := Process32First(SnapshotHandle, ProcessEntry32);
+  while ContinueLoop do
+  begin
+    if (ProcessEntry32.th32ProcessID = ProcessId) then
+    begin
+      Result := ProcessEntry32.th32ParentProcessID;
+    end;
+    ContinueLoop := (Result = 0) and Process32Next(SnapshotHandle, ProcessEntry32);
+  end;
+
+  CloseHandle(SnapshotHandle);
+end;
+
+function GetProcessIdFromParentProcessId(const ParentProcessId: LongWord): LongWord;
+var
+  ContinueLoop: Boolean;
+  SnapshotHandle: THandle;
+  ProcessEntry32: TProcessEntry32;
+
+begin
+  Result := 0;
+
+  SnapshotHandle := CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  ProcessEntry32.dwSize := SizeOf(ProcessEntry32);
+
+  ContinueLoop := Process32First(SnapshotHandle, ProcessEntry32);
+  while ContinueLoop do
+  begin
+    if (ProcessEntry32.th32ParentProcessID = ParentProcessId) then
+    begin
+      Result := ProcessEntry32.th32ProcessID;
+    end;
+    ContinueLoop := (Result = 0) and Process32Next(SnapshotHandle, ProcessEntry32);
+  end;
+
+  CloseHandle(SnapshotHandle);
+end;
+
+procedure WaitForProcessId(const ProcessId: LongWord);
+var
+  ProcessHandle: THandle;
+
+begin
+  ProcessHandle := OpenProcess(SYNCHRONIZE, False, ProcessId);
+  if ProcessHandle <> INVALID_HANDLE_VALUE then
+  begin
+    WaitForSingleObject(ProcessHandle, INFINITE);
+    CloseHandle(ProcessHandle);
+  end;
 end;
 
 {$PUSH}
