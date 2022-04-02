@@ -143,7 +143,7 @@ begin
   fShellProcessId := ShellProcessId;
   fWindowHandles := TList.Create;
   try
-    Delay(100);
+    Sleep(100);
     while ProcessAlive do
     begin
       ProcessAlive := FindProcessWindows(fShellProcessID, fWindowHandles)
