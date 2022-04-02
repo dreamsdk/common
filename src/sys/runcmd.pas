@@ -80,7 +80,7 @@ end;
 
 function TRunCommand.IsValidNewLine(const NewLine: string): Boolean;
 begin
-  Result := (Trim(NewLine) <> EmptyStr);
+  Result := (Trim(NewLine) <> EmptyStr) and (not StartsWith(#$1B, NewLine));
 end;
 
 function TRunCommand.GetExitCode: Integer;
