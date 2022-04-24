@@ -157,7 +157,7 @@ begin
 end;
 
 // Note: for debugging this complex function, define the thing below
-// {$DEFINE DEBUG_GET_NETWORK_CARD_ADAPTER}
+{$DEFINE DEBUG_GET_NETWORK_CARD_ADAPTER}
 function GetNetworkCardAdapterList(
   var ANetworkAdapterCardList: TNetworkCardAdapterList): Boolean;
 var
@@ -187,7 +187,7 @@ var
     try
       Buffer.Add('@echo off');
       Buffer.Add('echo. | wmic OS get Version > nul');
-      // Get-WmiObject -Class Win32_NetworkAdapterConfiguration -Filter IPEnabled=TRUE -ComputerName . | Select MACAddress,IPSubnet,IPAddress | Export-Csv .\test.csv
+      // Get-WmiObject -Class Win32_NetworkAdapterConfiguration -ComputerName . | Select @{Name='Node';Expression={$env:computername}},@{Name='IPAddress';Expression={"{" + [string]::join(";", ($_.IPAddress)) + "}"}},@{Name='IPSubnet';Expression={"{" + [string]::join(";", ($_.IPSubnet)) + "}"}},MACAddress,SettingID | ConvertTo-Csv -NoTypeInformation -Delimiter "," | % {$_ -replace '"',''}
       Buffer.Add(Format('echo. | wmic NICCONFIG get IPAddress,IPSubnet,MACAddress,SettingID /FORMAT:CSV > "%s"', [IpToMacFileName]));
       // Get-NetAdapter | Where-Object Name -like '*' | Select-Object IfIndex,MacAddress,Name | ConvertTo-Csv
       Buffer.Add(Format('echo. | wmic NIC where "NetConnectionID like ''%%%%''" get %sMACAddress,NetConnectionID /FORMAT:CSV > "%s"', [InterfaceIndexField, MacToAdapterNameFileName]));
@@ -572,7 +572,7 @@ begin
     try
       //returns something like:
       {
-<html><head><title>Current IP Check</title></head><body>Current IP Address: 44.151.191.44</body></html>
+<html><head><title>Current IP Check</title></head><body>Current IP Address: 111.222.333.444</body></html>
       }
       RawData := HTTPClient.Get(TEST_URL);
       // adjust for expected output; we just capture the first IP address now:
