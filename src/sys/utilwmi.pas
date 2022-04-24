@@ -102,61 +102,72 @@ const
   wbemFlagForwardOnly = $00000020;
 
 var
-  FSWbemLocator : Variant;
-  objWMIService : Variant;
-  colWMI        : Variant;
-  oEnumWMI      : IEnumvariant;
-  nrValue       : LongWord;
+  FSWbemLocator,
+  objWMIService,
+  colWMI: Variant;
+  oEnumWMI: IEnumvariant;
+  nrValue: LongWord;
 {$IFDEF USE_OLD_WMI}
-  objWMI        : Variant;                     // FPC < 3.0 requires WMIobj to be an variant, not an OleVariant
-  nr            : PLongWord;                   // FPC < 3.0 requires IEnumvariant.next to supply a pointer to a longword for # returned values
+  objWMI: Variant;                 // FPC < 3.0 requires WMIobj to be an variant, not an OleVariant
+  nr: PLongWord;                   // FPC < 3.0 requires IEnumvariant.next to supply a pointer to a longword for # returned values
 {$ELSE}
-  objWMI        : OLEVariant;                  // FPC 3.0 requires WMIobj to be an olevariant, not a variant
-  nr            : LongWord absolute nrValue;   // FPC 3.0 requires IEnumvariant.next to supply a longword variable for # returned values
+  objWMI: OLEVariant;              // FPC 3.0 requires WMIobj to be an olevariant, not a variant
+  nr: LongWord absolute nrValue;   // FPC 3.0 requires IEnumvariant.next to supply a longword variable for # returned values
 {$ENDIF}
-  WMIproperties : String;
-  WMIProp       : TStringList;
-  Request       : String;
-  PropertyName  : String;
-  PropertyStrVal: String;
-  i             : integer;
+  WMIProperties: string;
+  Request,
+  PropertyName,
+  PropertyStrVal: string;
+  i: Integer;
+  WMIProp: TStringList;
 
 begin
 {$IFDEF USE_OLD_WMI}
   nr := @nrValue;
 {$ENDIF}
+
   // Prepare the search query
-  WMIProperties := '';
-  for i := low(WMIPropertyNames) to High(WMIPropertyNames)
-    do WMIProperties := WMIProperties + WMIPropertyNames[i] + ',';
-  Delete(WMIProperties, length(WMIProperties), 1);
+  WMIProperties := EmptyStr;
+  for i := Low(WMIPropertyNames) to High(WMIPropertyNames) do
+    WMIProperties := WMIProperties + WMIPropertyNames[i] + ',';
+  Delete(WMIProperties, Length(WMIProperties), 1);
+
   // Let FPObjectList take care of freeing the objects
   Result := TFPObjectList.Create(True);
   try
-    FSWbemLocator   := CreateOleObject('WbemScripting.SWbemLocator');
-    objWMIService   := FSWbemLocator.ConnectServer('localhost', 'root\CIMV2', '', '');
-    if Condition = ''
-    then Request := Format('SELECT %s FROM %s'   , [WMIProperties, WMIClass])
-    else Request := Format('SELECT %s FROM %s %s', [WMIProperties, WMIClass, Condition]);
+    FSWbemLocator := CreateOleObject('WbemScripting.SWbemLocator');
+    objWMIService := FSWbemLocator.ConnectServer('localhost', 'root\CIMV2',
+      EmptyStr, EmptyStr);
+
+    if Condition = EmptyStr then
+      Request := Format('SELECT %s FROM %s', [WMIProperties, WMIClass])
+    else
+      Request := Format('SELECT %s FROM %s %s', [WMIProperties, WMIClass, Condition]);
+
     // Start Request
-    colWMI   := objWMIService.ExecQuery(WideString(Request), 'WQL', wbemFlagForwardOnly);
+    colWMI := objWMIService.ExecQuery(WideString(Request), 'WQL',
+      wbemFlagForwardOnly);
+
     // Enum for requested results
     oEnumWMI := IUnknown(colWMI._NewEnum) as IEnumVariant;
+
     // Enumerate results from query, one by one
     while oEnumWMI.Next(1, objWMI, nr) = 0 do
     begin
       // Store all property name/value pairs for this enum to TStringList.
       WMIprop := TStringList.Create;
-      for i := low(WMIPropertyNames) to High(WMIPropertyNames) do
+      for i := Low(WMIPropertyNames) to High(WMIPropertyNames) do
       begin
         PropertyName := WMIPropertyNames[i];
-        If not VarIsNull(objWMI.Properties_.Item(WideString(PropertyName)).value) then
+        if not VarIsNull(objWMI.Properties_.Item(WideString(PropertyName)).value) then
         begin
-          if VarIsArray(objWMI.Properties_.Item(WideString(PropertyName)).value)
-          then PropertyStrVal := VarArrayToStr(objWMI.Properties_.Item(WideString(PropertyName)).value)
-          else PropertyStrVal := VartoStr(objWMI.Properties_.Item(WideString(PropertyName)).value)
+          if VarIsArray(objWMI.Properties_.Item(WideString(PropertyName)).value) then
+            PropertyStrVal := VarArrayToStr(objWMI.Properties_.Item(WideString(PropertyName)).value)
+          else
+            PropertyStrVal := VartoStr(objWMI.Properties_.Item(WideString(PropertyName)).value);
         end
-        else PropertyStrVal := '<null>';
+        else
+          PropertyStrVal := '<null>';
         WMIProp.Add(PropertyName + '=' + PropertyStrVal);
       end;
       // Add properties from this enum to FPObjectList as TStringList
