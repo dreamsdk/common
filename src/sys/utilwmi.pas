@@ -1,9 +1,10 @@
 (*******************************************************************************
 
-UtilWMI
+UtilWMI for Free Pascal/Lazarus
+A very simple utility for querying Windows Management Instrumentation (WMI).
 https://forum.lazarus.freepascal.org/index.php/topic,24490.0.html
 
-Copyright (c) 2016 Jurassic Pork, Molly, SiZiOUS
+Copyright (c) 2016-2022 Jurassic Pork, Molly and SiZiOUS
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -23,8 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 *******************************************************************************)
 unit UtilWMI;
  
-// 0.1  Jurassic Pork July 2015
-// 0.2  Molly  January 2016 : improvement : fpc 3.0 compatibility + usage of  TFPObjectList
+// 0.1 (July 2015)  Jurassic Pork: first public release
+// 0.2 (January 2016) Molly: improvement: fpc 3.0 compatibility + usage of TFPObjectList
  
 // Changes 2016-jan-02 (Molly)
 // - updated/corrected comments
@@ -60,11 +61,20 @@ unit UtilWMI;
 interface
  
 uses
-  Classes,
-  Contnrs;
+  SysUtils,
+  Classes;
+
+type
+  TWindowsManagementInstrumentationProperty = record
+    Key: string;
+    Values: TStringArray;
+  end;
+  TWindowsManagementInstrumentationProperties = array of TWindowsManagementInstrumentationProperty;
+  TWindowsManagementInstrumentationResult = array of TWindowsManagementInstrumentationProperties;
 
 function GetWMIInfo(const WMIClass: string;
-  const WMIPropertyNames: array of string; const Condition: string = ''): TFPObjectList;
+  const WMIPropertyNames: Array of String;
+  const Condition: string = ''): TWindowsManagementInstrumentationResult;
 
 implementation
  
@@ -74,54 +84,77 @@ uses
 {$ENDIF}
   Variants,
   ActiveX,
-  ComObj,
-  SysUtils;
- 
-function VarArrayToStr(Value: Variant): String;
+  ComObj;
+
+function VarArrayToStr(Value: Variant): TStringArray;
 var
-  i : Integer;
+  i, j: Integer;
+  Buffer: TStringArray;
+
 begin
-  Result := '[';
+  Result := Default(TStringArray);
+  SetLength(Result, 0);
   for i := VarArrayLowBound(Value, 1) to VarArrayHighBound(Value, 1) do
   begin
-    if Result <> '[' then Result := Result + ',';
     if not VarIsNull(Value[i]) then
     begin
-      if VarIsArray(Value[i]) 
-      then Result := Result + VarArrayToStr(Value[i])
-      else Result := Result + VartoStr(Value[i])
+      if VarIsArray(Value[i]) then
+      begin
+        Buffer := VarArrayToStr(Value[i]);
+        for j := Low(Buffer) to High(Buffer) do
+          Insert(Buffer[j], Result, MaxInt);
+      end
+      else
+        Insert(VarToStr(Value[i]), Result, MaxInt);
     end
-    else Result := Result + '<null>';
+    else
+      Insert(#0, Result, MaxInt);
   end;
-  Result := Result + ']';
+end;
+
+function CombineStringArray(const Array1, Array2: TStringArray): TStringArray;
+var
+  i: Integer;
+
+begin
+  Result := Array1;
+  for i := Low(Array2) to High(Array2) do
+    Insert(Array2[i], Result, MaxInt);
 end;
 
 function GetWMIInfo(const WMIClass: string;
-  const WMIPropertyNames: Array of String; const Condition: string = ''): TFPObjectList;
+  const WMIPropertyNames: Array of String;
+  const Condition: string = ''): TWindowsManagementInstrumentationResult;
 const
+  WhereKeyword = 'WHERE';
   wbemFlagForwardOnly = $00000020;
 
 var
   FSWbemLocator,
   objWMIService,
   colWMI: Variant;
-  oEnumWMI: IEnumvariant;
+  oEnumWMI: IEnumVariant;
   nrValue: LongWord;
 {$IFDEF USE_OLD_WMI}
   objWMI: Variant;                 // FPC < 3.0 requires WMIobj to be an variant, not an OleVariant
-  nr: PLongWord;                   // FPC < 3.0 requires IEnumvariant.next to supply a pointer to a longword for # returned values
+  NR: PLongWord;                   // FPC < 3.0 requires IEnumvariant.next to supply a pointer to a longword for # returned values
 {$ELSE}
   objWMI: OLEVariant;              // FPC 3.0 requires WMIobj to be an olevariant, not a variant
-  nr: LongWord absolute nrValue;   // FPC 3.0 requires IEnumvariant.next to supply a longword variable for # returned values
+  NR: LongWord absolute nrValue;   // FPC 3.0 requires IEnumvariant.next to supply a longword variable for # returned values
 {$ENDIF}
-  WMIProperties: string;
+  WMIProperties,
+  WMICondition: string;
   Request,
-  PropertyName,
-  PropertyStrVal: string;
+  PropertyName: string;
+  PropertyValue: Variant;
   i: Integer;
-  WMIProp: TStringList;
+  Properties: TWindowsManagementInstrumentationProperties;
+  Buffer: TStringArray;
+  SingleProperty: TWindowsManagementInstrumentationProperty;
 
 begin
+  Result := Default(TWindowsManagementInstrumentationResult);
+
 {$IFDEF USE_OLD_WMI}
   nr := @nrValue;
 {$ENDIF}
@@ -133,16 +166,16 @@ begin
   Delete(WMIProperties, Length(WMIProperties), 1);
 
   // Let FPObjectList take care of freeing the objects
-  Result := TFPObjectList.Create(True);
   try
     FSWbemLocator := CreateOleObject('WbemScripting.SWbemLocator');
     objWMIService := FSWbemLocator.ConnectServer('localhost', 'root\CIMV2',
       EmptyStr, EmptyStr);
 
-    if Condition = EmptyStr then
-      Request := Format('SELECT %s FROM %s', [WMIProperties, WMIClass])
-    else
-      Request := Format('SELECT %s FROM %s %s', [WMIProperties, WMIClass, Condition]);
+    WMICondition := Condition;
+    if (not SameText(WMICondition, EmptyStr)) and (not WMICondition.StartsWith(WhereKeyword, True)) then
+      WMICondition := Concat(WhereKeyword, ' ', WMICondition);
+
+    Request := Format('SELECT %s FROM %s %s', [WMIProperties, WMIClass, WMICondition]);
 
     // Start Request
     colWMI := objWMIService.ExecQuery(WideString(Request), 'WQL',
@@ -152,26 +185,40 @@ begin
     oEnumWMI := IUnknown(colWMI._NewEnum) as IEnumVariant;
 
     // Enumerate results from query, one by one
-    while oEnumWMI.Next(1, objWMI, nr) = 0 do
+    while oEnumWMI.Next(1, objWMI, NR) = 0 do
     begin
-      // Store all property name/value pairs for this enum to TStringList.
-      WMIprop := TStringList.Create;
+      // Store all property name/value pairs for this enum
+      Properties := Default(TWindowsManagementInstrumentationProperties);
+      SetLength(Properties, 0);
+
       for i := Low(WMIPropertyNames) to High(WMIPropertyNames) do
       begin
+        SingleProperty := Default(TWindowsManagementInstrumentationProperty);
+
         PropertyName := WMIPropertyNames[i];
-        if not VarIsNull(objWMI.Properties_.Item(WideString(PropertyName)).value) then
+        PropertyValue := objWMI.Properties_.Item(WideString(PropertyName)).Value;
+
+        Buffer := Default(TStringArray);
+        SetLength(Buffer, 0);
+
+        if not VarIsNull(PropertyValue) then
         begin
-          if VarIsArray(objWMI.Properties_.Item(WideString(PropertyName)).value) then
-            PropertyStrVal := VarArrayToStr(objWMI.Properties_.Item(WideString(PropertyName)).value)
+          if VarIsArray(PropertyValue) then
+          begin
+            Buffer := CombineStringArray(Buffer, VarArrayToStr(PropertyValue));
+          end
           else
-            PropertyStrVal := VartoStr(objWMI.Properties_.Item(WideString(PropertyName)).value);
+            Insert(PropertyValue, Buffer, MaxInt);
         end
         else
-          PropertyStrVal := '<null>';
-        WMIProp.Add(PropertyName + '=' + PropertyStrVal);
+          Insert(#0, Buffer, MaxInt);
+
+        SingleProperty.Key := PropertyName;
+        SingleProperty.Values := Buffer;
+
+        Insert(SingleProperty, Properties, MaxInt);
       end;
-      // Add properties from this enum to FPObjectList as TStringList
-      Result.Add(WMIProp);
+      Insert(Properties, Result, MaxInt);
     end;
    except
 {$IFDEF USE_DIALOG}
@@ -184,6 +231,30 @@ begin
 {$ENDIF}
   end;
 end;
- 
+
+(*
+function QueryWindowsManagementInstrumentation(const WMIClass: string;
+  const WMIPropertyNames: array of string; const Condition: string = ''): TWindowsManagementInstrumentationResult;
+var
+  Output: TFPObjectList;
+  i: Integer;
+
+begin
+  Output := GetWMIInfo(WMIClass, WMIPropertyNames, Condition);
+  try
+    for i := 0 to Pred(WMIResult.Count) do
+    begin
+      Buffer := TStringList(WMIResult[i]);
+      if Assigned(Buffer) then
+      begin
+        WriteLn(Buffer.Text);
+      end;
+    end;
+  finally
+    Output.Free;
+  end;
+end;
+*)
+
 end.
 
