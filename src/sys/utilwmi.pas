@@ -23,34 +23,41 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 *******************************************************************************)
 unit UtilWMI;
- 
-// 0.1 (July 2015)  Jurassic Pork: first public release
-// 0.2 (January 2016) Molly: improvement: fpc 3.0 compatibility + usage of TFPObjectList
- 
-// Changes 2016-jan-02 (Molly)
-// - updated/corrected comments
-// - Introduction of variable nrValue.
-// - Generic solution for variable nr, using nrValue (inc. pointer assignment)
-// - re-introduction of calling ShowMessage() when exception occurs (code only
-//   active when USE_DIALOG is defined) + reorganized defines
- 
-// 0.3  Molly  November 2016 : improvement : support for variant arrays
-// Changes 2016-nov-11 (Molly)
-// - Add support for variant arrays
 
-// 0.4  SiZiOUS  April 2022: refactoring: comments
+(*
+
+Changelog:
+
+Ver. 0.1 [July 2015] Jurassic Pork:
+first public release
+
+Ver. 0.2 [January 2016] Molly:
+  - improvement: fpc 3.0 compatibility + usage of TFPObjectList
+  - updated/corrected comments
+  - introduction of variable nrValue.
+  - generic solution for variable nr, using nrValue (inc. pointer assignment)
+  - re-introduction of calling ShowMessage() when exception occurs
+    (code only active when USE_DIALOG is defined) + reorganized defines
  
+Ver. 0.3 [November 2016] Molly:
+improvement : support for variant arrays
+
+Ver. 0.4  [April 2022]  SiZiOUS:
+complete rewriting/revamping
+
+*)
+
 {$MODE OBJFPC}{$H+}{$HINTS ON}
  
 {$IF FPC_FULLVERSION > 29999} // FPC > 2.9.9
-  {$INFO "Use new WMI"}
+  {$INFO "Use New WMI"}
 {$ELSE}
-  {$INFO "Use old WMI"}
+  {$INFO "Use Old WMI"}
   {$DEFINE USE_OLD_WMI}
 {$ENDIF}
  
 {
-  Enable this define if wanting to use ShowMessage() to inform about an
+  Enable this define if you want to use ShowMessage() to inform about an
   exception.
 
   Please realize that using unit Dialogs can 'clash', as both Freevision and
@@ -65,16 +72,23 @@ uses
   Classes;
 
 type
+  EQueryWindowsManagementInstrumentation = class(Exception);
+
   TWindowsManagementInstrumentationProperty = record
     Key: string;
     Values: TStringArray;
   end;
   TWindowsManagementInstrumentationProperties = array of TWindowsManagementInstrumentationProperty;
-  TWindowsManagementInstrumentationResult = array of TWindowsManagementInstrumentationProperties;
+  TWindowsManagementInstrumentationQueryResult = array of TWindowsManagementInstrumentationProperties;
 
-function GetWMIInfo(const WMIClass: string;
-  const WMIPropertyNames: Array of String;
-  const Condition: string = ''): TWindowsManagementInstrumentationResult;
+function QueryWindowsManagementInstrumentation(const WMIClass: string;
+  const WMIPropertyNames: array of string;
+  const Condition: string = ''): TWindowsManagementInstrumentationQueryResult;
+
+function GetWindowsManagementInstrumentationValuesByPropertyName(
+  const QueryResult: TWindowsManagementInstrumentationQueryResult;
+  const WMIPropertyName: string;
+  const ItemIndex: Integer): TStringArray;
 
 implementation
  
@@ -86,45 +100,40 @@ uses
   ActiveX,
   ComObj;
 
-function VarArrayToStr(Value: Variant): TStringArray;
+function VarArrayToStringArray(Value: Variant): TStringArray;
 var
   i, j: Integer;
   Buffer: TStringArray;
+  CurrentItemValue: Variant;
 
 begin
   Result := Default(TStringArray);
   SetLength(Result, 0);
   for i := VarArrayLowBound(Value, 1) to VarArrayHighBound(Value, 1) do
   begin
-    if not VarIsNull(Value[i]) then
+    CurrentItemValue := Value[i];
+    if not VarIsNull(CurrentItemValue) then
     begin
-      if VarIsArray(Value[i]) then
+      if VarIsArray(CurrentItemValue) then
       begin
-        Buffer := VarArrayToStr(Value[i]);
+        // CurrentItemValue is an array
+        Buffer := VarArrayToStringArray(CurrentItemValue);
         for j := Low(Buffer) to High(Buffer) do
           Insert(Buffer[j], Result, MaxInt);
       end
       else
-        Insert(VarToStr(Value[i]), Result, MaxInt);
+        // CurrentItemValue is a single string
+        Insert(VarToStr(CurrentItemValue), Result, MaxInt);
     end
     else
+      // CurrentItemValue is NULL
       Insert(#0, Result, MaxInt);
   end;
 end;
 
-function CombineStringArray(const Array1, Array2: TStringArray): TStringArray;
-var
-  i: Integer;
-
-begin
-  Result := Array1;
-  for i := Low(Array2) to High(Array2) do
-    Insert(Array2[i], Result, MaxInt);
-end;
-
-function GetWMIInfo(const WMIClass: string;
+function QueryWindowsManagementInstrumentation(const WMIClass: string;
   const WMIPropertyNames: Array of String;
-  const Condition: string = ''): TWindowsManagementInstrumentationResult;
+  const Condition: string = ''): TWindowsManagementInstrumentationQueryResult;
 const
   WhereKeyword = 'WHERE';
   wbemFlagForwardOnly = $00000020;
@@ -153,7 +162,7 @@ var
   SingleProperty: TWindowsManagementInstrumentationProperty;
 
 begin
-  Result := Default(TWindowsManagementInstrumentationResult);
+  Result := Default(TWindowsManagementInstrumentationQueryResult);
 
 {$IFDEF USE_OLD_WMI}
   nr := @nrValue;
@@ -204,13 +213,14 @@ begin
         if not VarIsNull(PropertyValue) then
         begin
           if VarIsArray(PropertyValue) then
-          begin
-            Buffer := CombineStringArray(Buffer, VarArrayToStr(PropertyValue));
-          end
+            // PropertyValue is an array
+            Buffer := VarArrayToStringArray(PropertyValue)
           else
-            Insert(PropertyValue, Buffer, MaxInt);
+            // PropertyValue is a single string
+            Insert(VarToStr(PropertyValue), Buffer, MaxInt);
         end
         else
+          // PropertyValue is NULL
           Insert(#0, Buffer, MaxInt);
 
         SingleProperty.Key := PropertyName;
@@ -222,39 +232,41 @@ begin
     end;
    except
 {$IFDEF USE_DIALOG}
-      on e: Exception do
-        ShowMessage('Error WMI with ' + Request + sLineBreak + 'Error : ' + e.Message);
+      on E: Exception do
+        ShowMessage('Error WMI with ' + Request + sLineBreak + 'Error : ' + E.Message);
 {$ELSE}
       // Replace Raise with more appropiate exception if wanted.
-      on e: Exception do
-        raise;
+      on E: Exception do
+        raise EQueryWindowsManagementInstrumentation
+          .CreateFmt('Error while querying WMI: %s', [E.Message]);
 {$ENDIF}
   end;
 end;
 
-(*
-function QueryWindowsManagementInstrumentation(const WMIClass: string;
-  const WMIPropertyNames: array of string; const Condition: string = ''): TWindowsManagementInstrumentationResult;
+function GetWindowsManagementInstrumentationValuesByPropertyName(
+  const QueryResult: TWindowsManagementInstrumentationQueryResult;
+  const WMIPropertyName: string;
+  const ItemIndex: Integer): TStringArray;
 var
-  Output: TFPObjectList;
-  i: Integer;
+  i,
+  ColumnIndex: Integer;
+  Buffer: TWindowsManagementInstrumentationProperties;
 
 begin
-  Output := GetWMIInfo(WMIClass, WMIPropertyNames, Condition);
-  try
-    for i := 0 to Pred(WMIResult.Count) do
-    begin
-      Buffer := TStringList(WMIResult[i]);
-      if Assigned(Buffer) then
-      begin
-        WriteLn(Buffer.Text);
-      end;
-    end;
-  finally
-    Output.Free;
-  end;
+  if (ItemIndex < Low(QueryResult)) or (ItemIndex > High(QueryResult)) then
+    raise EArgumentOutOfRangeException.CreateFmt('Index is out of bound: %d', [ItemIndex]);
+
+  ColumnIndex := -1;
+  Buffer := QueryResult[0];
+  for i := Low(Buffer) to High(Buffer) do
+    if SameText(Buffer[i].Key, WMIPropertyName) then
+      ColumnIndex := i;
+
+  if ColumnIndex = -1 then
+    raise EArgumentException.CreateFmt('WMI property not found: %s', [WMIPropertyName]);
+
+  Result := QueryResult[ItemIndex][ColumnIndex].Values;
 end;
-*)
 
 end.
 
