@@ -81,14 +81,26 @@ type
   TWindowsManagementInstrumentationProperties = array of TWindowsManagementInstrumentationProperty;
   TWindowsManagementInstrumentationQueryResult = array of TWindowsManagementInstrumentationProperties;
 
-function QueryWindowsManagementInstrumentation(const WMIClass: string;
-  const WMIPropertyNames: array of string;
+function QueryWindowsManagementInstrumentation(
+  const WMIClass: string;
+  const WMIPropertyNames: TStringArray;
   const Condition: string = ''): TWindowsManagementInstrumentationQueryResult;
 
-function GetWindowsManagementInstrumentationValuesByPropertyName(
+function GetWindowsManagementInstrumentationMultipleValuesByPropertyName(
   const QueryResult: TWindowsManagementInstrumentationQueryResult;
   const WMIPropertyName: string;
   const ItemIndex: Integer): TStringArray;
+
+function GetWindowsManagementInstrumentationSingleValueByPropertyName(
+  const QueryResult: TWindowsManagementInstrumentationQueryResult;
+  const WMIPropertyName: string;
+  const ItemIndex: Integer): string;
+
+{$IFDEF DEBUG}
+procedure DumpWindowsManagementInstrumentation(
+  const QueryResult: TWindowsManagementInstrumentationQueryResult
+);
+{$ENDIF}
 
 implementation
  
@@ -131,8 +143,9 @@ begin
   end;
 end;
 
-function QueryWindowsManagementInstrumentation(const WMIClass: string;
-  const WMIPropertyNames: Array of String;
+function QueryWindowsManagementInstrumentation(
+  const WMIClass: string;
+  const WMIPropertyNames: TStringArray;
   const Condition: string = ''): TWindowsManagementInstrumentationQueryResult;
 const
   WhereKeyword = 'WHERE';
@@ -174,7 +187,6 @@ begin
     WMIProperties := WMIProperties + WMIPropertyNames[i] + ',';
   Delete(WMIProperties, Length(WMIProperties), 1);
 
-  // Let FPObjectList take care of freeing the objects
   try
     FSWbemLocator := CreateOleObject('WbemScripting.SWbemLocator');
     objWMIService := FSWbemLocator.ConnectServer('localhost', 'root\CIMV2',
@@ -243,7 +255,7 @@ begin
   end;
 end;
 
-function GetWindowsManagementInstrumentationValuesByPropertyName(
+function GetWindowsManagementInstrumentationMultipleValuesByPropertyName(
   const QueryResult: TWindowsManagementInstrumentationQueryResult;
   const WMIPropertyName: string;
   const ItemIndex: Integer): TStringArray;
@@ -267,6 +279,53 @@ begin
 
   Result := QueryResult[ItemIndex][ColumnIndex].Values;
 end;
+
+function GetWindowsManagementInstrumentationSingleValueByPropertyName(
+  const QueryResult: TWindowsManagementInstrumentationQueryResult;
+  const WMIPropertyName: string;
+  const ItemIndex: Integer): string;
+var
+  Buffer: TStringArray;
+  BufferItemsCount: Integer;
+
+begin
+  Buffer := GetWindowsManagementInstrumentationMultipleValuesByPropertyName(
+    QueryResult, WMIPropertyName, ItemIndex);
+
+  BufferItemsCount := Length(Buffer);
+  if BufferItemsCount > 1 then
+    raise EQueryWindowsManagementInstrumentation.CreateFmt(
+      'Illegal use: multiple values available (%d)', [BufferItemsCount]);
+
+  Result := Buffer[0];
+end;
+
+{$IFDEF DEBUG}
+procedure DumpWindowsManagementInstrumentation(
+  const QueryResult: TWindowsManagementInstrumentationQueryResult
+);
+var
+   i, j, k: Integer;
+   WMIProperties: TWindowsManagementInstrumentationProperties;
+   WMIProperty:TWindowsManagementInstrumentationProperty;
+
+begin
+  for i := Low(QueryResult) to High(QueryResult) do
+  begin
+    WriteLn('Entry #', i);
+    WMIProperties := QueryResult[i];
+    for j := Low(WMIProperties) to High(WMIProperties) do
+    begin
+      WMIProperty := WMIProperties[j];
+      WriteLn('  ', WMIProperty.Key, ' >>>');
+      for k := Low(WMIProperty.Values) to High(WMIProperty.Values) do
+        WriteLn('     ', WMIProperty.Values[k]);
+      WriteLn('  ', WMIProperty.Key, ' <<< ');
+    end;
+    WriteLn('***');
+  end;
+end;
+{$ENDIF}
 
 end.
 

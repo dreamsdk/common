@@ -30,6 +30,9 @@ type
 
   TNetworkCardAdapterList = array of TNetworkCardAdapter;
 
+{$IFDEF DEBUG}
+procedure DumpNetworkCardAdapterList(var ANetworkAdapterCardList: TNetworkCardAdapterList);
+{$ENDIF}
 function GetExternalInternetProtocolAddress: string;
 function GetNetworkCardAdapterList(var ANetworkAdapterCardList: TNetworkCardAdapterList): Boolean;
 function FindMediaAccessControlAddress(var ANetworkAdapterCardList: TNetworkCardAdapterList;
@@ -41,6 +44,9 @@ function IsValidInternetProtocolAddress(InternetProtocolAddress: string): Boolea
 function IsValidMediaAccessControlAddress(MediaAccessControlAddress: string): Boolean;
 function ParseInternetProtocolAddress(const InputValue: string): string;
 function SanitizeMediaAccessControlAddress(MediaAccessControlAddress: string): string;
+
+function GetNetworkCardAdapterList_OLD(
+  var ANetworkAdapterCardList: TNetworkCardAdapterList): Boolean;
 
 implementation
 
@@ -54,7 +60,8 @@ uses
   RunTools,
   FSTools,
   Version,
-  RegTools;
+  RegTools,
+  UtilWMI;
 
 function ParseInternetProtocolAddress(const InputValue: string): string;
 var
@@ -159,6 +166,224 @@ end;
 // Note: for debugging this complex function, define the thing below
 {$DEFINE DEBUG_GET_NETWORK_CARD_ADAPTER}
 function GetNetworkCardAdapterList(
+  var ANetworkAdapterCardList: TNetworkCardAdapterList): Boolean;
+var
+  NetworkAdapterConfiguration,
+  NetworkAdapter: TWindowsManagementInstrumentationQueryResult;
+  WMIFieldNames: TStringArray;
+  i,
+  CurrentCardItemIndex: Integer;
+  NetworkCardAdapter: TNetworkCardAdapter;
+  BufferArray: TStringArray;
+  MacAddress,
+  BufferString: string;
+  machin__: TStringIntegerMap;
+  IpAddressRecord: TIpAddress;
+  machin2__: PIpAddresses;
+
+  function _HandleIpAddressesFromWMI(const ANetworkCardAdapterItemIndex: Integer;
+    const AIpAddresses, AIpSubnets: TStringArray): Boolean;
+  var
+    i,
+    IpEntryIndex: Integer;
+    CurrentIpAddress,
+    CurrentIpSubnet: string;
+    IpAddresses: PIpAddresses;
+    IpParsingSuccess: Boolean;
+
+    function __IsUsableIpAddress(const IpAddress: string): Boolean;
+    const
+      INVALID_IP_ADDRESS = '0.0.0.0';
+
+    begin
+      Result := (not IsEmpty(IpAddress)) and (not SameText(IpAddress, INVALID_IP_ADDRESS));
+    end;
+
+    function __IsUsableIpAddresses(const IpAddresses: TStringArray): Boolean;
+    var
+      i: Integer;
+
+    begin
+      Result := False;
+      for i := Low(IpAddresses) to High(IpAddresses) do
+        Result := Result or __IsUsableIpAddress(IpAddresses[i]);
+    end;
+
+  begin
+    Result := False;
+
+    if __IsUsableIpAddresses(AIpAddresses) then
+      with ANetworkAdapterCardList[ANetworkCardAdapterItemIndex] do
+        for i := Low(AIpAddresses) to High(AIpAddresses) do
+        begin
+          CurrentIpAddress := AIpAddresses[i];
+          CurrentIpSubnet := EmptyStr;
+
+          if __IsUsableIpAddress(CurrentIpAddress) then
+          begin
+            CurrentIpSubnet := AIpSubnets[i]; // no parsing needed
+
+            // Determine if the item is an IPv4 or IPv6
+            IpAddresses := @IPv4Addresses;
+            if IsIP6(CurrentIpAddress) then
+              IpAddresses := @IPv6Addresses
+            else
+              CurrentIpAddress := ParseInternetProtocolAddress(CurrentIpAddress); // Sanitize IPv4
+
+            // Add a item to the array
+            IpEntryIndex := Length(IpAddresses^);
+            SetLength(IpAddresses^, IpEntryIndex + 1);
+
+            // Assign the values to the new item
+            IpAddresses^[IpEntryIndex].Address := CurrentIpAddress;
+            IpAddresses^[IpEntryIndex].Subnet := CurrentIpSubnet;
+          end;
+        end;
+  end;
+
+  function _HandleIpAddressesFromRegistry(const ANetworkCardAdapterItemIndex: Integer;
+    const SettingID: string): Boolean;
+  var
+    Reg: TRegistry;
+    AIpAddress,
+    AIpSubnet: string;
+
+    function __RetrieveValues(const KeyPath: string): Boolean;
+    begin
+      Result := False;
+      if Reg.OpenKey(Format(KeyPath, [SettingID]), False) then
+      begin
+        if Reg.ValueExists('IPAddress') then
+          AIpAddress := RegistryReadMultiSzToSingle(Reg, 'IPAddress');
+        if Reg.ValueExists('SubnetMask') then
+          AIpSubnet := RegistryReadMultiSzToSingle(Reg, 'SubnetMask');
+      end;
+      Result := (not IsEmpty(AIpAddress)) and (not IsEmpty(AIpSubnet));
+    end;
+
+  begin
+  {$IFDEF DEBUG}
+  {$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
+    DebugLog('      Network Card GUID: ' + SettingID);
+  {$ENDIF}
+  {$ENDIF}
+    Result := False;
+    AIpAddress := EmptyStr;
+    AIpSubnet := EmptyStr;
+    Reg := TRegistry.Create(KEY_READ);
+    try
+      // Extract AIpAddress/AIpSubnet from Registry
+      Reg.RootKey := HKEY_LOCAL_MACHINE;
+      Result := __RetrieveValues('\SYSTEM\CurrentControlSet\Services\%s\Parameters\Tcpip'); // Win XP
+      if not Result then
+        Result := __RetrieveValues('\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\%s'); // Win 10
+
+      if Result then
+      begin
+        ici il faut appeler  _HandleIpAddressesFromWMI
+      end;
+    finally
+      FreeAndNil(Reg);
+    end;
+  end;
+
+begin
+  Result := False;
+  ANetworkAdapterCardList := Default(TNetworkCardAdapterList);
+  SetLength(ANetworkAdapterCardList, 0);
+
+  // Querying: Win32_NetworkAdapterConfiguration
+  NetworkAdapterConfiguration := QueryWindowsManagementInstrumentation(
+    'Win32_NetworkAdapterConfiguration', [
+        'IPAddress',
+        'IPSubnet',
+        'MACAddress',
+        'SettingID'
+      ], 'IPEnabled = True');
+
+  // Querying: Win32_NetworkAdapter
+  WMIFieldNames := ['MACAddress', 'NetConnectionID'];
+  if IsWindowsVistaOrGreater then
+    Insert('InterfaceIndex', WMIFieldNames, MaxInt);
+  NetworkAdapter := QueryWindowsManagementInstrumentation(
+    'Win32_NetworkAdapter', WMIFieldNames,
+    'NetConnectionID is not null');
+
+  machin__ := TStringIntegerMap.Create;
+  try
+    // Analyzing NetworkAdapter
+    for i := Low(NetworkAdapter) to High(NetworkAdapter) do
+    begin
+      // Retrieving MAC Address
+      MacAddress := SanitizeMediaAccessControlAddress(
+        GetWindowsManagementInstrumentationSingleValueByPropertyName(NetworkAdapter, 'MACAddress', i));
+
+      if IsValidMediaAccessControlAddress(MacAddress) then
+      begin
+        // Valid MAC Address, handle this Network Adapter
+        NetworkCardAdapter.MacAddress := MacAddress;
+        machin__.Add(MacAddress, i);
+
+        // InterfaceIndex
+        // In WinXP there is no InterfaceIndex field
+        if IsWindowsVistaOrGreater then
+        begin
+          BufferString := GetWindowsManagementInstrumentationSingleValueByPropertyName(NetworkAdapter, 'InterfaceIndex', i);
+          NetworkCardAdapter.InterfaceIndex := StrToInt(BufferString);
+        end;
+
+        // NetworkCardName
+        BufferString := GetWindowsManagementInstrumentationSingleValueByPropertyName(NetworkAdapter, 'NetConnectionID', i);
+        NetworkCardAdapter.NetworkCardName := BufferString;
+
+        // Pushing the NetworkCardAdapter
+        Insert(NetworkCardAdapter, ANetworkAdapterCardList, MaxInt);
+      end;
+    end;
+
+    // Analyzing NetworkAdapterConfiguration
+    for i := Low(NetworkAdapterConfiguration) to High(NetworkAdapterConfiguration) do
+    begin
+      MacAddress := SanitizeMediaAccessControlAddress(
+        GetWindowsManagementInstrumentationSingleValueByPropertyName(NetworkAdapterConfiguration, 'MACAddress', i));
+
+      if IsValidMediaAccessControlAddress(MacAddress) then
+      begin
+        CurrentCardItemIndex := machin__.IndexOf(MacAddress);
+        if CurrentCardItemIndex <> -1 then
+        begin
+          // FIXME
+          Result := _HandleIpAddressesFromWMI(
+            CurrentCardItemIndex,
+            GetWindowsManagementInstrumentationMultipleValuesByPropertyName(NetworkAdapterConfiguration, 'IPAddress', CurrentCardItemIndex),
+            GetWindowsManagementInstrumentationMultipleValuesByPropertyName(NetworkAdapterConfiguration, 'IPSubnet', CurrentCardItemIndex)
+          );
+
+          // Fail-back: try to read from registry if possible
+          if not Result then
+            _HandleIpAddressesFromRegistry(
+              CurrentCardItemIndex,
+              GetWindowsManagementInstrumentationSingleValueByPropertyName(NetworkAdapterConfiguration, 'SettingID', CurrentCardItemIndex)
+            );
+        end;
+      end;
+    end;
+
+  finally
+    machin__.Free;
+  end;
+
+{$IFDEF DEBUG}
+{$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
+  WriteLn('GetNetworkCardAdapterList, Result: ', Result);
+  DumpNetworkCardAdapterList(ANetworkAdapterCardList);
+{$ENDIF}
+{$ENDIF}
+end;
+
+// Note: for debugging this complex function, define the thing below
+{$DEFINE DEBUG_GET_NETWORK_CARD_ADAPTER}
+function GetNetworkCardAdapterList_OLD(
   var ANetworkAdapterCardList: TNetworkCardAdapterList): Boolean;
 var
   IpToMacStringBuffer,
@@ -301,7 +526,7 @@ var
     finally
       Buffer.Free;
     end;
-  end;
+  end; // ParseMacToAdapterName
 
   procedure HandleIpAddressesFromGuid(const GUID: string; var AIpAddress,
     AIpSubnet: string);
@@ -347,7 +572,7 @@ var
     Result := (not IsEmpty(IpAddress)) and (not SameText(IpAddress, INVALID_IP_ADDRESS));
   end;
 
-  procedure HandleIpAddresses(const AIpIndex: Integer;
+  procedure HandleIpAddresses(const ANetworkCardAdapterItemIndex: Integer;
     const AIpAddresses, AIpSubnets, ANetworkCardGuid: string);
 
   var
@@ -394,7 +619,7 @@ var
         StringToStringList(ExtractedIpAddresses, ';', IpBuffer);
         StringToStringList(ExtractedSubnets, ';', SubnetBuffer);
 
-        with ANetworkAdapterCardList[AIpIndex] do
+        with ANetworkAdapterCardList[ANetworkCardAdapterItemIndex] do
         begin
           for i := 0 to IpBuffer.Count - 1 do
           begin
@@ -604,6 +829,46 @@ begin
     Result := False;
   end;
 end;
+
+{$IFDEF DEBUG}
+procedure DumpNetworkCardAdapterList(
+  var ANetworkAdapterCardList: TNetworkCardAdapterList);
+
+  function DumpIpAdresses(const AIpAddresses: TIpAddresses): string;
+  var
+    j: Integer;
+    Separator: string;
+
+  begin
+    Result := EmptyStr;
+    Separator := EmptyStr;
+    for j := Low(AIpAddresses) to High(AIpAddresses) do
+    begin
+      Result := Result + Separator + AIpAddresses[j].Address + '/' + AIpAddresses[j].Subnet;
+      Separator := ', ';
+    end;
+  end;
+
+var
+  i: Integer;
+  NetworkCardAdapter: TNetworkCardAdapter;
+
+begin
+  for i := Low(ANetworkAdapterCardList) to High(ANetworkAdapterCardList) do
+  begin
+    NetworkCardAdapter := ANetworkAdapterCardList[i];
+    WriteLn(
+      'Interface #', i, sLineBreak,
+      '    NetworkCardName: ', NetworkCardAdapter.NetworkCardName, sLineBreak,
+      '    InterfaceIndex: ', NetworkCardAdapter.InterfaceIndex, sLineBreak,
+      '    MacAddress: ', NetworkCardAdapter.MacAddress, sLineBreak,
+      '    IPv4Addresses: ', DumpIpAdresses(NetworkCardAdapter.IPv4Addresses), sLineBreak,
+      '    IPv6Addresses: ', DumpIpAdresses(NetworkCardAdapter.IPv6Addresses), sLineBreak,
+      sLineBreak
+    );
+  end;
+end;
+{$ENDIF}
 
 end.
 
