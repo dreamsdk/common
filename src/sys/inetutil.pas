@@ -262,11 +262,11 @@ var
     end;
 
   begin
-  {$IFDEF DEBUG}
-  {$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
+{$IFDEF DEBUG}
+{$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
     DebugLog('      Network Card GUID: ' + SettingID);
-  {$ENDIF}
-  {$ENDIF}
+{$ENDIF}
+{$ENDIF}
     Result := False;
     AIpAddress := EmptyStr;
     AIpSubnet := EmptyStr;
@@ -280,7 +280,7 @@ var
 
       if Result then
       begin
-        ici il faut appeler  _HandleIpAddressesFromWMI
+//        ici il faut appeler  _HandleIpAddressesFromWMI
       end;
     finally
       FreeAndNil(Reg);
@@ -288,6 +288,12 @@ var
   end;
 
 begin
+{$IFDEF DEBUG}
+{$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
+  DebugLog('*** GetNetworkCardAdapterList: Start');
+{$ENDIF}
+{$ENDIF}
+
   Result := False;
   ANetworkAdapterCardList := Default(TNetworkCardAdapterList);
   SetLength(ANetworkAdapterCardList, 0);
@@ -318,6 +324,12 @@ begin
       MacAddress := SanitizeMediaAccessControlAddress(
         GetWindowsManagementInstrumentationSingleValueByPropertyName(NetworkAdapter, 'MACAddress', i));
 
+{$IFDEF DEBUG}
+{$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
+      DebugLog('Processing NetworkAdapter: ' + MacAddress);
+{$ENDIF}
+{$ENDIF}
+
       if IsValidMediaAccessControlAddress(MacAddress) then
       begin
         // Valid MAC Address, handle this Network Adapter
@@ -347,6 +359,12 @@ begin
       MacAddress := SanitizeMediaAccessControlAddress(
         GetWindowsManagementInstrumentationSingleValueByPropertyName(NetworkAdapterConfiguration, 'MACAddress', i));
 
+{$IFDEF DEBUG}
+{$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
+      DebugLog('Processing NetworkAdapterConfiguration: ' + MacAddress);
+{$ENDIF}
+{$ENDIF}
+
       if IsValidMediaAccessControlAddress(MacAddress) then
       begin
         CurrentCardItemIndex := machin__.IndexOf(MacAddress);
@@ -375,8 +393,10 @@ begin
 
 {$IFDEF DEBUG}
 {$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
-  WriteLn('GetNetworkCardAdapterList, Result: ', Result);
+  DebugLog('Dumping ANetworkAdapterCardList:');
   DumpNetworkCardAdapterList(ANetworkAdapterCardList);
+  DebugLog(sLineBreak + '*** GetNetworkCardAdapterList: End [Result: '
+    + BoolToStr(Result, 'TRUE', 'FALSE') + ']');
 {$ENDIF}
 {$ENDIF}
 end;
@@ -852,20 +872,23 @@ procedure DumpNetworkCardAdapterList(
 var
   i: Integer;
   NetworkCardAdapter: TNetworkCardAdapter;
+  Separator: string;
 
 begin
+  Separator := EmptyStr;
   for i := Low(ANetworkAdapterCardList) to High(ANetworkAdapterCardList) do
   begin
     NetworkCardAdapter := ANetworkAdapterCardList[i];
     WriteLn(
-      'Interface #', i, sLineBreak,
-      '    NetworkCardName: ', NetworkCardAdapter.NetworkCardName, sLineBreak,
-      '    InterfaceIndex: ', NetworkCardAdapter.InterfaceIndex, sLineBreak,
-      '    MacAddress: ', NetworkCardAdapter.MacAddress, sLineBreak,
-      '    IPv4Addresses: ', DumpIpAdresses(NetworkCardAdapter.IPv4Addresses), sLineBreak,
-      '    IPv6Addresses: ', DumpIpAdresses(NetworkCardAdapter.IPv6Addresses), sLineBreak,
-      sLineBreak
+      Separator,
+      'Interface #', i, ':', sLineBreak,
+      '  NetworkCardName: ', NetworkCardAdapter.NetworkCardName, sLineBreak,
+      '  InterfaceIndex: ', NetworkCardAdapter.InterfaceIndex, sLineBreak,
+      '  MacAddress: ', NetworkCardAdapter.MacAddress, sLineBreak,
+      '  IPv4Addresses: ', DumpIpAdresses(NetworkCardAdapter.IPv4Addresses), sLineBreak,
+      '  IPv6Addresses: ', DumpIpAdresses(NetworkCardAdapter.IPv6Addresses)
     );
+    Separator := sLineBreak;
   end;
 end;
 {$ENDIF}
