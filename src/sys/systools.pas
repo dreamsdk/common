@@ -79,27 +79,25 @@ uses
 {$ENDIF}
   RunTools,
   FSTools,
-  Version;
+  Version,
+  UtilWMI;
 
 function GetUserList(var UserList: TStringList): Boolean;
 var
   i: Integer;
-  OutputBuffer: string;
+  UserAccounts: TWindowsManagementInstrumentationQueryResult;
 
 begin
   Result := False;
   if Assigned(UserList) then
   begin
-    OutputBuffer := EmptyStr;
-    Result := RunWmic('UserAccount where "LocalAccount = True and Disabled = False" get Name',
-      OutputBuffer);
-
-    if Result then
-    begin
-      UserList.Text := OutputBuffer;
-      for i := 0 to UserList.Count - 1 do
-        UserList[i] := Trim(UserList[i]);
-    end;
+    UserAccounts := QueryWindowsManagementInstrumentation('Win32_UserAccount',
+      ['Name'], 'LocalAccount = TRUE and Disabled = FALSE and SIDType = 1 and not Name like ''%$''');
+    for i := Low(UserAccounts) to High(UserAccounts) do
+      UserList.Add(
+        Trim(GetWindowsManagementInstrumentationSingleValueByPropertyName(UserAccounts, 'Name', i))
+      );
+    Result := (UserList.Count > 0);
   end;
 end;
 
@@ -513,13 +511,14 @@ end;
 
 function GetUserFullNameFromUserName(const UserName: string): string;
 var
-  OutputBuffer: string;
+  UserAccount: TWindowsManagementInstrumentationQueryResult;
 
 begin
-  Result := EmptyStr;
-  OutputBuffer := EmptyStr;
-  if RunWmic(Format('UserAccount where Name=''%s'' get FullName', [UserName]), OutputBuffer) then
-    Result := Trim(OutputBuffer);
+  UserAccount := QueryWindowsManagementInstrumentation(
+    'Win32_UserAccount', ['FullName'], Format('Name = ''%s''', [UserName]));
+  Result := Trim(
+    GetWindowsManagementInstrumentationSingleValueByPropertyName(UserAccount, 'FullName', 0)
+  );
 end;
 
 function GetFriendlyUserName(const UserName: string): string;

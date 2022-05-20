@@ -32,7 +32,6 @@ function RunSingleCommand(const FullCommandLine: string;
   var OutputBuffer: string; var ProcessExitCode: Integer): Boolean; overload;
 function RunSingleCommandUTF16(const FullCommandLine: string;
   var OutputBuffer: string; var ProcessExitCode: Integer): Boolean;
-function RunWmic(CommandLine: string; var OutputBuffer: string): Boolean;
 
 implementation
 
@@ -53,9 +52,6 @@ uses
   , UTF8Process,
 {$ENDIF}
   FSTools;
-
-const
-  WMIC_TEMP_FILE = 'TempWmicBatchFile.bat';
 
 function ParseProcessParameters(const CommandLine: string): string;
 begin
@@ -347,39 +343,6 @@ begin
   Result := RunSingleCommandInternal(FullCommandLine, ProcessExitCode,
     OutputBuffer, @LoadUTF16FileToString);
 end;
-
-function RunWmic(CommandLine: string; var OutputBuffer: string): Boolean;
-var
-  Buffer: TStringList;
-  ProcessExitCode: Integer;
-  TempBuffer: string;
-
-begin
-  Result := False;
-  Buffer := TStringList.Create;
-  try
-    TempBuffer := EmptyStr;
-    ProcessExitCode := Default(Integer);
-
-    Result := RunSingleCommandUTF16(Format('echo. | wmic /interactive:off %s', [CommandLine]),
-      TempBuffer, ProcessExitCode);
-    KillFile(WMIC_TEMP_FILE);
-
-    if Result then
-    begin
-      Buffer.Text := TempBuffer;
-      if Buffer.Count > 0 then
-        Buffer.Delete(0); // remove header
-    end;
-
-    OutputBuffer := Buffer.Text;
-  finally
-    Buffer.Free;
-  end;
-end;
-
-finalization
-  KillFile(WMIC_TEMP_FILE);
 
 end.
 
