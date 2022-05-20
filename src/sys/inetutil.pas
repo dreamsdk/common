@@ -54,7 +54,6 @@ uses
   FPHTTPClient,
   RegExpr,
   SysTools,
-  RunTools,
   FSTools,
   Version,
   RegTools,
@@ -390,7 +389,7 @@ begin
     end;
 
     // Analyzing NetworkAdapterConfiguration
-    Result := (Length(NetworkAdapterConfiguration) > 0); // Initialization, this will be reset by the loop below
+    Result := False; // Initialization, this will be reset by the loop below
     for i := Low(NetworkAdapterConfiguration) to High(NetworkAdapterConfiguration) do
     begin
       MacAddress := SanitizeMediaAccessControlAddress(
@@ -422,7 +421,7 @@ begin
             );
 
           // Saving the result...
-          Result := Result and IsIpAddressExtractSuccess;
+          Result := Result or IsIpAddressExtractSuccess;
         end;
       end;
     end;
