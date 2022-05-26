@@ -36,6 +36,7 @@ interface
 uses
   Classes, SysUtils;
 
+function CompareVersion(Version1, Version2: string): Integer;
 function GetComments: string;
 function GetFileDescription: string;
 function GetFileVersion: string;
@@ -383,6 +384,72 @@ else
 begin
 Result := True;
 {$endif}
+end;
+
+// Compares two version numbers, returns -1 if Version1 is newer, 0 if both are identical, 1 if Version2 is newer
+function CompareVersion(Version1, Version2: string): Integer;
+type
+  TSimpleIntegerArray = array of Integer;
+
+var
+  verA,
+  verB: TSimpleIntegerArray;
+  i, Len: Integer;
+
+  function _ParseVersion(const Version: string): TSimpleIntegerArray;
+  var
+    Buffer: TStringArray;
+    i: Integer;
+
+  begin
+    Result := Default(TSimpleIntegerArray);
+    Buffer := Trim(Version).Split('.');
+    for i := Low(Buffer) to High(Buffer) do
+      Insert(StrToIntDef(Buffer[i], 0), Result, MaxInt);
+  end;
+
+begin
+  Version1 := Trim(Version1);
+  Version2 := Trim(Version2);
+
+{$IFDEF DEBUG}
+  WriteLn(Format('Comparing Version "%s" with "%s"...', [Version1, Version2]));
+{$ENDIF}
+
+  verA := _ParseVersion(Version1);
+  verB := _ParseVersion(Version2);
+
+  len := Length(verA);
+  if Length(verB) < len then
+    len := Length(verB);
+
+  for i := 0 to len - 1 do
+    if verA[i] < verB[i] then
+    begin
+      Result := 1;
+{$IFDEF DEBUG}
+      WriteLn('  Result = 1');
+{$ENDIF}
+      Exit;
+    end
+    else if verA[i] > verB[i] then
+    begin
+      Result := -1;
+{$IFDEF DEBUG}
+      WriteLn('  Result = -1');
+{$ENDIF}
+      Exit;
+    end;
+
+  Result := 0;
+  if (Length(verA) < Length(verB)) then
+    Result := 1
+  else if (Length(verA) > Length(verB)) then
+    Result := -1;
+
+{$IFDEF DEBUG}
+  WriteLn('  Result = ', Result);
+{$ENDIF}
 end;
 
 Initialization
