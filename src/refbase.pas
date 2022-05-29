@@ -109,7 +109,7 @@ begin
       // Fail-safe: this points to the X:\DreamSDK\ directory
       if IsEmpty(InstallationBaseDirectory)
         or (not DirectoryExists(InstallationBaseDirectory)) then
-          InstallationBaseDirectory := GetApplicationPath + '..\..\..\..\';
+          InstallationBaseDirectory := Left(MSYS_BASE_DIRECTORY, GetApplicationPath);
 {$IFDEF DEBUG}
       DebugLog('  InstallationBaseDirectory fail-safe: ' + InstallationBaseDirectory);
 {$ENDIF}
