@@ -41,7 +41,8 @@ function ExtractStr(LeftSubStr, RightSubStr, S: string): string;
 function ExtremeRight(SubStr: string; S: string): string;
 function GetSubStrCount(SubStr, S: string): Integer;
 function GetEveryoneName: string;
-function GetFileLocationInSystemPath(const FileName: TFileName): TFileName;
+function GetFileLocationsInSystemPath(const FileName: TFileName;
+  Output: TStringList): Boolean;
 function GetFriendlyUserName(const UserName: string): string;
 function GetParentProcessIdFromProcessId(const ProcessId: LongWord): LongWord;
 function GetProcessIdFromParentProcessId(const ParentProcessId: LongWord): LongWord;
@@ -323,6 +324,7 @@ const
   MAXSIZE = 32768;
 
 begin
+  Result := EmptyStr;
   SetLength(Result, MAXSIZE);
   SetLength(Result, Windows.ExpandEnvironmentStrings(PChar(InputString), @Result[1], Length(Result)) - 1);
 {$ELSE}
@@ -609,46 +611,36 @@ begin
     Format('%s=%s', [LOGONSERVER_ENVIRONMENT_VARIABLE, LogonServerValue]));
 end;
 
-function GetFileLocationInSystemPath(const FileName: TFileName): TFileName;
+function GetFileLocationsInSystemPath(const FileName: TFileName;
+  Output: TStringList): Boolean;
+const
+  PATH_ENV_VAR = 'PATH';
+  PATH_SEPARATOR = ';';
+
 var
+  FullFileName: TFileName;
   Buffer: TStringList;
-  BatchFileName: TFileName;
+  i: Integer;
 
 begin
-  // Generating the whereis.bat utility
-  // WhereIS by Claus (https://superuser.com/a/544988/436364)
-  // Fixed by Gurce
-  BatchFileName := ChangeFileExt(GetTemporaryFileName, '.bat');
-  Buffer := TStringList.Create;
-  try
-    Buffer.Add('@echo off');
-    Buffer.Add('setlocal EnableDelayedExpansion');
-    Buffer.Add('set var_a=%1');
-    Buffer.Add('call :sub %var_a%');
-    Buffer.Add('if exist "%var_b%" goto exit');
-    Buffer.Add('for %%i in ( .com .exe .cmd .bat ) do (');
-    Buffer.Add(' call :sub %var_a%%%i');
-    Buffer.Add(' if exist !var_b! goto exit');
-    Buffer.Add(')');
-    Buffer.Add('set "var_a="');
-    Buffer.Add('set "var_b="');
-    Buffer.Add('exit /b 1');
-    Buffer.Add(':sub');
-    Buffer.Add('set var_b=%~$PATH:1');
-    Buffer.Add('goto :EOF');
-    Buffer.Add(':exit');
-    Buffer.Add('echo %var_b%');
-    Buffer.Add('set "var_a="');
-    Buffer.Add('set "var_b="');
-    Buffer.Add('exit /b 0');
-    Buffer.SaveToFile(BatchFileName);
-  finally
-    Buffer.Free;
+  Result := False;
+  if Assigned(Output) then
+  begin
+    Buffer := TStringList.Create;
+    try
+      StringToStringList(SysUtils.GetEnvironmentVariable(PATH_ENV_VAR),
+        PATH_SEPARATOR, Buffer);
+      for i := 0 to Buffer.Count - 1 do
+      begin
+        FullFileName := IncludeTrailingPathDelimiter(Buffer[i]) + FileName;
+        if FileExists(FullFileName) then
+          Output.Add(FullFileName);
+      end;
+      Result := (Output.Count > 0);
+    finally
+      Buffer.Free;
+    end;
   end;
-
-  Result := Trim(Run(BatchFileName, FileName));
-
-  KillFile(BatchFileName);
 end;
 
 function GetParentProcessIdFromProcessId(const ProcessId: LongWord): LongWord;
