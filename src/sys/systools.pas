@@ -79,7 +79,6 @@ uses
   Forms,
 {$ENDIF}
   RunTools,
-  FSTools,
   Version,
   UtilWMI;
 

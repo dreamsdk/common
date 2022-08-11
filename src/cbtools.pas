@@ -32,6 +32,12 @@ function GetCodeBlocksConfigurationFileNames(AvailableConfigurationFileNames: TF
 procedure GetCodeBlocksAvailableUsers(AvailableUsers: TStringList);
 function GetCodeBlocksDefaultInstallationDirectory: TFileName;
 procedure InitializeCodeBlocksProfiles;
+{$IFDEF ENABLE_CBTOOLS_SAVE_CB_VERSION}
+procedure DeleteCodeBlocksVersionFileFromInstallationDirectory(
+  InstallationDirectory: TFileName);
+procedure SaveCodeBlocksVersionToInstallationDirectory(
+  const CodeBlocksVersion: TCodeBlocksVersion; InstallationDirectory: TFileName);
+{$ENDIF}
 
 implementation
 
@@ -47,7 +53,8 @@ type
   end;
 
 const
-  CODEBLOCKS_ORIGINAL_FILE_CHECKER = 'codeblocks.dll';
+  CODEBLOCKS_VERSION_FILE = 'dreamsdk.bin';
+  CODEBLOCKS_ORIGINAL_CHECKER_FILE = 'codeblocks.dll';
   CODEBLOCKS_SUPPORTED_HASHES: array [0..2] of TCodeBlocksSupportedVersion = (
     (
       MD5HashString: '1575beba73a3ea34465fad9f55fd098a';
@@ -61,7 +68,7 @@ const
       MD5HashString: '998040f792a0c36c85490b384ae1d3f0';
       Version: cbv2003x64
     )
-);
+  );
 
 function CodeBlocksVersionToString(const CodeBlocksVersion: TCodeBlocksVersion): string;
 begin
@@ -224,8 +231,10 @@ function GetCodeBlocksVersion(InstallationDirectory: TFileName;
 var
   i: Integer;
   CheckerFileName: TFileName;
+  Buffer,
   CheckerFileHash: string;
   FileInfo: TCodeBlocksSupportedVersion;
+  PatchedVersionFileName: TFileName;
 
 begin
   Result := cbvUndefined; // C::B is not installed/detected
@@ -233,20 +242,39 @@ begin
   if ExpandInstallationDirectory then
     InstallationDirectory := ParseInputFileSystemObject(InstallationDirectory);
 
-  CheckerFileName := IncludeTrailingPathDelimiter(InstallationDirectory)
-    + CODEBLOCKS_ORIGINAL_FILE_CHECKER;
-
-  if FileExists(CheckerFileName) then
+  // Check if this C::B install has already been patched
+  PatchedVersionFileName := IncludeTrailingPathDelimiter(InstallationDirectory)
+    + CODEBLOCKS_VERSION_FILE;
+  if FileExists(PatchedVersionFileName) then
   begin
-    Result := cbvUnknown; // C::B is installed but version is unknown (atm)
-    CheckerFileHash := LowerCase(MD5Print(MD5File(CheckerFileName)));
-    i := Low(CODEBLOCKS_SUPPORTED_HASHES);
-    while (Result = cbvUnknown) and (i <= High(CODEBLOCKS_SUPPORTED_HASHES)) do
+    Buffer := LoadFileToString(PatchedVersionFileName);
+    try
+      // In that case, C::B has been patched so we read the version from a special file
+      Result := TCodeBlocksVersion(StrToInt(Buffer));
+    except
+      // Silent exception if not possible to parse the file...
+      Result := cbvUndefined; // Still undefined
+    end;
+  end;
+
+  // Try to determine the C::B version by parsing the hash of "codeblocks.dll"
+  if (Result = cbvUndefined) then
+  begin
+    CheckerFileName := IncludeTrailingPathDelimiter(InstallationDirectory)
+      + CODEBLOCKS_ORIGINAL_CHECKER_FILE;
+
+    if FileExists(CheckerFileName) then
     begin
-      FileInfo := CODEBLOCKS_SUPPORTED_HASHES[i];
-      if (FileInfo.MD5HashString = CheckerFileHash) then
-        Result := FileInfo.Version; // we found the C::B version and it's supported!
-      Inc(i);
+      Result := cbvUnknown; // C::B is installed but version is unknown (atm)
+      CheckerFileHash := LowerCase(MD5Print(MD5File(CheckerFileName)));
+      i := Low(CODEBLOCKS_SUPPORTED_HASHES);
+      while (Result = cbvUnknown) and (i <= High(CODEBLOCKS_SUPPORTED_HASHES)) do
+      begin
+        FileInfo := CODEBLOCKS_SUPPORTED_HASHES[i];
+        if (FileInfo.MD5HashString = CheckerFileHash) then
+          Result := FileInfo.Version; // we found the C::B version and it's supported!
+        Inc(i);
+      end;
     end;
   end;
 end;
@@ -290,5 +318,31 @@ begin
     MissingConfigurationFileNames.Free;
   end;
 end;
+
+{$IFDEF ENABLE_CBTOOLS_SAVE_CB_VERSION}
+
+procedure SaveCodeBlocksVersionToInstallationDirectory(
+  const CodeBlocksVersion: TCodeBlocksVersion; InstallationDirectory: TFileName);
+var
+  PatchedVersionFileName: TFileName;
+
+begin
+  PatchedVersionFileName := IncludeTrailingPathDelimiter(InstallationDirectory)
+    + CODEBLOCKS_VERSION_FILE;
+  SaveStringToFile(IntToStr(Integer(CodeBlocksVersion)), PatchedVersionFileName);
+end;
+
+procedure DeleteCodeBlocksVersionFileFromInstallationDirectory(
+  InstallationDirectory: TFileName);
+var
+  PatchedVersionFileName: TFileName;
+
+begin
+  PatchedVersionFileName := IncludeTrailingPathDelimiter(InstallationDirectory)
+    + CODEBLOCKS_VERSION_FILE;
+  KillFile(PatchedVersionFileName);
+end;
+
+{$ENDIF}
 
 end.

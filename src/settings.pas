@@ -13,7 +13,7 @@ uses
 const
   SETTINGS_FILE_NAME = 'dreamsdk.conf';
 
-  // Repositories
+  // Default repositories URLs (can be overriden in DreamSDK Manager)
   DEFAULT_KALLISTI_URL = 'https://git.code.sf.net/p/cadcdev/kallistios';
   DEFAULT_KALLISTI_PORTS_URL = 'https://git.code.sf.net/p/cadcdev/kos-ports';
   DEFAULT_DREAMCAST_TOOL_SERIAL_URL = 'https://gitlab.com/kallistios/dcload-serial.git';
@@ -161,6 +161,7 @@ type
     fAvailableConfigurationFileNames: TFileList;
     fInstallationDirectory: TFileName;
     function GetHomeDirectory: TFileName;
+    function GetInstalled: Boolean;
     function GetRegistryFileName: TFileName;
     procedure SetBackupDirectory(AValue: TFileName);
     procedure SetExportLibraryInformation(AValue: Boolean);
@@ -217,7 +218,16 @@ type
       read GetHomeDirectory
       write SetHomeDirectory;
 
+    (* This is equals to True if the patch for C::B has been installed.
+       This property is overriden to False if the installation is now invalid.
+       This could happens for example if the patch has been installed and C::B
+       has been uninstalled after the patch installation. *)
     property Installed: Boolean
+      read GetInstalled;
+
+    (* This is equals to True if ther patch for C::B has been installed in the past.
+       This property is not overriden. *)
+    property MarkedAsInstalled: Boolean
       read fInstalled;
   end;
 
@@ -289,7 +299,10 @@ function SerialBaudrateToString(SerialBaudrate: TDreamcastToolSerialBaudrate): s
 implementation
 
 uses
-  RefBase, SysTools, Version, CBTools;
+  RefBase,
+  SysTools,
+  Version,
+  CBTools;
 
 const
   // Code::Blocks Backup Directory (for previous install)
@@ -548,6 +561,12 @@ begin
 {$ENDIF}
 end;
 
+function TDreamcastSoftwareDevelopmentSettingsCodeBlocks.GetInstalled: Boolean;
+begin
+  Result := fInstalled and DirectoryExists(InstallationDirectory)
+    and (GetCodeBlocksVersion(InstallationDirectory) <> cbvUndefined);
+end;
+
 procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocks
   .SetBackupDirectory(AValue: TFileName);
 begin
@@ -635,7 +654,7 @@ begin
   begin
     IniFile := TIniFile.Create(GetRegistryFileName);
     try
-      // Global C::B
+      // Global C::B flag to know if patcher was installed
       fInstalled := IniFile.ReadBool(CONFIG_IDE_SECTION_GLOBAL,
         CONFIG_IDE_SECTION_GLOBAL_KEY_CODEBLOCKS, fInstalled);
 
@@ -928,7 +947,7 @@ begin
   IniFile := TIniFile.Create(FileName);
   try
     // Settings
-    DefaultInstallationPath := ExpandFileName(GetApplicationPath + '..\..\..\..\');
+    DefaultInstallationPath := GetInstallationBaseDirectory;
     fInstallPath := IncludeTrailingPathDelimiter(
       IniFile.ReadString(
         CONFIG_DREAMSDK_SECTION_SETTINGS,
