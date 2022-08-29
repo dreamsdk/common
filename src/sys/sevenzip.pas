@@ -9,9 +9,6 @@ uses
   SysUtils,
   RunCmd;
 
-const
-  EMBEDDED_7ZIP = 'SEVENZIP';
-
 type
   TSevenZipProgressValueEvent = procedure(Sender: TObject; const CurrentValue: Integer;
     const TotalValue: Integer) of object;
@@ -90,7 +87,7 @@ function UncompressLzmaFile(const FileName, OutputDirectory: TFileName): Boolean
 
 implementation
 
-{$R embedded.rc}
+{$R embedded/sevenzip.rc}
 
 uses
   SysTools,
@@ -98,7 +95,8 @@ uses
   RunTools;
 
 const
-  SEVENZIP_FILE = '7za.exe';
+  EMBEDDED_RESOURCE_SEVENZIP = 'SEVENZIP';
+  EMBEDDED_FILENAME_SEVENZIP = '7za.exe';
   SUCCESS_MESSAGE = 'Everything is Ok';
   RECORD_NODE_TERMINATED = '#|#TERMINATED#|#';
   PERCENT_MAX_VALUE = 100;
@@ -359,7 +357,8 @@ end;
 
 initialization
   if not FileExists(SevenZipFileName) then
-    SevenZipFileName := ExtractEmbeddedFileToWorkingPath(EMBEDDED_7ZIP, SEVENZIP_FILE);
+    SevenZipFileName := ExtractEmbeddedFileToWorkingPath(
+      EMBEDDED_RESOURCE_SEVENZIP, EMBEDDED_FILENAME_SEVENZIP);
 
 finalization
   KillFile(SevenZipFileName);

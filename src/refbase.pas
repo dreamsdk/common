@@ -20,6 +20,7 @@ implementation
 
 uses
 {$IFDEF GUI}
+  Interfaces,
   Dialogs,
   MsgDlg,
 {$ENDIF}

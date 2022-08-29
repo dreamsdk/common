@@ -20,7 +20,9 @@ const
   ArraySeparator = '|';
 
   sError = 'Error';
+{$IFDEF DEBUG}
   sDebugLogTitle = 'DebugLog';
+{$ENDIF}
 
   STRING_DATE_FORMAT = 'YYYY-MM-DD @ HH:mm:ss';
   ACL_RIGHT_FULL = 'F';
@@ -76,7 +78,11 @@ uses
   LazUTF8,
   LConvEncoding,
 {$IFDEF GUI}
+  Interfaces,
   Forms,
+{$ENDIF}
+{$IFDEF DEBUG}
+  DbgLog,
 {$ENDIF}
   RunTools,
   Version,
@@ -220,14 +226,21 @@ end;
 
 {$IFDEF DEBUG}
 procedure DebugLog(const Message: string);
+{$IFNDEF CONSOLE}
+var
+  MsgHandle: THandle;
+{$ENDIF}
 begin
 {$IFDEF CONSOLE}
   WriteLn(Message);
 {$ELSE}
+  MsgHandle := 0;
 {$IFDEF GUI}
-  MessageBox(Application.Handle, PChar(Trim(Message)), sDebugLogTitle,
-    MB_ICONINFORMATION + MB_OK);
+  MsgHandle := Application.Handle;
 {$ENDIF}
+  if not DbgLog.DebugLog(Message) then
+    MessageBox(MsgHandle, PChar(Trim(Message)), sDebugLogTitle,
+      MB_ICONINFORMATION + MB_OK);
 {$ENDIF}
 end;
 {$ENDIF}

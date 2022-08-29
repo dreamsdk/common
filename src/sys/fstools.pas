@@ -40,6 +40,7 @@ type
 function ExtractDirectoryName(const DirectoryName: string): string;
 function ExtractEmbeddedFileToWorkingPath(const ResourceName: string;
   const FileName: TFileName): TFileName;
+procedure ForceWorkingPathCleanup;
 function GetApplicationPath: TFileName;
 function GetFileHash(const FileName: TFileName): string;
 function GetProgramName: string;
@@ -75,6 +76,7 @@ uses
   FileUtil,
   MD5,
 {$IFDEF GUI}
+  Interfaces,
   Forms,
 {$ENDIF}
   Zipper,
@@ -543,6 +545,11 @@ begin
   Add(Values, Delimiter);
 end;
 
+procedure ForceWorkingPathCleanup;
+begin
+  KillDirectory(WorkingPath);
+end;
+
 initialization
   Randomize;
   WorkingPath := IncludeTrailingPathDelimiter(
@@ -550,7 +557,7 @@ initialization
   ForceDirectories(WorkingPath);
 
 finalization
-  KillDirectory(WorkingPath);
+  ForceWorkingPathCleanup;
 
 end.
 

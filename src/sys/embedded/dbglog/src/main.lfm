@@ -1,0 +1,31 @@
+object frmMain: TfrmMain
+  Left = 413
+  Height = 200
+  Top = 285
+  Width = 640
+  BorderStyle = bsSizeToolWin
+  Caption = '(%DYNAMIC%)'
+  ClientHeight = 200
+  ClientWidth = 640
+  FormStyle = fsSystemStayOnTop
+  OnClose = FormClose
+  OnCreate = FormCreate
+  PopupMode = pmAuto
+  Position = poScreenCenter
+  LCLVersion = '2.2.2.0'
+  object memDebugLog: TMemo
+    Left = 0
+    Height = 200
+    Top = 0
+    Width = 640
+    Align = alClient
+    Font.CharSet = ANSI_CHARSET
+    Font.Name = 'Courier New'
+    Font.Pitch = fpFixed
+    Font.Quality = fqDraft
+    ParentFont = False
+    ScrollBars = ssAutoBoth
+    TabOrder = 0
+    WordWrap = False
+  end
+end

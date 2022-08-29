@@ -11,6 +11,7 @@ uses
   Graphics,
   Classes,
   SysUtils,
+  Interfaces,
   Controls,
   ExtCtrls;
 
@@ -22,7 +23,10 @@ procedure SetWindowIconForProcessId(const ProcessID: LongWord;
   const IconResourceName: string); overload;
 procedure SetWindowIconForProcessId(const ProcessID: LongWord); overload;
 function GetWindowTitle(const AWindowHandle: THandle): string;
-function SetWindowTitle(const AWindowHandle: THandle; const NewTitle: string): Boolean;
+function SetWindowTitle(const AWindowHandle: THandle;
+  const NewTitle: string): Boolean;
+procedure WaitForWindowCreationForProcessId(const ProcessId: LongWord;
+  const MaxTries: Integer = 10; MillisecondsBetweenTries: LongWord = 100);
 
 implementation
 
@@ -36,7 +40,7 @@ type
     HandleList: TList;
   end;
 
-function EnumWindowsProc(WinHandle: THandle; lParam: LPARAM): LongBool; stdcall;
+function EnumWindowsProc(hwnd: HWND; lParam: LPARAM): LongBool; stdcall;
 var
   dwProcessId: LongWord;
   
@@ -45,10 +49,10 @@ begin
   dwProcessId := 0;
   if lParam <> 0 then
   begin
-    GetWindowThreadProcessId(WinHandle, dwProcessId);
-    with PFindWindowsStruct(lParam)^ do
+    GetWindowThreadProcessId(hwnd, dwProcessId);
+    with {%H-}PFindWindowsStruct(lParam)^ do
 	    if dwProcessID = ProcessID then
-        HandleList.Add(Pointer(WinHandle));
+        HandleList.Add({%H-}Pointer(hwnd));
     Result:= True;
   end;
 end;
@@ -61,7 +65,7 @@ var
 begin
   FindWindowsStruct.ProcessID := ProcessID;
   FindWindowsStruct.HandleList := Handles;
-  Result := EnumWindows(@EnumWindowsProc, LongWord(@FindWindowsStruct));
+  Result := EnumWindows(@EnumWindowsProc, {%H-}IntPtr(@FindWindowsStruct));
 end; 
 	
 function IsAeroEnabled: Boolean;
@@ -155,7 +159,7 @@ begin
     FindProcessWindows(ProcessID, WinHandles);
     for i:= 0 to WinHandles.Count - 1 do
     begin
-      WinHandle := THandle(WinHandles[i]);
+      WinHandle := {%H-}THandle(WinHandles[i]);
       SendMessage(WinHandle, WM_SETICON, ICON_BIG, LParam(BigIcon));
       SendMessage(WinHandle, WM_SETICON, ICON_SMALL, LParam(SmallIcon));
     end;
@@ -190,6 +194,27 @@ function SetWindowTitle(const AWindowHandle: THandle;
   const NewTitle: string): Boolean;
 begin
   Result := SetWindowText(AWindowHandle, PChar(NewTitle))
+end;
+
+procedure WaitForWindowCreationForProcessId(const ProcessId: LongWord;
+  const MaxTries: Integer = 10; MillisecondsBetweenTries: LongWord = 100);
+var
+  WinHandles: TList;
+  i: Integer;
+
+begin
+  WinHandles := TList.Create;
+  try
+    for i := 0 to MaxTries - 1 do
+    begin
+      if FindProcessWindows(ProcessId, WinHandles) then
+        if WinHandles.Count > 0 then
+          Break;
+      Sleep(MillisecondsBetweenTries);
+    end;
+  finally
+    WinHandles.Free;
+  end;
 end;
 
 end.
