@@ -145,7 +145,6 @@ initialization
 
 finalization
   FreeClient;
-  ForceWorkingPathCleanup;
 
 end.
 

@@ -40,7 +40,6 @@ type
 function ExtractDirectoryName(const DirectoryName: string): string;
 function ExtractEmbeddedFileToWorkingPath(const ResourceName: string;
   const FileName: TFileName): TFileName;
-procedure ForceWorkingPathCleanup;
 function GetApplicationPath: TFileName;
 function GetFileHash(const FileName: TFileName): string;
 function GetProgramName: string;
@@ -208,37 +207,40 @@ begin
   Result := False;
 
   CurSrcDir := CleanAndExpandDirectory(DirectoryName);
-  if FindFirstUTF8(CurSrcDir + GetAllFilesMask, faAnyFile, FileInfo) = 0 then
+  if DirectoryExists(CurSrcDir) then
   begin
-    repeat
-      // Ignore directories and files without name:
-      if (FileInfo.Name <> '.') and (FileInfo.Name <> '..') and (FileInfo.Name <> '') then
-      begin
-        // Remove all files and directories in this directory:
-        CurFileName := CurSrcDir + FileInfo.Name;
-        // Remove read-only file attribute so we can delete it:
-        if (FileInfo.Attr and faReadOnly) > 0 then
-          FileSetAttrUTF8(CurFileName, FileInfo.Attr - faReadOnly);
-        if (FileInfo.Attr and faDirectory) > 0 then
+    if FindFirstUTF8(CurSrcDir + GetAllFilesMask, faAnyFile, FileInfo) = 0 then
+    begin
+      repeat
+        // Ignore directories and files without name:
+        if (FileInfo.Name <> '.') and (FileInfo.Name <> '..') and (FileInfo.Name <> '') then
         begin
-          // Directory; exit with failure on error
-          if not KillDirectory(CurFileName) then Exit;
-        end
-        else
-        begin
-          // File; exit with failure on error
-          if not DeleteFileUTF8(CurFileName) then Exit;
+          // Remove all files and directories in this directory:
+          CurFileName := CurSrcDir + FileInfo.Name;
+          // Remove read-only file attribute so we can delete it:
+          if (FileInfo.Attr and faReadOnly) > 0 then
+            FileSetAttrUTF8(CurFileName, FileInfo.Attr - faReadOnly);
+          if (FileInfo.Attr and faDirectory) > 0 then
+          begin
+            // Directory; exit with failure on error
+            if not KillDirectory(CurFileName) then Exit;
+          end
+          else
+          begin
+            // File; exit with failure on error
+            if not DeleteFileUTF8(CurFileName) then Exit;
+          end;
         end;
-      end;
-    until FindNextUTF8(FileInfo) <> 0;
+      until FindNextUTF8(FileInfo) <> 0;
+    end;
+    FindCloseUTF8(FileInfo);
+
+    // Remove "root" directory
+    RemoveDirUTF8(DirectoryName);
+
+    // Verify if the required directory exists
+    Result := not DirectoryExists(DirectoryName);
   end;
-  FindCloseUTF8(FileInfo);
-
-  // Remove "root" directory
-  RemoveDirUTF8(DirectoryName);
-
-  // Verify if the required directory exists
-  Result := not DirectoryExists(DirectoryName);
 end;
 
 // Thanks to: GetMem
@@ -545,11 +547,6 @@ begin
   Add(Values, Delimiter);
 end;
 
-procedure ForceWorkingPathCleanup;
-begin
-  KillDirectory(WorkingPath);
-end;
-
 initialization
   Randomize;
   WorkingPath := IncludeTrailingPathDelimiter(
@@ -557,7 +554,7 @@ initialization
   ForceDirectories(WorkingPath);
 
 finalization
-  ForceWorkingPathCleanup;
+  KillDirectory(WorkingPath);
 
 end.
 
