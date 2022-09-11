@@ -51,7 +51,7 @@ begin
   begin
     GetWindowThreadProcessId(hwnd, dwProcessId);
     with {%H-}PFindWindowsStruct(lParam)^ do
-	    if dwProcessID = ProcessID then
+	    if (dwProcessID = ProcessID) and IsWindowVisible(hwnd) then
         HandleList.Add({%H-}Pointer(hwnd));
     Result:= True;
   end;
