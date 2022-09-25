@@ -206,6 +206,10 @@ var
 begin
   Result := False;
 
+  // Fail-safe: don't continue if DirectoryName is empty!
+  if IsEmpty(DirectoryName) then
+    Exit;
+
   CurSrcDir := CleanAndExpandDirectory(DirectoryName);
   if DirectoryExists(CurSrcDir) then
   begin
