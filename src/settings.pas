@@ -959,7 +959,7 @@ begin
     fUseMintty := IniFile.ReadBool(
       CONFIG_DREAMSDK_SECTION_SETTINGS,
       'UseMinTTY',
-      False
+      True // Use MinTTY by default (much better)
     );
 
     fProgressWindowAutoClose := IniFile.ReadBool(
