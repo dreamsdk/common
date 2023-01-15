@@ -14,12 +14,14 @@ const
   MSYS_BASE_DIRECTORY = 'msys\1.0\';
   SETTINGS_DIRECTORY = 'etc\dreamsdk\';
   SETTINGS_SYSTEM_FULL_PATH = MSYS_BASE_DIRECTORY + SETTINGS_DIRECTORY;
-  
+
+function DreamSdkPathToSystem(const UnixPathName: TFileName): TFileName;
 function GetBaseEnvironmentVariableName: string;
 function GetConfigurationDirectory: TFileName;
 function GetInstallationBaseDirectory: TFileName;
 function GetMSysBaseDirectory: TFileName;
 function IsDefinedInstallationBaseDirectoryVariable: Boolean;
+function SystemToDreamSdkPath(const SystemPathName: TFileName): TFileName;
 
 implementation
 
@@ -187,6 +189,19 @@ function GetConfigurationDirectory: TFileName;
 begin
   RetrieveBaseDirectories;
   Result := ConfigurationDirectory;
+end;
+
+function SystemToDreamSdkPath(const SystemPathName: TFileName): TFileName;
+begin
+  Result := StringReplace(SystemPathName, GetMSysBaseDirectory, EmptyStr, []);
+  Result := SystemToUnixPath(Result);
+end;
+
+function DreamSdkPathToSystem(const UnixPathName: TFileName): TFileName;
+begin
+  Result := UnixPathToSystem(UnixPathName);
+  if not DirectoryExists(Result) then
+    Result := GetMSysBaseDirectory + Result;
 end;
 
 {$IFNDEF DISABLE_REFBASE_HOME_DIR_OVERRIDE}

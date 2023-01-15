@@ -60,10 +60,9 @@ procedure SaveStringToFile(const InString: string; FileName: TFileName); overloa
 procedure SaveStringToFile(const InString: string; FileName: TFileName; const Append: Boolean); overload;
 function SetDirectoryRights(const DirectoryFullPath: TFileName;
   const UserName, Rights: string): Boolean;
-function SystemToUnixPath(const UnixPathName: TFileName;
-  const UseUnixRelativePath: Boolean = False): TFileName;
+function SystemToUnixPath(const SystemPathName: TFileName): TFileName;
 function UncompressZipFile(const FileName, OutputDirectory: TFileName): Boolean;
-function UnixPathToSystem(const PathName: TFileName): TFileName;
+function UnixPathToSystem(const UnixPathName: TFileName): TFileName;
 
 implementation
 
@@ -382,16 +381,28 @@ begin
   ExtractEmbeddedResourceToFile(ResourceName, Result);
 end;
 
-function UnixPathToSystem(const PathName: TFileName): TFileName;
+function UnixPathToSystem(const UnixPathName: TFileName): TFileName;
+var
+  AttemptDriveLetter,
+  AttemptPartPath,
+  AttemptFullPath: TFileName;
+
 begin
-  Result := StringReplace(PathName, '/', DirectorySeparator, [rfReplaceAll]);
+  Result := StringReplace(UnixPathName, '/', DirectorySeparator, [rfReplaceAll]);
   Result := IncludeTrailingPathDelimiter(Copy(Result, 2, Length(Result) - 1));
+  if not DirectoryExists(Result) then
+  begin
+    AttemptDriveLetter := Left(DirectorySeparator, Result);
+    AttemptPartPath := Right(DirectorySeparator, Result);
+    AttemptFullPath := AttemptDriveLetter + ':' +  DirectorySeparator + AttemptPartPath;
+    if DirectoryExists(AttemptFullPath) then
+      Result := AttemptFullPath;
+  end;
 end;
 
-function SystemToUnixPath(const UnixPathName: TFileName;
-  const UseUnixRelativePath: Boolean = False): TFileName;
+function SystemToUnixPath(const SystemPathName: TFileName): TFileName;
 begin
-  Result := StringReplace(UnixPathName, DirectorySeparator, '/', [rfReplaceAll]);
+  Result := StringReplace(SystemPathName, DirectorySeparator, '/', [rfReplaceAll]);
   Result := '/' + StringReplace(Result, ':', EmptyStr, [rfReplaceAll]);
 end;
 
