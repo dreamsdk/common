@@ -10,6 +10,11 @@ uses
 type
   EHomeDirectoryNotFound = class(Exception);
 
+const
+  MSYS_BASE_DIRECTORY = 'msys\1.0\';
+  SETTINGS_DIRECTORY = 'etc\dreamsdk\';
+  SETTINGS_SYSTEM_FULL_PATH = MSYS_BASE_DIRECTORY + SETTINGS_DIRECTORY;
+  
 function GetBaseEnvironmentVariableName: string;
 function GetConfigurationDirectory: TFileName;
 function GetInstallationBaseDirectory: TFileName;
@@ -68,14 +73,12 @@ begin
 end;
 
 procedure RetrieveBaseDirectories;
-const
 {$IFNDEF DISABLE_REFBASE_WARNING}
+const
   MSYS_EXCEPTION_MESSAGE = 'DreamSDK Home directory is not found. ' +
     'InstallationBaseDirectory: "%s", ConfigurationDirectory: "%s", ' +
     'ConfigurationDirectory: "%s", CommandLineInstallationDirectory: "%s".';
-{$ENDIF}
-  MSYS_BASE_DIRECTORY = 'msys\1.0\';
-  SETTINGS_DIRECTORY = 'etc\dreamsdk\';
+{$ENDIF}  
 
 {$IFNDEF DISABLE_REFBASE_WARNING}
 var

@@ -309,7 +309,7 @@ const
   DEFAULT_CODEBLOCKS_BACKUP_DIR = '%s\support\ide\codeblocks\';
 
   // Export Library Path for DreamSDK Wizard for Code::Blocks
-  EXPORT_LIBRARY_INFORMATION_DIR = '%s\msys\1.0\etc\dreamsdk\ide\codeblocks\';
+  EXPORT_LIBRARY_INFORMATION_DIR = '%s\' + SETTINGS_SYSTEM_FULL_PATH + 'ide\codeblocks\';
 
   // dreamsdk.conf: sections
   CONFIG_DREAMSDK_SECTION_SETTINGS = 'Settings';
@@ -546,7 +546,7 @@ end;
 function TDreamcastSoftwareDevelopmentSettingsCodeBlocks
   .GetRegistryFileName: TFileName;
 const
-  IDE_CONFIGURATION_FILE = 'msys\1.0\etc\dreamsdk\ide.conf';
+  IDE_CONFIGURATION_FILE = SETTINGS_SYSTEM_FULL_PATH + 'ide.conf';
 
 begin
   Result := IncludeTrailingPathDelimiter(HomeDirectory)

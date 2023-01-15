@@ -51,7 +51,7 @@ uses
   FSTools;
 
 const
-  GREP_FILE_SYSTEM_LOCATION = 'msys\1.0\bin\grep.exe';
+  GREP_FILE_SYSTEM_LOCATION = MSYS_BASE_DIRECTORY + 'bin\grep.exe';
   GET_MODULE_VERSION_SWITCH = '--internal-get-module-version';
   VERSION_REGISTRY_FILE_SYSTEM_LOCATION = 'versions.conf';
 

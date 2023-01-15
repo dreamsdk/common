@@ -60,7 +60,8 @@ procedure SaveStringToFile(const InString: string; FileName: TFileName); overloa
 procedure SaveStringToFile(const InString: string; FileName: TFileName; const Append: Boolean); overload;
 function SetDirectoryRights(const DirectoryFullPath: TFileName;
   const UserName, Rights: string): Boolean;
-function SystemToUnixPath(const UnixPathName: TFileName): TFileName;
+function SystemToUnixPath(const UnixPathName: TFileName;
+  const UseUnixRelativePath: Boolean = False): TFileName;
 function UncompressZipFile(const FileName, OutputDirectory: TFileName): Boolean;
 function UnixPathToSystem(const PathName: TFileName): TFileName;
 
@@ -387,7 +388,8 @@ begin
   Result := IncludeTrailingPathDelimiter(Copy(Result, 2, Length(Result) - 1));
 end;
 
-function SystemToUnixPath(const UnixPathName: TFileName): TFileName;
+function SystemToUnixPath(const UnixPathName: TFileName;
+  const UseUnixRelativePath: Boolean = False): TFileName;
 begin
   Result := StringReplace(UnixPathName, DirectorySeparator, '/', [rfReplaceAll]);
   Result := '/' + StringReplace(Result, ':', EmptyStr, [rfReplaceAll]);

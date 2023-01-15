@@ -63,6 +63,7 @@ uses
   CMem,
 {$ENDIF}
   Interfaces,
+  RefBase,
   Version,
   FSTools,
   UITools;
@@ -209,7 +210,7 @@ end;
 
 procedure TDreamcastSoftwareDevelopmentKitRunner.InitializeEnvironment;
 const
-  BINARY_DIRECTORY = 'msys\1.0\bin\';
+  BINARY_DIRECTORY = MSYS_BASE_DIRECTORY + 'bin\';
 
 begin
   fExecutableMinTTY := Settings.InstallPath + BINARY_DIRECTORY + 'mintty.exe';
