@@ -31,21 +31,34 @@ var
 // Thanks to: Sertac Akyuz
 // https://stackoverflow.com/a/13384920
 function IsJunction(const FileName: string): Boolean;
-//  IO_REPARSE_TAG_MOUNT_POINT = $A0000003;
+const
+  IO_REPARSE_TAG_MOUNT_POINT = $A0000003;
+
 var
   FindHandle: THandle;
   FindData: TWin32FindData;
+
 begin
   Result := False;
   FindData := Default(TWin32FindData);
+
+{$IFDEF DEBUG}
+  DebugLog(Format('IsJunction: "%s"', [FileName]));
+{$ENDIF}
+
   FindHandle := FindFirstFile(PChar(FileName), FindData);
-  if FindHandle <> INVALID_HANDLE_VALUE then begin
+  if FindHandle <> INVALID_HANDLE_VALUE then
+  begin
     Result := (Bool(FindData.dwFileAttributes and FILE_ATTRIBUTE_REPARSE_POINT))
-              and Bool(FindData.dwReserved0 and $80000000) // MS bit
-              and Bool(FindData.dwReserved0 and $20000000) // name surrogate bit
-              and (LoWord(FindData.dwReserved0) = 3); // mount point value
+              and (FindData.dwReserved0 = IO_REPARSE_TAG_MOUNT_POINT);
+
+{$IFDEF DEBUG}
+    DebugLog(Format('  IsJunction ["%s"]: %s', [FileName, DebugBoolToStr(Result)]));
+{$ENDIF}
+
     FindClose(FindHandle);
-  end else
+  end
+  else
     RaiseLastOSError;
 end;
 
@@ -61,6 +74,9 @@ begin
   // If nothing to do, exit
   if DirectoryExists(TargetDirectory) and IsJunction(TargetDirectory) then
   begin
+{$IFDEF DEBUG}
+    DebugLog('Nothing to do, exiting');
+{$ENDIF}
     Result := True;
     Exit;
   end;

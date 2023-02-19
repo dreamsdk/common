@@ -32,7 +32,10 @@ type
   TStringIntegerMap = specialize TFPGMap<string, Integer>;
   TIntegerStringMap = specialize TFPGMap<Integer, string>;
 
-{$IFDEF DEBUG}procedure DebugLog(const Message: string);{$ENDIF}
+{$IFDEF DEBUG}
+function DebugBoolToStr(const Value: Boolean): string;
+procedure DebugLog(const Message: string);
+{$ENDIF}
 {$IFDEF GUI}procedure Delay(Milliseconds: Integer);{$ENDIF}
 {$IFDEF DEBUG}procedure DumpCharArrayToFile(A: array of Char; const FileName: TFileName);{$ENDIF}
 function EndsWith(const SubStr, S: string): Boolean;
@@ -770,6 +773,13 @@ begin
   end;
 end;
 {$POP}
+
+{$IFDEF DEBUG}
+function DebugBoolToStr(const Value: Boolean): string;
+begin
+  Result := BoolToStr(Value, 'TRUE', 'FALSE');
+end;
+{$ENDIF}
 
 initialization
   Randomize;
