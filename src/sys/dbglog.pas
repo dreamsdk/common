@@ -16,10 +16,8 @@ uses
 {$ENDIF}
   SysUtils,
   Classes,
-{$IFDEF GUI}
   Interfaces,
   Forms,
-{$ENDIF}
   Process,
 {$IF Defined(Unix) OR Defined(Darwin)}
   , UTF8Process,

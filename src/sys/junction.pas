@@ -37,6 +37,7 @@ var
   FindData: TWin32FindData;
 begin
   Result := False;
+  FindData := Default(TWin32FindData);
   FindHandle := FindFirstFile(PChar(FileName), FindData);
   if FindHandle <> INVALID_HANDLE_VALUE then begin
     Result := (Bool(FindData.dwFileAttributes and FILE_ATTRIBUTE_REPARSE_POINT))

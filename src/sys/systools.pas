@@ -82,7 +82,9 @@ uses
   Forms,
 {$ENDIF}
 {$IFDEF DEBUG}
+{$IFDEF GUI}
   DbgLog,
+{$ENDIF}
 {$ENDIF}
   RunTools,
   Version,
