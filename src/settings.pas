@@ -13,13 +13,6 @@ uses
 const
   SETTINGS_FILE_NAME = 'dreamsdk.conf';
 
-  // Default repositories URLs (can be overriden in DreamSDK Manager)
-  DEFAULT_KALLISTI_URL = 'https://git.code.sf.net/p/cadcdev/kallistios';
-  DEFAULT_KALLISTI_PORTS_URL = 'https://git.code.sf.net/p/cadcdev/kos-ports';
-  DEFAULT_DREAMCAST_TOOL_SERIAL_URL = 'https://git.code.sf.net/p/cadcdev/dcload-serial';
-  DEFAULT_DREAMCAST_TOOL_INTERNET_PROTOCOL_URL = 'https://gitlab.com/kallistios/dcload-ip.git';
-  DEFAULT_RUBY_URL = 'https://github.com/mruby/mruby.git';
-
   // Dreamcast Tool
   DREAMCAST_TOOL_DEFAULT_KIND = 0;
   DREAMCAST_TOOL_DEFAULT_ATTACH_CONSOLE_FILESERVER = True;
@@ -293,6 +286,11 @@ type
   end;
 
 function GetDefaultCodeBlocksBackupDirectory: TFileName;
+function GetDefaultUrlKallisti: string;
+function GetDefaultUrlKallistiPorts: string;
+function GetDefaultUrlDreamcastToolSerial: string;
+function GetDefaultUrlDreamcastToolInternetProtocol: string;
+function GetDefaultUrlRuby: string;
 function SerialPortToString(SerialPort: TDreamcastToolSerialPort): string;
 function SerialBaudrateToString(SerialBaudrate: TDreamcastToolSerialBaudrate): string;
 
@@ -305,6 +303,20 @@ uses
   CBTools;
 
 const
+  // Default repositories URLs (can be overriden in DreamSDK Manager)
+  DEFAULT_KALLISTI_URL = 'https://git.code.sf.net/p/cadcdev/kallistios';
+  DEFAULT_KALLISTI_PORTS_URL = 'https://git.code.sf.net/p/cadcdev/kos-ports';
+  DEFAULT_DREAMCAST_TOOL_SERIAL_URL = 'https://git.code.sf.net/p/cadcdev/dcload-serial';
+  DEFAULT_DREAMCAST_TOOL_INTERNET_PROTOCOL_URL = 'https://gitlab.com/kallistios/dcload-ip.git';
+  DEFAULT_RUBY_URL = 'https://github.com/mruby/mruby.git';
+
+  // Default repositories URLs (before Windows Vista, as on XP, GitHub is working properly)
+  ALTERNATE_DEFAULT_KALLISTI_URL = 'https://github.com/kallistios/kallistios.git';
+  ALTERNATE_DEFAULT_KALLISTI_PORTS_URL = 'https://github.com/kallistios/kos-ports.git';
+  ALTERNATE_DEFAULT_DREAMCAST_TOOL_SERIAL_URL = 'https://github.com/kallistios/dcload-serial.git';
+  ALTERNATE_DEFAULT_DREAMCAST_TOOL_INTERNET_PROTOCOL_URL = 'https://gitlab.com/kallistios/dcload-ip.git';
+  ALTERNATE_DEFAULT_RUBY_URL = 'https://github.com/mruby/mruby.git';
+
   // Code::Blocks Backup Directory (for previous install)
   DEFAULT_CODEBLOCKS_BACKUP_DIR = '%s\support\ide\codeblocks\';
 
@@ -366,6 +378,41 @@ begin
       '%' + GetBaseEnvironmentVariableName + '%']);
 end;
 
+function GetDefaultUrlKallisti: string;
+begin
+  Result := ALTERNATE_DEFAULT_KALLISTI_URL;
+  if IsWindowsVistaOrGreater then
+    Result := DEFAULT_KALLISTI_URL;
+end;
+
+function GetDefaultUrlKallistiPorts: string;
+begin
+  Result := ALTERNATE_DEFAULT_KALLISTI_PORTS_URL;
+  if IsWindowsVistaOrGreater then
+    Result := DEFAULT_KALLISTI_PORTS_URL;
+end;
+
+function GetDefaultUrlDreamcastToolSerial: string;
+begin
+  Result := ALTERNATE_DEFAULT_DREAMCAST_TOOL_SERIAL_URL;
+  if IsWindowsVistaOrGreater then
+    Result := DEFAULT_DREAMCAST_TOOL_SERIAL_URL;
+end;
+
+function GetDefaultUrlDreamcastToolInternetProtocol: string;
+begin
+  Result := ALTERNATE_DEFAULT_DREAMCAST_TOOL_INTERNET_PROTOCOL_URL;
+  if IsWindowsVistaOrGreater then
+    Result := DEFAULT_DREAMCAST_TOOL_INTERNET_PROTOCOL_URL;
+end;
+
+function GetDefaultUrlRuby: string;
+begin
+  Result := ALTERNATE_DEFAULT_RUBY_URL;
+  if IsWindowsVistaOrGreater then
+    Result := DEFAULT_RUBY_URL;
+end;
+
 { TDreamcastSoftwareDevelopmentSettingsRuby }
 
 procedure TDreamcastSoftwareDevelopmentSettingsRuby.SetEnabled(AValue: Boolean);
@@ -401,27 +448,27 @@ end;
 
 function TDreamcastSoftwareDevelopmentSettingsRepositories.GetDreamcastToolInternetProtocolURL: string;
 begin
-  Result := GetURL(fDreamcastToolInternetProtocolURL, DEFAULT_DREAMCAST_TOOL_INTERNET_PROTOCOL_URL);
+  Result := GetURL(fDreamcastToolInternetProtocolURL, GetDefaultUrlDreamcastToolInternetProtocol);
 end;
 
 function TDreamcastSoftwareDevelopmentSettingsRepositories.GetDreamcastToolSerialURL: string;
 begin
-  Result := GetURL(fDreamcastToolSerialURL, DEFAULT_DREAMCAST_TOOL_SERIAL_URL);
+  Result := GetURL(fDreamcastToolSerialURL, GetDefaultUrlDreamcastToolSerial);
 end;
 
 function TDreamcastSoftwareDevelopmentSettingsRepositories.GetKallistiPortsURL: string;
 begin
-  Result := GetURL(fKallistiPortsURL, DEFAULT_KALLISTI_PORTS_URL);
+  Result := GetURL(fKallistiPortsURL, GetDefaultUrlKallistiPorts);
 end;
 
 function TDreamcastSoftwareDevelopmentSettingsRepositories.GetKallistiURL: string;
 begin
-  Result := GetURL(fKallistiURL, DEFAULT_KALLISTI_URL);
+  Result := GetURL(fKallistiURL, GetDefaultUrlKallisti);
 end;
 
 function TDreamcastSoftwareDevelopmentSettingsRepositories.GetRubyURL: string;
 begin
-  Result := GetURL(fRubyURL, DEFAULT_RUBY_URL);
+  Result := GetURL(fRubyURL, GetDefaultUrlRuby);
 end;
 
 function TDreamcastSoftwareDevelopmentSettingsRepositories.GetURL(
