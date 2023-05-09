@@ -57,6 +57,7 @@ procedure HandleLogonServerVariable(EnvironmentVariables: TStringList);
 function IsEmpty(const S: string): Boolean;
 function IsInString(const SubStr, S: string): Boolean;
 function IsProcessRunning(FileName: TFileName): Boolean;
+function IsProcessRunning(const ProcessId: LongWord): Boolean;
 function IsRegExMatch(const InputValue, RegEx: string): Boolean;
 function KillProcessByName(const FileName: TFileName): Boolean;
 function Left(SubStr: string; S: string): string;
@@ -721,6 +722,31 @@ begin
     WaitForSingleObject(ProcessHandle, INFINITE);
     CloseHandle(ProcessHandle);
   end;
+end;
+
+function IsProcessRunning(const ProcessId: LongWord): Boolean;
+var
+  ProcessHandle: THandle;
+  DesiredAccess,
+  ProcessExitCode: LongWord;
+
+begin
+  ProcessHandle := Default(THandle);
+  ProcessExitCode := Default(LongWord);
+{$IFDEF WINDOWS}
+  DesiredAccess := PROCESS_QUERY_INFORMATION;
+  if IsWindowsVistaOrGreater then
+    DesiredAccess := PROCESS_QUERY_LIMITED_INFORMATION;
+  ProcessHandle := OpenProcess(DesiredAccess, False, ProcessId);
+  if ProcessHandle <> INVALID_HANDLE_VALUE then
+  begin
+    Result := GetExitCodeProcess(ProcessHandle, @ProcessExitCode)
+      and (ProcessExitCode = STILL_ACTIVE);
+    CloseHandle(ProcessHandle);
+  end;
+{$ELSE}
+  raise EAbstractError.Create('IsProcessRunning: Not Implemented');
+{$ENDIF}
 end;
 
 {$PUSH}

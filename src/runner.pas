@@ -35,7 +35,7 @@ type
     procedure SetWorkingDirectory(AValue: TFileName);
   protected
     function GetClientExitCode: Integer;
-    procedure ExecuteThreadWatchShellWindowTitle(const AShellWindowProcessId: LongWord);
+    procedure ExecuteShellWindowWatchdogThread(const AShellWindowProcessId: LongWord);
     property Settings: TDreamcastSoftwareDevelopmentSettings read fSettings;
   public
     constructor Create;
@@ -69,13 +69,10 @@ uses
   UITools;
 
 type
-  { TShellWindowTitleWatchdogThread }
-  TShellWindowTitleWatchdogThread = class(TThread)
+  { TShellWindowWatchdogThread }
+  TShellWindowWatchdogThread = class(TThread)
   private
-    fWindowHandles: TList;
-    fWindowTextMap: TIntegerStringMap;
     fShellProcessID: LongWord;
-    function UpdateShellWindowTitleText: Boolean;
   protected
     procedure Execute; override;
   public
@@ -91,65 +88,7 @@ resourcestring
 
 { TShellWindowTitleWatchdogThread }
 
-function TShellWindowTitleWatchdogThread.UpdateShellWindowTitleText: Boolean;
-const
-  OLD_TAG = 'MINGW32';
-  NEW_TAG = 'DreamSDK';
-
-var
-  WinHandle: THandle;
-  i, j: Integer;
-  CurrentWinText,
-  SavedWinText,
-  NewWinText: string;
-
-begin
-  Result := True;
-  for i := 0 to fWindowHandles.Count - 1 do
-  begin
-    WinHandle := THandle(fWindowHandles[i]);
-
-    SavedWinText := EmptyStr;
-    CurrentWinText := GetWindowTitle(WinHandle);
-    Result := not IsEmpty(CurrentWinText);
-
-    if Result then
-    begin
-      j := fWindowTextMap.IndexOf(WinHandle);
-      if j = -1 then
-        j := fWindowTextMap.Add(WinHandle, CurrentWinText)
-      else
-        SavedWinText := fWindowTextMap.Data[j];
-
-      if not SameText(CurrentWinText, SavedWinText) then
-      begin
-        NewWinText := StringReplace(CurrentWinText, OLD_TAG, NEW_TAG, []);
-
-{$IFDEF DEBUG}
-        DebugLog(Format('Updating Shell Window (handle: %d) title is required. SavedWinText: "%s", CurrentWinText: "%s", NewWinText: "%s"', [
-          WinHandle,
-          SavedWinText,
-          CurrentWinText,
-          NewWinText
-        ]));
-{$ENDIF}
-
-        fWindowTextMap.Data[j] := NewWinText;
-        Result := Result and SetWindowTitle(WinHandle, NewWinText);
-        SetWindowIconForProcessId(fShellProcessID);
-      end;
-    end;
-  end;
-end;
-
-procedure TShellWindowTitleWatchdogThread.Execute;
-var
-  ProcessAlive: Boolean;
-{$IFDEF DEBUG}
-  i: Integer;
-  WinHandle: Integer;
-{$ENDIF}
-
+procedure TShellWindowWatchdogThread.Execute;
 begin
 {$IFDEF DEBUG}
   DebugLog('Shell Window Process Id: ' + IntToStr(ShellProcessId));
@@ -157,52 +96,17 @@ begin
 
   WaitForWindowCreationForProcessId(ShellProcessId);
 
-{$IFDEF DEBUG}
-  DebugLog('Setting up watchdog on Shell Window.');
-{$ENDIF}
-
-  // Getting all visible window handles
-  FindProcessWindows(fShellProcessID, fWindowHandles);
-
-{$IFDEF DEBUG}
-  DebugLog(Format('%d window(s) detected for PID %d:', [
-    fWindowHandles.Count,
-    fShellProcessID
-  ]));
-
-  for i := 0 to fWindowHandles.Count - 1 do
-  begin
-    WinHandle := Integer(fWindowHandles.Items[i]);
-    DebugLog(Format('  Window handle: %d (0x%x)', [
-      WinHandle,
-      WinHandle
-    ]));
-  end;
-{$ENDIF}
-
-  // Do the watchdog
-  ProcessAlive := True;
-  while (not Terminated) and (ProcessAlive) do
-  begin
-    ProcessAlive := UpdateShellWindowTitleText;
-    Sleep(1);
-  end;
-
-  // Cleaning up stored window handles
-  fWindowHandles.Clear;
+  if IsProcessRunning(ShellProcessID) then
+    SetWindowIconForProcessId(ShellProcessID);
 end;
 
-constructor TShellWindowTitleWatchdogThread.Create;
+constructor TShellWindowWatchdogThread.Create;
 begin
   inherited Create(True);
-  fWindowHandles := TList.Create;
-  fWindowTextMap := TIntegerStringMap.Create;
 end;
 
-destructor TShellWindowTitleWatchdogThread.Destroy;
+destructor TShellWindowWatchdogThread.Destroy;
 begin
-  fWindowTextMap.Free;
-  fWindowHandles.Free;
   inherited Destroy;
 end;
 
@@ -270,23 +174,23 @@ begin
   end;
 end;
 
-procedure TDreamcastSoftwareDevelopmentKitRunner.ExecuteThreadWatchShellWindowTitle(
+procedure TDreamcastSoftwareDevelopmentKitRunner.ExecuteShellWindowWatchdogThread(
   const AShellWindowProcessId: LongWord);
 var
-  WatchShellWindowTitleThread: TShellWindowTitleWatchdogThread;
+  ShellWindowWatchdogThread: TShellWindowWatchdogThread;
 
 begin
   // Executing the watchdog thread!
-  WatchShellWindowTitleThread := TShellWindowTitleWatchdogThread.Create;
-  with WatchShellWindowTitleThread do
+  ShellWindowWatchdogThread := TShellWindowWatchdogThread.Create;
+  with ShellWindowWatchdogThread do
   begin
     ShellProcessID := AShellWindowProcessId;
     Start;
   end;
 
   // Cleaning up
-  WatchShellWindowTitleThread.WaitFor;
-  FreeAndNil(WatchShellWindowTitleThread);
+  ShellWindowWatchdogThread.WaitFor;
+  FreeAndNil(ShellWindowWatchdogThread);
 end;
 
 function TDreamcastSoftwareDevelopmentKitRunner.StartShellCommand(
@@ -392,14 +296,13 @@ begin
         // MinTTY
         OurProcess.WaitOnExit;
         ProcessId := GetProcessIdFromParentProcessId(OurProcess.ProcessID);
-        ExecuteThreadWatchShellWindowTitle(ProcessId);
         WaitForProcessId(ProcessId);
       end
       else
       begin
         // Windows Terminal
         ProcessId := OurProcess.ProcessID;
-        ExecuteThreadWatchShellWindowTitle(ProcessId);
+        ExecuteShellWindowWatchdogThread(ProcessId);
         OurProcess.WaitOnExit;
       end;
     end;
