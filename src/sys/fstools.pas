@@ -9,6 +9,13 @@ uses
   SysUtils;
 
 type
+  { TParseInputFileSystemObjectBehaviour }
+  TParseInputFileSystemObjectBehaviour = (
+    pifsobNoAlteration,
+    pifsobIncludeTrailingPathDelimiter,
+    pifsobExcludeTrailingPathDelimiter
+  );
+
   { TFileListItem }
   TFileListItem = class(TObject)
   private
@@ -54,7 +61,8 @@ function KillDirectory(const DirectoryName: TFileName): Boolean;
 function KillFile(const FileName: TFileName): Boolean;
 function LoadFileToString(const FileName: TFileName): string;
 function LoadUTF16FileToString(const FileName: TFileName): string;
-function ParseInputFileSystemObject(const Parameter: TFileName): TFileName;
+function ParseInputFileSystemObject(const Parameter: TFileName;
+  const Behaviour: TParseInputFileSystemObjectBehaviour = pifsobNoAlteration): TFileName;
 function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string): Boolean;
 procedure SaveStringToFile(const InString: string; FileName: TFileName); overload;
 procedure SaveStringToFile(const InString: string; FileName: TFileName; const Append: Boolean); overload;
@@ -179,9 +187,16 @@ begin
   Result := ExtractFileNameOnly(ParamStr(0));
 end;
 
-function ParseInputFileSystemObject(const Parameter: TFileName): TFileName;
+function ParseInputFileSystemObject(const Parameter: TFileName;
+  const Behaviour: TParseInputFileSystemObjectBehaviour = pifsobNoAlteration): TFileName;
 begin
   Result := ExpandFileName(ExpandEnvironmentStrings(Parameter));
+  case Behaviour of
+    pifsobIncludeTrailingPathDelimiter:
+      Result := IncludeTrailingPathDelimiter(Result);
+    pifsobExcludeTrailingPathDelimiter:
+      Result := ExcludeTrailingPathDelimiter(Result);
+  end;
 end;
 
 function KillFile(const FileName: TFileName): Boolean;
@@ -413,10 +428,13 @@ end;
 
 function GetTemporaryFileName: TFileName;
 begin
-  Result := ChangeFileExt(SysUtils.GetTempFileName, Format('-%s-%d.tmp', [
+  Result := ChangeFileExt(SysUtils.GetTempFileName, Format('-%s-%d-dreamsdk.tmp', [
     GetProgramName,
-    Random($FFFF)
+    GetProcessID
   ]));
+{$IFDEF DEBUG}
+  DebugLog('GetTemporaryFileName: "' + Result + '"');
+{$ENDIF}
 end;
 
 function GetFileDate(const FileName: TFileName): TDateTime;
@@ -463,6 +481,16 @@ begin
   WriteLn('SetDirectoryRights: Not implemented');
 {$ENDIF}
 {$ENDIF}
+end;
+
+procedure InitializeWorkingPath;
+var
+  TempVariable: TFileName;
+
+begin
+  TempVariable := LowerCase(ChangeFileExt(GetTemporaryFileName, EmptyStr));
+  WorkingPath := IncludeTrailingPathDelimiter(TempVariable);
+  ForceDirectories(WorkingPath);
 end;
 
 { TFileListItem }
@@ -565,10 +593,7 @@ begin
 end;
 
 initialization
-  Randomize;
-  WorkingPath := IncludeTrailingPathDelimiter(
-    LowerCase(ChangeFileExt(GetTemporaryFileName, '-' + GetProgramName)));
-  ForceDirectories(WorkingPath);
+  InitializeWorkingPath;
 
 finalization
   KillDirectory(WorkingPath);

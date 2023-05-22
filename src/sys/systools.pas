@@ -731,6 +731,7 @@ var
   ProcessExitCode: LongWord;
 
 begin
+  Result := Default(Boolean);
   ProcessHandle := Default(THandle);
   ProcessExitCode := Default(LongWord);
 {$IFDEF WINDOWS}
