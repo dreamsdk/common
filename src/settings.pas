@@ -264,6 +264,8 @@ type
     fRuby: TDreamcastSoftwareDevelopmentSettingsRuby;
     fUseMinTTY: Boolean;
     fDreamcastTool: TDreamcastSoftwareDevelopmentSettingsDreamcastTool;
+    fWindowsTerminalProfileGuid: string;
+    fWindowsTerminalProfileGuidGenerated: Boolean;
   protected
     function GetConfigurationFileName: TFileName;
   public
@@ -283,6 +285,8 @@ type
     property Repositories: TDreamcastSoftwareDevelopmentSettingsRepositories
       read fRepositories;
     property Ruby: TDreamcastSoftwareDevelopmentSettingsRuby read fRuby;
+    property WindowsTerminalProfileGuid: string
+      read fWindowsTerminalProfileGuid;
   end;
 
 function GetDefaultCodeBlocksBackupDirectory: TFileName;
@@ -978,6 +982,8 @@ end;
 
 destructor TDreamcastSoftwareDevelopmentSettings.Destroy;
 begin
+  if fWindowsTerminalProfileGuidGenerated then
+   SaveConfiguration;
   fRepositories.Free;
   fDreamcastTool.Free;
   fRuby.Free;
@@ -988,6 +994,7 @@ function TDreamcastSoftwareDevelopmentSettings.LoadConfiguration: Boolean;
 var
   IniFile: TIniFile;
   DefaultInstallationPath: TFileName;
+  RealGuid: TGUID;
 
 begin
   Result := FileExists(FileName);
@@ -1014,6 +1021,20 @@ begin
       'ProgressWindowAutoClose',
       True
     );
+
+    // Handle GUID for Windows Terminal
+    fWindowsTerminalProfileGuidGenerated := False;
+    fWindowsTerminalProfileGuid := IniFile.ReadString(
+      CONFIG_DREAMSDK_SECTION_SETTINGS,
+      'WindowsTerminalProfileGuid',
+      EmptyStr
+    );
+    if not TryStringToGUID(fWindowsTerminalProfileGuid, RealGuid) then
+    begin
+      CreateGUID(RealGuid);
+      fWindowsTerminalProfileGuid := LowerCase(GUIDToString(RealGuid));
+      fWindowsTerminalProfileGuidGenerated := True;
+    end;
 
     DreamcastTool.LoadConfiguration(IniFile);
 
@@ -1047,6 +1068,11 @@ begin
       CONFIG_DREAMSDK_SECTION_SETTINGS,
       'ProgressWindowAutoClose',
       fProgressWindowAutoClose
+    );
+    IniFile.WriteString(
+      CONFIG_DREAMSDK_SECTION_SETTINGS,
+      'WindowsTerminalProfileGuid',
+      fWindowsTerminalProfileGuid
     );
 
     DreamcastTool.SaveConfiguration(IniFile);
