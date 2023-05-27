@@ -3,8 +3,9 @@ unit WtTools;
 interface
 
 type
-  TWindowsTerminalSettingsOperation = (wtsoInstall, wtsoUninstall);
+  TWindowsTerminalSettingsOperation = (wtsoUndefined, wtsoInstall, wtsoUninstall);
 
+function IsWindowsTerminalInstalled: Boolean;
 function UpdateWindowsTerminalSettingsFile(
   const Operation: TWindowsTerminalSettingsOperation): Boolean;
 
@@ -26,6 +27,11 @@ const
 var
   WindowsTerminalSettingsFileName: TFileName;
 
+function IsWindowsTerminalInstalled: Boolean;
+begin
+  Result := FileExists(WindowsTerminalSettingsFileName);
+end;
+
 function UpdateWindowsTerminalSettingsFile(
   const Operation: TWindowsTerminalSettingsOperation): Boolean;
 var
@@ -39,7 +45,10 @@ var
 
 begin
   Result := False;
-  if FileExists(WindowsTerminalSettingsFileName) then
+  if Operation = wtsoUndefined then
+    Exit;
+
+  if IsWindowsTerminalInstalled then
   begin
     Settings := TDreamcastSoftwareDevelopmentSettings.Create;
     WindowsTerminalSettingsData := TJSONObject(GetJSON(LoadFileToString(WindowsTerminalSettingsFileName)));
@@ -94,6 +103,10 @@ initialization
   WindowsTerminalSettingsFileName := ExpandEnvironmentStrings(
     WINDOWS_TERMINAL_SETTINGS_FILE
   );
+{$IFDEF DEBUG}
+  DebugLog('WindowsTerminalSettingsFileName: "'
+    + WindowsTerminalSettingsFileName + '"');
+{$ENDIF}
 
 end.
 
