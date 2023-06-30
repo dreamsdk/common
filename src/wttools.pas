@@ -3,10 +3,15 @@ unit WtTools;
 interface
 
 type
-  TWindowsTerminalSettingsOperation = (wtsoUndefined, wtsoInstall, wtsoUninstall);
+  TWindowsTerminalSettingsOperation = (
+    wtsoUndefined,
+    wtsoStatus, // TODO
+    wtsoInstall,
+    wtsoUninstall
+  );
 
 function IsWindowsTerminalInstalled: Boolean;
-function UpdateWindowsTerminalSettingsFile(
+function UpdateWindowsTerminalSettingsFiles(
   const Operation: TWindowsTerminalSettingsOperation): Boolean;
 
 implementation
@@ -21,19 +26,42 @@ uses
   Settings,
   RefBase;
 
+function IsWindowsTerminalInstalled: Boolean;
 const
-  WINDOWS_TERMINAL_SETTINGS_FILE = '%LocalAppData%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json';
+  WINDOWS_TERMINAL_LAUNCHER_FILENAME = 'wt.exe';
+  WINDOWS_TERMINAL_CODE_IN_PATH = 'Microsoft\WindowsApps\wt.exe';
 
 var
-  WindowsTerminalSettingsFileName: TFileName;
+  PathFileNames: TStringList;
+  i: Integer;
 
-function IsWindowsTerminalInstalled: Boolean;
 begin
-  Result := FileExists(WindowsTerminalSettingsFileName);
+  Result := False;
+{$IFDEF DEBUG}
+  DebugLog('IsWindowsTerminalInstalled');
+{$ENDIF}
+  PathFileNames := TStringList.Create;
+  try
+    GetFileLocationsInSystemPath(WINDOWS_TERMINAL_LAUNCHER_FILENAME, PathFileNames);
+    for i := 0 to PathFileNames.Count - 1 do
+    begin
+{$IFDEF DEBUG}
+      DebugLog('  Processing: "' + PathFileNames[i] + '"');
+{$ENDIF}
+      Result := IsInString(WINDOWS_TERMINAL_CODE_IN_PATH, PathFileNames[i]);
+      if Result then
+        Exit; // Don't continue, it isn't needed
+    end;
+  finally
+    PathFileNames.Free;
+  end;
 end;
 
-function UpdateWindowsTerminalSettingsFile(
+function UpdateWindowsTerminalSettingsFiles(
   const Operation: TWindowsTerminalSettingsOperation): Boolean;
+const
+  WINDOWS_TERMINAL_SETTINGS_FILEPATH = 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json';
+
 var
   Settings: TDreamcastSoftwareDevelopmentSettings;
   WindowsTerminalSettingsData,
@@ -42,6 +70,9 @@ var
   ProfilesEnum: TJSONEnum;
   ProfileFound: Boolean;
   MemoryStream: TMemoryStream;
+  LocalAppDataDirectories: TStringList;
+  WindowsTerminalSettingsFileName: TFileName;
+  i: Integer;
 
 begin
   Result := False;
@@ -51,62 +82,77 @@ begin
   if IsWindowsTerminalInstalled then
   begin
     Settings := TDreamcastSoftwareDevelopmentSettings.Create;
-    WindowsTerminalSettingsData := TJSONObject(GetJSON(LoadFileToString(WindowsTerminalSettingsFileName)));
-    MemoryStream := TMemoryStream.Create;
+    LocalAppDataDirectories := TStringList.Create;
     try
-      Settings.LoadConfiguration;
-      Profiles := TJSONArray(WindowsTerminalSettingsData.FindPath('profiles.list'));
-
-      // Search for DreamSDK profile in "settings.json"
-      Profile := nil;
-      ProfileFound := False;
-      for ProfilesEnum in Profiles do
-      begin
-        Profile := TJSONObject(ProfilesEnum.Value);
-        if (Profile.FindPath('guid').AsString = Settings.WindowsTerminalProfileGuid) then
+      if GetAppDataListFromUsers(LocalAppDataDirectories, adkLocal) then
+        for i := 0 to LocalAppDataDirectories.Count - 1 do
         begin
-          ProfileFound := True;
-          Break;
+          WindowsTerminalSettingsFileName := IncludeTrailingPathDelimiter(LocalAppDataDirectories[i])
+            + WINDOWS_TERMINAL_SETTINGS_FILEPATH;
+          if FileExists(WindowsTerminalSettingsFileName) then
+          begin
+{$IFDEF DEBUG}
+            DebugLog('Processing: "' +  WindowsTerminalSettingsFileName + '"');
+{$ENDIF}
+            WindowsTerminalSettingsData := TJSONObject(GetJSON(LoadFileToString(WindowsTerminalSettingsFileName)));
+            MemoryStream := TMemoryStream.Create;
+            try
+              Settings.LoadConfiguration;
+              Profiles := TJSONArray(WindowsTerminalSettingsData.FindPath('profiles.list'));
+
+              // Search for DreamSDK profile in "settings.json"
+              Profile := nil;
+              ProfileFound := False;
+              for ProfilesEnum in Profiles do
+              begin
+                Profile := TJSONObject(ProfilesEnum.Value);
+                if (Profile.FindPath('guid').AsString = Settings.WindowsTerminalProfileGuid) then
+                begin
+                  ProfileFound := True;
+                  Break;
+                end;
+              end;
+
+              // Update operation: Install/Uninstall
+              if (Operation = wtsoInstall) or (Operation = wtsoUninstall) then
+              begin
+                // Destroy the DreamSDK profile if needed
+                // This is done in all cases, if uninstalling AND installing.
+                // If installing, we will recreate it after deleting the old one.
+                // This is because the "hidden" flag is written as string when
+                // modifiying it... Looks like a bug in FPJson but we don't care.
+                if ProfileFound then
+                  Profiles.Remove(Profile);
+
+                // Recreate the profile if needed (if we are in Install mode).
+                if Operation = wtsoInstall then
+                begin
+                  Profile := TJSONObject.Create;
+                  Profile.Add('commandline', GetMSysBaseDirectory + 'bin\sh.exe --login -i');
+                  Profile.Add('guid', Settings.WindowsTerminalProfileGuid);
+                  Profile.Add('hidden', False);
+                  Profile.Add('icon', GetMSysBaseDirectory + 'dreamsdk-wt.ico');
+                  Profile.Add('name', 'DreamSDK');
+                  Profiles.Add(Profile);
+                end;
+
+                // Save the new JSON file.
+                WindowsTerminalSettingsData.DumpJSON(MemoryStream);
+                MemoryStream.SaveToFile(WindowsTerminalSettingsFileName);
+              end;
+              Result := True;
+            finally
+              WindowsTerminalSettingsData.Free;
+              MemoryStream.Free;
+            end;
+          end;
         end;
-      end;
-
-      // Destroy the DreamSDK profile if needed
-      // This is done in all cases, if uninstalling AND installing.
-      // If installing, we will recreate it after deleting the old one.
-      if ProfileFound then
-        Profiles.Remove(Profile);
-
-      // Recreate the profile if needed (if we are in Install mode).
-      if Operation = wtsoInstall then
-      begin
-        Profile := TJSONObject.Create;
-        Profile.Add('commandline', GetMSysBaseDirectory + 'bin\sh.exe --login -i');
-        Profile.Add('guid', Settings.WindowsTerminalProfileGuid);
-        Profile.Add('hidden', False);
-        Profile.Add('icon', GetMSysBaseDirectory + 'msys.ico');
-        Profile.Add('name', 'DreamSDK');
-        Profiles.Add(Profile);
-      end;
-
-      WindowsTerminalSettingsData.DumpJSON(MemoryStream);
-      MemoryStream.SaveToFile(WindowsTerminalSettingsFileName);
-      Result := True;
     finally
-      WindowsTerminalSettingsData.Free;
+      LocalAppDataDirectories.Free;
       Settings.Free;
-      MemoryStream.Free;
     end;
   end;
 end;
-
-initialization
-  WindowsTerminalSettingsFileName := ExpandEnvironmentStrings(
-    WINDOWS_TERMINAL_SETTINGS_FILE
-  );
-{$IFDEF DEBUG}
-  DebugLog('WindowsTerminalSettingsFileName: "'
-    + WindowsTerminalSettingsFileName + '"');
-{$ENDIF}
 
 end.
 

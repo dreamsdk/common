@@ -11,6 +11,10 @@ uses
   FSTools;
 
 const
+  // DreamSDK Application GUID (coming from "dreamsdk.iss", i.e., setup file)
+  DREAMSDK_APPLICATION_ID = '{df847892-5d85-4ffa-8603-e71750d81602}';
+
+  // Name of main configuration file for DreamSDK
   SETTINGS_FILE_NAME = 'dreamsdk.conf';
 
   // Dreamcast Tool
@@ -1031,8 +1035,7 @@ begin
     );
     if not TryStringToGUID(fWindowsTerminalProfileGuid, RealGuid) then
     begin
-      CreateGUID(RealGuid);
-      fWindowsTerminalProfileGuid := LowerCase(GUIDToString(RealGuid));
+      fWindowsTerminalProfileGuid := LowerCase(DREAMSDK_APPLICATION_ID);
       fWindowsTerminalProfileGuidGenerated := True;
     end;
 

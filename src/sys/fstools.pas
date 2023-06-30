@@ -9,6 +9,12 @@ uses
   SysUtils;
 
 type
+  { TAppDataKind }
+  TAppDataKind = (
+    adkRoaming,
+    adkLocal
+  );
+
   { TParseInputFileSystemObjectBehaviour }
   TParseInputFileSystemObjectBehaviour = (
     pifsobNoAlteration,
@@ -52,7 +58,8 @@ function GetFileHash(const FileName: TFileName): string;
 function GetProgramName: string;
 function GetWorkingPath: TFileName;
 function GetUsersDirectory: TFileName;
-function GetAppDataListFromUsers(var UserAppDataList: TStringList): Boolean;
+function GetAppDataListFromUsers(var UserAppDataList: TStringList;
+  const AppDataKind: TAppDataKind = adkRoaming): Boolean;
 function GetFileDate(const FileName: TFileName): TDateTime;
 function GetTemporaryFileName: TFileName;
 function GetUserFromAppDataDirectory(const AppDataDirectory: TFileName): string;
@@ -121,14 +128,19 @@ begin
     + CurrentUserName, GetEnvironmentVariable('APPDATA')));
 end;
 
-function GetAppDataTemplate: TFileName;
+function GetAppDataTemplate(const AppDataKind: TAppDataKind): TFileName;
 var
   AppDataTemplate: TFileName;
+  AppDataVariable,
   CurrentUserName: string;
 
 begin
+  AppDataVariable := '%AppData%';
+  if AppDataKind = adkLocal then
+    AppDataVariable := '%LocalAppData%';
+
   AppDataTemplate := IncludeTrailingPathDelimiter(
-    ParseInputFileSystemObject('%AppData%'));
+    ParseInputFileSystemObject(AppDataVariable));
   CurrentUserName := GetEnvironmentVariable('USERNAME');
 
   AppDataTemplate := StringReplace(
@@ -142,7 +154,8 @@ begin
 end;
 
 // {$DEFINE DEBUG_USER_APP_DATA_LIST}
-function GetAppDataListFromUsers(var UserAppDataList: TStringList): Boolean;
+function GetAppDataListFromUsers(var UserAppDataList: TStringList;
+  const AppDataKind: TAppDataKind = adkRoaming): Boolean;
 var
   AppDataTemplate: TFileName;
   i: Integer;
@@ -157,7 +170,7 @@ begin
 {$ENDIF}
 {$ENDIF}
 
-    AppDataTemplate := GetAppDataTemplate;
+    AppDataTemplate := GetAppDataTemplate(AppDataKind);
     for i := 0 to UserAppDataList.Count - 1 do
     begin
       UserAppDataList[i] := Format(AppDataTemplate, [UserAppDataList[i]]);
@@ -176,7 +189,7 @@ var
   TempLeft, TempRight: string;
 
 begin
-  AppDataTemplate := GetAppDataTemplate;
+  AppDataTemplate := GetAppDataTemplate(adkRoaming);
   TempLeft := Left('%s', AppDataTemplate);
   TempRight := Right('%s', AppDataTemplate);
   Result := Trim(ExtractStr(TempLeft, TempRight, AppDataDirectory));
