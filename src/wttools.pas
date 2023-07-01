@@ -26,35 +26,42 @@ uses
   Settings,
   RefBase;
 
+var
+  Cache_IsWindowsTerminalInstalled: Boolean = False;
+
 function IsWindowsTerminalInstalled: Boolean;
 const
-  WINDOWS_TERMINAL_LAUNCHER_FILENAME = 'wt.exe';
   WINDOWS_TERMINAL_CODE_IN_PATH = 'Microsoft\WindowsApps\wt.exe';
 
 var
   PathFileNames: TStringList;
   i: Integer;
+  WindowsTerminalFileName: TFileName;
 
 begin
-  Result := False;
 {$IFDEF DEBUG}
   DebugLog('IsWindowsTerminalInstalled');
 {$ENDIF}
-  PathFileNames := TStringList.Create;
-  try
-    GetFileLocationsInSystemPath(WINDOWS_TERMINAL_LAUNCHER_FILENAME, PathFileNames);
-    for i := 0 to PathFileNames.Count - 1 do
-    begin
+  if not Cache_IsWindowsTerminalInstalled then
+  begin
+    PathFileNames := TStringList.Create;
+    try
+      if GetAppDataListFromUsers(PathFileNames, adkLocal) then
+        for i := 0 to PathFileNames.Count - 1 do
+        begin
+          WindowsTerminalFileName := PathFileNames[i] + WINDOWS_TERMINAL_CODE_IN_PATH;
 {$IFDEF DEBUG}
-      DebugLog('  Processing: "' + PathFileNames[i] + '"');
+          DebugLog('  Processing: "' + WindowsTerminalFileName + '"');
 {$ENDIF}
-      Result := IsInString(WINDOWS_TERMINAL_CODE_IN_PATH, PathFileNames[i]);
-      if Result then
-        Exit; // Don't continue, it isn't needed
+          Cache_IsWindowsTerminalInstalled := FileExists(WindowsTerminalFileName);
+          if Cache_IsWindowsTerminalInstalled then
+            Break; // Don't continue, it isn't needed
+        end;
+    finally
+      PathFileNames.Free;
     end;
-  finally
-    PathFileNames.Free;
   end;
+  Result := Cache_IsWindowsTerminalInstalled;
 end;
 
 function UpdateWindowsTerminalSettingsFiles(
