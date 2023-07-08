@@ -25,6 +25,7 @@ const
 {$ENDIF}
 
   STRING_DATE_FORMAT = 'YYYY-MM-DD @ HH:mm:ss';
+  STRING_DATE_FORMAT_SHORT = 'YYYY-MM-DD';
   ACL_RIGHT_FULL = 'F';
 
 type
