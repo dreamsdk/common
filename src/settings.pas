@@ -49,7 +49,8 @@ type
     dtpCOM6,
     dtpCOM7,
     dtpCOM8,
-    dtpCOM9
+    dtpCOM9,
+    dtpCOM10
   );
 
   TDreamcastToolSerialBaudrate = (
@@ -61,9 +62,18 @@ type
     dtb19200,
     dtb38400,
     dtb57600,
-    dtb115200,
+    dtb115200, // Last standard baudrate
+    dtb128000,
+    dtb223214,
+    dtb230400,
+    dtb260416,
+    dtb312500,
+    dtb390625,
     dtb500000,
-    dtb1500000
+    dtb520833,
+    dtb781250,
+    dtb1500000,
+    dtb1562500
   );
 
   TDreamcastSoftwareDevelopmentSettings = class;
@@ -305,6 +315,7 @@ function SerialBaudrateToString(SerialBaudrate: TDreamcastToolSerialBaudrate): s
 implementation
 
 uses
+  TypInfo,
   RefBase,
   SysTools,
   Version,
@@ -364,20 +375,8 @@ end;
 
 function SerialBaudrateToString(SerialBaudrate: TDreamcastToolSerialBaudrate): string;
 begin
-  Result := '';
-  case SerialBaudrate of
-    dtb300: Result := '300';
-    dtb1200: Result := '1200';
-    dtb2400: Result := '2400';
-    dtb4800: Result := '4800';
-    dtb9600: Result := '9600';
-    dtb19200: Result := '19200';
-    dtb38400: Result := '38400';
-    dtb57600: Result := '57600';
-    dtb115200: Result := '115200';
-    dtb500000: Result := '500000';
-    dtb1500000: Result := '1500000';
-  end;
+  Result := Right('dtb',
+    GetEnumName(typeInfo(TDreamcastToolSerialBaudrate), Ord(SerialBaudrate)));
 end;
 
 function GetDefaultCodeBlocksBackupDirectory: TFileName;
