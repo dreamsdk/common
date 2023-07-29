@@ -296,7 +296,7 @@ function GetDefaultUrlKallistiPorts: string;
 function GetDefaultUrlDreamcastToolSerial: string;
 function GetDefaultUrlDreamcastToolInternetProtocol: string;
 function GetDefaultUrlRuby: string;
-function SerialPortToString(SerialPort: Integer): string;
+function SerialPortToString(SerialPortIndex: Integer): string;
 function SerialBaudrateToString(SerialBaudrate: TDreamcastToolSerialBaudrate): string;
 
 implementation
@@ -351,13 +351,9 @@ const
   CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_INSTALLED = 'InstalledUsers';
   CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_AVAILABLE = 'AvailableUsers';
 
-function SerialPortToString(SerialPort: Integer): string;
-var
-  SerialPortNumber: Integer;
-
+function SerialPortToString(SerialPortIndex: Integer): string;
 begin
-  SerialPortNumber := Integer(SerialPort) + 1;
-  Result := 'COM' + IntToStr(SerialPortNumber);
+  Result := Format('COM%d', [SerialPortIndex]);
 end;
 
 function SerialBaudrateToString(SerialBaudrate: TDreamcastToolSerialBaudrate): string;
