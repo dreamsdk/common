@@ -40,19 +40,6 @@ type
     dtkCustom
   );
 
-  TDreamcastToolSerialPort = (
-    dtpCOM1,
-    dtpCOM2,
-    dtpCOM3,
-    dtpCOM4,
-    dtpCOM5,
-    dtpCOM6,
-    dtpCOM7,
-    dtpCOM8,
-    dtpCOM9,
-    dtpCOM10
-  );
-
   TDreamcastToolSerialBaudrate = (
     dtb300,
     dtb1200,
@@ -94,7 +81,7 @@ type
     fSerialExternalClock: Boolean;
     fSerialBaudrate: TDreamcastToolSerialBaudrate;
     fSerialBaudrateAlternate: Boolean;
-    fSerialPort: TDreamcastToolSerialPort;
+    fSerialPort: Integer;
   protected
     procedure LoadConfiguration(IniFile: TIniFile);
     procedure SaveConfiguration(IniFile: TIniFile);
@@ -105,7 +92,7 @@ type
       read fAttachConsoleFileserver write fAttachConsoleFileserver;
     property ClearScreenBeforeDownload: Boolean
       read fClearScreenBeforeDownload write fClearScreenBeforeDownload;
-    property SerialPort: TDreamcastToolSerialPort
+    property SerialPort: Integer
       read fSerialPort write fSerialPort;
     property SerialBaudrate: TDreamcastToolSerialBaudrate
       read fSerialBaudrate write fSerialBaudrate;
@@ -309,7 +296,7 @@ function GetDefaultUrlKallistiPorts: string;
 function GetDefaultUrlDreamcastToolSerial: string;
 function GetDefaultUrlDreamcastToolInternetProtocol: string;
 function GetDefaultUrlRuby: string;
-function SerialPortToString(SerialPort: TDreamcastToolSerialPort): string;
+function SerialPortToString(SerialPort: Integer): string;
 function SerialBaudrateToString(SerialBaudrate: TDreamcastToolSerialBaudrate): string;
 
 implementation
@@ -364,7 +351,7 @@ const
   CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_INSTALLED = 'InstalledUsers';
   CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_AVAILABLE = 'AvailableUsers';
 
-function SerialPortToString(SerialPort: TDreamcastToolSerialPort): string;
+function SerialPortToString(SerialPort: Integer): string;
 var
   SerialPortNumber: Integer;
 
@@ -869,11 +856,11 @@ begin
     'SerialBaudrateAlternate',
     DREAMCAST_TOOL_DEFAULT_SERIAL_BAUDRATE_ALTERNATE
   );
-  fSerialPort := TDreamcastToolSerialPort(IniFile.ReadInteger(
+  fSerialPort := IniFile.ReadInteger(
     CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'SerialPort',
     DREAMCAST_TOOL_DEFAULT_SERIAL_PORT
-  ));
+  );
   fCustomExecutable := IniFile.ReadString(
     CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'CustomExecutable',

@@ -17,9 +17,9 @@ type
     Description: string;
   end;
 
-  TSerialPortArray = array of TSerialPort;
+  TSerialPortList = array of TSerialPort;
 
-function EnumComPorts(var SerialPortArray: TSerialPortArray): Boolean;
+function GetSerialPortList(var SerialPortList: TSerialPortList): Boolean;
 
 implementation
 
@@ -40,7 +40,7 @@ var
   EnumComFileName: TFileName = '';
 
 function ParseResultFile(Buffer: string;
-  var SerialPortArray: TSerialPortArray): Boolean;
+  var SerialPortList: TSerialPortList): Boolean;
 var 
   CSVDoc: TCSVDocument;
   i: Integer;
@@ -54,7 +54,7 @@ begin
     CSVDoc.CSVText := Buffer;
 
     // Allocate the required memory
-    SetLength(SerialPortArray, CSVDoc.RowCount - 1);
+    SetLength(SerialPortList, CSVDoc.RowCount - 1);
 
     // Looping on all CSV rows extracted from EnumCom
     for i := 1 to CSVDoc.RowCount - 1 do
@@ -68,16 +68,16 @@ begin
       SerialPort.Description := CSVDoc.Cells[5, i];
 
       // Adding the COM Port to the final Array
-      SerialPortArray[i - 1] := SerialPort;
+      SerialPortList[i - 1] := SerialPort;
     end;
 
-    Result := (High(SerialPortArray) + 1) = (CSVDoc.RowCount - 1);
+    Result := (High(SerialPortList) + 1) = (CSVDoc.RowCount - 1);
   finally
     CSVDoc.Free;
   end;
 end;
 
-function EnumComPorts(var SerialPortArray: TSerialPortArray): Boolean;
+function GetSerialPortList(var SerialPortList: TSerialPortList): Boolean;
 var
   OutputBuffer: string;
   ProcessExitCode: Integer;
@@ -88,7 +88,7 @@ begin
     OutputBuffer := Default(string);
     ProcessExitCode := Default(Integer);
     if RunSingleCommand(EnumComFileName, OutputBuffer, ProcessExitCode) then
-      Result := ParseResultFile(OutputBuffer, SerialPortArray);
+      Result := ParseResultFile(OutputBuffer, SerialPortList);
   except
     Result := False;
   end;
