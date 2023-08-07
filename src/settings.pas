@@ -18,6 +18,8 @@ const
   SETTINGS_FILE_NAME = 'dreamsdk.conf';
 
   // Dreamcast Tool
+  DREAMCAST_TOOL_DEFAULT_SERIAL_BAUDRATE_ALTERNATE_ALLOWED = 115200;
+
   DREAMCAST_TOOL_DEFAULT_KIND = 0;
   DREAMCAST_TOOL_DEFAULT_ATTACH_CONSOLE_FILESERVER = True;
   DREAMCAST_TOOL_DEFAULT_CLEAR_SCREEN_BEFORE_DOWNLOAD = True;
@@ -26,9 +28,9 @@ const
   DREAMCAST_TOOL_DEFAULT_MEDIA_ACCESS_CONTROL_ADDRESS = '00-00-00-00-00-00';
   DREAMCAST_TOOL_DEFAULT_SERIAL_DUMB_TERMINAL = False;
   DREAMCAST_TOOL_DEFAULT_SERIAL_EXTERNAL_CLOCK = False;
-  DREAMCAST_TOOL_DEFAULT_SERIAL_BAUDRATE = 7;
+  DREAMCAST_TOOL_DEFAULT_SERIAL_BAUDRATE = DREAMCAST_TOOL_DEFAULT_SERIAL_BAUDRATE_ALTERNATE_ALLOWED;
   DREAMCAST_TOOL_DEFAULT_SERIAL_BAUDRATE_ALTERNATE = False;
-  DREAMCAST_TOOL_DEFAULT_SERIAL_PORT = 0;
+  DREAMCAST_TOOL_DEFAULT_SERIAL_PORT = 1;
   DREAMCAST_TOOL_DEFAULT_CUSTOM_EXECUTABLE = '';
   DREAMCAST_TOOL_DEFAULT_CUSTOM_ARGUMENTS = '';
 
@@ -38,29 +40,6 @@ type
     dtkSerial,
     dtkInternetProtocol,
     dtkCustom
-  );
-
-  TDreamcastToolSerialBaudrate = (
-    dtb300,
-    dtb1200,
-    dtb2400,
-    dtb4800,
-    dtb9600,
-    dtb19200,
-    dtb38400,
-    dtb57600,
-    dtb115200, // Last standard baudrate
-    dtb128000,
-    dtb223214,
-    dtb230400,
-    dtb260416,
-    dtb312500,
-    dtb390625,
-    dtb500000,
-    dtb520833,
-    dtb781250,
-    dtb1500000,
-    dtb1562500
   );
 
   TDreamcastSoftwareDevelopmentSettings = class;
@@ -79,9 +58,10 @@ type
     fHostMediaAccessControlAddress: string;
     fSerialDumbTerminal: Boolean;
     fSerialExternalClock: Boolean;
-    fSerialBaudrate: TDreamcastToolSerialBaudrate;
+    fSerialBaudrate: Integer;
     fSerialBaudrateAlternate: Boolean;
     fSerialPort: Integer;
+    function IsAlternateBaudrateAllowed: Boolean;
   protected
     procedure LoadConfiguration(IniFile: TIniFile);
     procedure SaveConfiguration(IniFile: TIniFile);
@@ -94,10 +74,12 @@ type
       read fClearScreenBeforeDownload write fClearScreenBeforeDownload;
     property SerialPort: Integer
       read fSerialPort write fSerialPort;
-    property SerialBaudrate: TDreamcastToolSerialBaudrate
+    property SerialBaudrate: Integer
       read fSerialBaudrate write fSerialBaudrate;
     property SerialBaudrateAlternate: Boolean
       read fSerialBaudrateAlternate write fSerialBaudrateAlternate;
+    property SerialBaudrateAlternateAllowed: Boolean
+      read IsAlternateBaudrateAllowed;
     property SerialExternalClock: Boolean
       read fSerialExternalClock write fSerialExternalClock;
     property SerialDumbTerminal: Boolean
@@ -226,8 +208,9 @@ type
   end;
 
   { TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher }
-  TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher
-    = class(TDreamcastSoftwareDevelopmentSettingsCodeBlocks)
+  TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher = class(
+    TDreamcastSoftwareDevelopmentSettingsCodeBlocks
+  )
   private
     procedure InitializeCodeBlocksInstallationDirectory;
     procedure InitializeDefaults(const AutoLoad: Boolean);
@@ -297,7 +280,6 @@ function GetDefaultUrlDreamcastToolSerial: string;
 function GetDefaultUrlDreamcastToolInternetProtocol: string;
 function GetDefaultUrlRuby: string;
 function SerialPortToString(SerialPortIndex: Integer): string;
-function SerialBaudrateToString(SerialBaudrate: TDreamcastToolSerialBaudrate): string;
 
 implementation
 
@@ -354,12 +336,6 @@ const
 function SerialPortToString(SerialPortIndex: Integer): string;
 begin
   Result := Format('COM%d', [SerialPortIndex]);
-end;
-
-function SerialBaudrateToString(SerialBaudrate: TDreamcastToolSerialBaudrate): string;
-begin
-  Result := Right('dtb',
-    GetEnumName(typeInfo(TDreamcastToolSerialBaudrate), Ord(SerialBaudrate)));
 end;
 
 function GetDefaultCodeBlocksBackupDirectory: TFileName;
@@ -794,6 +770,11 @@ end;
 
 { TDreamcastSoftwareDevelopmentSettingsDreamcastTool }
 
+function TDreamcastSoftwareDevelopmentSettingsDreamcastTool.IsAlternateBaudrateAllowed: Boolean;
+begin
+  Result := (SerialBaudrate >= DREAMCAST_TOOL_DEFAULT_SERIAL_BAUDRATE_ALTERNATE_ALLOWED);
+end;
+
 procedure TDreamcastSoftwareDevelopmentSettingsDreamcastTool.LoadConfiguration(
   IniFile: TIniFile);
 begin
@@ -842,11 +823,11 @@ begin
     'SerialExternalClock',
     DREAMCAST_TOOL_DEFAULT_SERIAL_EXTERNAL_CLOCK
   );
-  fSerialBaudrate := TDreamcastToolSerialBaudrate(IniFile.ReadInteger(
+  fSerialBaudrate := IniFile.ReadInteger(
     CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'SerialBaudrate',
     DREAMCAST_TOOL_DEFAULT_SERIAL_BAUDRATE
-  ));
+  );
   fSerialBaudrateAlternate := IniFile.ReadBool(
     CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL,
     'SerialBaudrateAlternate',
