@@ -1,18 +1,28 @@
+// Windows Terminal Integration Tools for DreamSDK
 unit WtTools;
+
+(* Change this to simulate the installation of Windows Terminal
+   without installing it *)
+// {$DEFINE SIMULATE_WINDOWS_TERMINAL}
+
+(* Change this to simulate the installation of the DreamSDK profile for
+   Windows Terminal *)
+// {$DEFINE SIMULATE_WINDOWS_TERMINAL_PROFILE_INSTALLED}
 
 interface
 
-type
-  TWindowsTerminalSettingsOperation = (
-    wtsoUndefined,
-    wtsoStatus, // TODO
-    wtsoInstall,
-    wtsoUninstall
-  );
-
+// Check if Windows Terminal is installed on this computer
 function IsWindowsTerminalInstalled: Boolean;
-function UpdateWindowsTerminalSettingsFiles(
-  const Operation: TWindowsTerminalSettingsOperation): Boolean;
+
+// Indicates if Windows Terminal DreamSDK integration is installed
+// This will check only for the current user
+function IsWindowsTerminalIntegrationInstalled: Boolean;
+
+// Install DreamSDK integration for all Windows Terminal
+function InstallWindowsTerminalIntegration: Boolean;
+
+// Uninstall DreamSDK integration for all Windows Terminal
+function UninstallWindowsTerminalIntegration: Boolean;
 
 implementation
 
@@ -26,8 +36,25 @@ uses
   Settings,
   RefBase;
 
+type
+  TWindowsTerminalSettingsOperation = (
+    wtsoUndefined,
+    wtsoStatus,
+    wtsoInstall,
+    wtsoUninstall
+  );
+
 var
-  Cache_IsWindowsTerminalInstalled: Boolean = False;
+  Cache_IsWindowsTerminalInstalled: Boolean =
+{$IFDEF DEBUG}
+  {$IFDEF SIMULATE_WINDOWS_TERMINAL}
+    True
+  {$ELSE}
+    False
+  {$ENDIF}
+{$ELSE}
+  False
+{$ENDIF};
 
 function IsWindowsTerminalInstalled: Boolean;
 const
@@ -55,13 +82,17 @@ begin
 {$ENDIF}
           Cache_IsWindowsTerminalInstalled := FileExists(WindowsTerminalFileName);
           if Cache_IsWindowsTerminalInstalled then
-            Break; // Don't continue, it isn't needed
+            Break; // Don't continue, it isn't needed. Not so optimized but...
         end;
     finally
       PathFileNames.Free;
     end;
   end;
   Result := Cache_IsWindowsTerminalInstalled;
+{$IFDEF DEBUG}
+  DebugLog('  IsWindowsTerminalInstalled RESULT: '
+    + DebugBoolToStr(Result));
+{$ENDIF}
 end;
 
 function UpdateWindowsTerminalSettingsFiles(
@@ -120,6 +151,13 @@ begin
                 end;
               end;
 
+              // Status only
+              if (Operation = wtsoStatus) then
+              begin
+                Result := ProfileFound;
+                Exit;
+              end;
+
               // Update operation: Install/Uninstall
               if (Operation = wtsoInstall) or (Operation = wtsoUninstall) then
               begin
@@ -146,19 +184,46 @@ begin
                 // Save the new JSON file.
                 WindowsTerminalSettingsData.DumpJSON(MemoryStream);
                 MemoryStream.SaveToFile(WindowsTerminalSettingsFileName);
-              end;
-              Result := True;
+                Result := FileExists(WindowsTerminalSettingsFileName);
+              end; // wtsoInstall+wtsoUninstall
             finally
               WindowsTerminalSettingsData.Free;
               MemoryStream.Free;
             end;
-          end;
-        end;
+          end; // Check for WindowsTerminalSettingsFileName
+        end; // for
     finally
       LocalAppDataDirectories.Free;
       Settings.Free;
     end;
   end;
+end;
+
+function IsWindowsTerminalIntegrationInstalled: Boolean;
+begin
+  Result := UpdateWindowsTerminalSettingsFiles(wtsoStatus);
+{$IFDEF DEBUG}
+  {$IFDEF SIMULATE_WINDOWS_TERMINAL_PROFILE_INSTALLED}
+  Result := True;
+  {$ENDIF}
+  DebugLog('IsWindowsTerminalIntegrationInstalled: ' + DebugBoolToStr(Result));
+{$ENDIF}
+end;
+
+function InstallWindowsTerminalIntegration: Boolean;
+begin
+  Result := UpdateWindowsTerminalSettingsFiles(wtsoInstall);
+{$IFDEF DEBUG}
+  DebugLog('InstallWindowsTerminalIntegration: ' + DebugBoolToStr(Result));
+{$ENDIF}
+end;
+
+function UninstallWindowsTerminalIntegration: Boolean;
+begin
+  Result := UpdateWindowsTerminalSettingsFiles(wtsoUninstall);
+{$IFDEF DEBUG}
+  DebugLog('UninstallWindowsTerminalIntegration: ' + DebugBoolToStr(Result));
+{$ENDIF}
 end;
 
 end.
