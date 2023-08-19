@@ -10,6 +10,8 @@ uses
   RunCmd;
 
 type
+  TSevenZipOperationPickupEvent = procedure(Sender: TObject;
+    const SourceFileName, OutputDirectory: TFileName) of object;
   TSevenZipProgressValueEvent = procedure(Sender: TObject; const CurrentValue: Integer;
     const TotalValue: Integer) of object;
   TSevenZipProgressRecordEvent = procedure(Sender: TObject; const RecordNode: string) of object;
@@ -46,6 +48,7 @@ type
   { TSevenZipCommander }
   TSevenZipCommander = class(TObject)
   private
+    fOperationPickup: TSevenZipOperationPickupEvent;
     fProgressRecord: TSevenZipProgressRecordEvent;
     fSevenZipProcess: TRunCommand;
     fCurrentTaskIndex: Integer;
@@ -71,12 +74,17 @@ type
   public
     constructor Create;
     destructor Destroy; override;
+
     procedure Abort;
     procedure Execute;
     procedure Pause;
     procedure Resume;
+
     property Active: Boolean read GetActive;
     property Operations: TSevenZipCommanderOperationList read fOperationList;
+
+    property OnOperationPickup: TSevenZipOperationPickupEvent
+      read fOperationPickup write fOperationPickup;
     property OnProgress: TSevenZipProgressValueEvent read fProgress write fProgress;
     property OnProgressRecord: TSevenZipProgressRecordEvent
       read fProgressRecord write fProgressRecord;
@@ -303,6 +311,13 @@ begin
   fSevenZipProcess.OnTerminate := @HandleTerminate;
 
   fSevenZipProcess.Start;
+
+  if Assigned(fOperationPickup) then
+    fOperationPickup(
+      Self,
+      CurrentOperation.SourceFileName,
+      CurrentOperation.OutputDirectory
+    );
 
   Inc(fCurrentTaskIndex);
 end;
