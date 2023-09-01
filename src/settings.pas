@@ -275,11 +275,13 @@ type
   end;
 
 function GetDefaultCodeBlocksBackupDirectory: TFileName;
+
 function GetDefaultUrlKallisti: string;
 function GetDefaultUrlKallistiPorts: string;
 function GetDefaultUrlDreamcastToolSerial: string;
 function GetDefaultUrlDreamcastToolInternetProtocol: string;
 function GetDefaultUrlRuby: string;
+
 function SerialPortToString(SerialPortIndex: Integer): string;
 
 implementation
@@ -289,23 +291,10 @@ uses
   RefBase,
   SysTools,
   Version,
-  CBTools;
+  CBTools,
+  RunTools;
 
 const
-  // Default repositories URLs (can be overriden in DreamSDK Manager)
-  DEFAULT_KALLISTI_URL = 'https://git.code.sf.net/p/cadcdev/kallistios';
-  DEFAULT_KALLISTI_PORTS_URL = 'https://git.code.sf.net/p/cadcdev/kos-ports';
-  DEFAULT_DREAMCAST_TOOL_SERIAL_URL = 'https://git.code.sf.net/p/cadcdev/dcload-serial';
-  DEFAULT_DREAMCAST_TOOL_INTERNET_PROTOCOL_URL = 'https://gitlab.com/kallistios/dcload-ip.git';
-  DEFAULT_RUBY_URL = 'https://github.com/mruby/mruby.git';
-
-  // Default repositories URLs (before Windows Vista, as on XP, GitHub is working properly)
-  ALTERNATE_DEFAULT_KALLISTI_URL = 'https://github.com/kallistios/kallistios.git';
-  ALTERNATE_DEFAULT_KALLISTI_PORTS_URL = 'https://github.com/kallistios/kos-ports.git';
-  ALTERNATE_DEFAULT_DREAMCAST_TOOL_SERIAL_URL = 'https://github.com/kallistios/dcload-serial.git';
-  ALTERNATE_DEFAULT_DREAMCAST_TOOL_INTERNET_PROTOCOL_URL = 'https://gitlab.com/kallistios/dcload-ip.git';
-  ALTERNATE_DEFAULT_RUBY_URL = 'https://github.com/mruby/mruby.git';
-
   // Code::Blocks Backup Directory (for previous install)
   DEFAULT_CODEBLOCKS_BACKUP_DIR = '%s\support\ide\codeblocks\';
 
@@ -334,6 +323,55 @@ const
   CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_INSTALLED = 'InstalledUsers';
   CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_AVAILABLE = 'AvailableUsers';
 
+  // Handling default repositories (mainly used while installing DreamSDK)
+  REPOSITORIES_DEFAULT_FILE_NAME = 'repositories-default.conf';
+
+type
+  { TDefaultRepositoryItem }
+  TDefaultRepositoryItem = class(TObject)
+  private
+    fPrimary: string;
+    fSecondary: string;
+  public
+    property Primary: string read fPrimary;
+    property Secondary: string read fSecondary;
+  end;
+
+  { TDefaultRepository }
+  TDefaultRepository = class(TObject)
+  private
+    fDreamcastToolInternetProtocol: TDefaultRepositoryItem;
+    fDreamcastToolSerial: TDefaultRepositoryItem;
+    fKallisti: TDefaultRepositoryItem;
+    fKallistiPorts: TDefaultRepositoryItem;
+    fRuby: TDefaultRepositoryItem;
+    procedure Initialize(const AutoLoad: Boolean);
+    function IsRepositoryAvailable(const Url: string): Boolean;
+    function GetOptimalRepositoryUrl(Item: TDefaultRepositoryItem): string;
+  protected
+    function GetKallisti: string;
+    function GetKallistiPorts: string;
+    function GetDreamcastToolSerial: string;
+    function GetDreamcastToolInternetProtocol: string;
+    function GetRuby: string;
+  public
+    constructor Create;
+    constructor Create(const AutoLoad: Boolean); overload;
+    destructor Destroy; override;
+
+    function Load(const FileName: TFileName): Boolean;
+    function Load: Boolean; overload;
+
+    property Kallisti: string read GetKallisti;
+    property KallistiPorts: string read GetKallistiPorts;
+    property DreamcastToolSerial: string read GetDreamcastToolSerial;
+    property DreamcastToolInternetProtocol: string read GetDreamcastToolInternetProtocol;
+    property Ruby: string read GetRuby;
+  end;
+
+var
+  DefaultRepository: TDefaultRepository;
+
 function SerialPortToString(SerialPortIndex: Integer): string;
 begin
   Result := Format('COM%d', [SerialPortIndex]);
@@ -347,37 +385,191 @@ end;
 
 function GetDefaultUrlKallisti: string;
 begin
-  Result := ALTERNATE_DEFAULT_KALLISTI_URL;
-  if IsWindowsVistaOrGreater then
-    Result := DEFAULT_KALLISTI_URL;
+  Result := DefaultRepository.Kallisti;
 end;
 
 function GetDefaultUrlKallistiPorts: string;
 begin
-  Result := ALTERNATE_DEFAULT_KALLISTI_PORTS_URL;
-  if IsWindowsVistaOrGreater then
-    Result := DEFAULT_KALLISTI_PORTS_URL;
+  Result := DefaultRepository.KallistiPorts;
 end;
 
 function GetDefaultUrlDreamcastToolSerial: string;
 begin
-  Result := ALTERNATE_DEFAULT_DREAMCAST_TOOL_SERIAL_URL;
-  if IsWindowsVistaOrGreater then
-    Result := DEFAULT_DREAMCAST_TOOL_SERIAL_URL;
+  Result := DefaultRepository.DreamcastToolSerial;
 end;
 
 function GetDefaultUrlDreamcastToolInternetProtocol: string;
 begin
-  Result := ALTERNATE_DEFAULT_DREAMCAST_TOOL_INTERNET_PROTOCOL_URL;
-  if IsWindowsVistaOrGreater then
-    Result := DEFAULT_DREAMCAST_TOOL_INTERNET_PROTOCOL_URL;
+  Result := DefaultRepository.DreamcastToolInternetProtocol;
 end;
 
 function GetDefaultUrlRuby: string;
 begin
-  Result := ALTERNATE_DEFAULT_RUBY_URL;
-  if IsWindowsVistaOrGreater then
-    Result := DEFAULT_RUBY_URL;
+  Result := DefaultRepository.Ruby;
+end;
+
+{ TDefaultRepository }
+
+constructor TDefaultRepository.Create;
+begin
+  Initialize(True);
+end;
+
+constructor TDefaultRepository.Create(const AutoLoad: Boolean);
+begin
+  Initialize(AutoLoad);
+end;
+
+destructor TDefaultRepository.Destroy;
+begin
+  fRuby.Free;
+  fDreamcastToolInternetProtocol.Free;
+  fDreamcastToolSerial.Free;
+  fKallistiPorts.Free;
+  fKallisti.Free;
+
+  inherited Destroy;
+end;
+
+procedure TDefaultRepository.Initialize(const AutoLoad: Boolean);
+begin
+  fKallisti := TDefaultRepositoryItem.Create;
+  fKallistiPorts := TDefaultRepositoryItem.Create;
+  fDreamcastToolSerial := TDefaultRepositoryItem.Create;
+  fDreamcastToolInternetProtocol := TDefaultRepositoryItem.Create;
+  fRuby := TDefaultRepositoryItem.Create;
+
+  if AutoLoad then
+    Load;
+end;
+
+function TDefaultRepository.IsRepositoryAvailable(const Url: string): Boolean;
+
+  function ExtractHostFromUrl(const Url: string): string;
+  begin
+    Result := ExtractStr('://', '/', Url);
+    if IsEmpty(Result) then
+      Result := Right('://', Url);
+  end;
+
+  function IsHostReachable(const Host: string): Boolean;
+  const
+    HOSTS_STATUS_FILE_NAME = 'hosts-status.conf';
+    GIT_VALID_KEYWORD = #$09'HEAD'#$0D#$0A;
+    GIT_CHECK_CMD = 'where git > nul 2>&1 && git ls-remote "%s"';
+
+  type
+    THostReachableStatus = (hrsNotReachable, hrsReachable, hrsUndefined);
+
+  var
+    Buffer: string;
+    ProcessExitCode: Integer;
+    HostsStatusFile: TIniFile;
+    HostReachableStatus: THostReachableStatus;
+
+  begin
+    Result := False;
+    Buffer := Default(string);
+    ProcessExitCode := Default(Integer);
+
+    HostsStatusFile := TIniFile.Create(GetConfigurationDirectory + HOSTS_STATUS_FILE_NAME);
+    try
+      HostReachableStatus := THostReachableStatus(
+        HostsStatusFile.ReadInteger('Status', Host, Integer(hrsUndefined))
+      );
+
+      if (HostReachableStatus = hrsUndefined) then
+      begin
+        if RunSingleCommand(Format(GIT_CHECK_CMD, [Url]), Buffer, ProcessExitCode) then
+          if (ProcessExitCode = 0) then
+            Result := IsInString(GIT_VALID_KEYWORD, Buffer);
+        HostsStatusFile.WriteBool('Status', Host, Result);
+      end;
+    finally
+      HostsStatusFile.Free;
+    end;
+  end;
+
+var
+  Host: string;
+
+begin
+  Host := ExtractHostFromUrl(Url);
+  Result := IsHostReachable(Host);
+end;
+
+function TDefaultRepository.GetOptimalRepositoryUrl(
+  Item: TDefaultRepositoryItem): string;
+begin
+  Result := EmptyStr;
+  if Assigned(Item) then
+  begin
+    Result := Item.Primary;
+    if not IsRepositoryAvailable(Result) then
+      Result := Item.Secondary;
+  end;
+end;
+
+function TDefaultRepository.GetKallisti: string;
+begin
+  Result := GetOptimalRepositoryUrl(fKallisti);
+end;
+
+function TDefaultRepository.GetKallistiPorts: string;
+begin
+  Result := GetOptimalRepositoryUrl(fKallistiPorts);
+end;
+
+function TDefaultRepository.GetDreamcastToolSerial: string;
+begin
+  Result := GetOptimalRepositoryUrl(fDreamcastToolSerial);
+end;
+
+function TDefaultRepository.GetDreamcastToolInternetProtocol: string;
+begin
+  Result := GetOptimalRepositoryUrl(fDreamcastToolInternetProtocol);
+end;
+
+function TDefaultRepository.GetRuby: string;
+begin
+  Result := GetOptimalRepositoryUrl(fRuby);
+end;
+
+function TDefaultRepository.Load(const FileName: TFileName): Boolean;
+var
+  IniFile: TIniFile;
+
+begin
+  Result := False;
+  if FileExists(FileName) then
+  begin
+    IniFile := TIniFile.Create(FileName);
+    try
+      fKallisti.fPrimary := IniFile.ReadString('Kallisti', 'Primary', EmptyStr);
+      fKallisti.fSecondary := IniFile.ReadString('Kallisti', 'Secondary', EmptyStr);
+
+      fKallistiPorts.fPrimary := IniFile.ReadString('KallistiPorts', 'Primary', EmptyStr);
+      fKallistiPorts.fSecondary := IniFile.ReadString('KallistiPorts', 'Secondary', EmptyStr);
+
+      fDreamcastToolSerial.fPrimary := IniFile.ReadString('DreamcastToolSerial', 'Primary', EmptyStr);
+      fDreamcastToolSerial.fSecondary := IniFile.ReadString('DreamcastToolSerial', 'Secondary', EmptyStr);
+
+      fDreamcastToolInternetProtocol.fPrimary := IniFile.ReadString('DreamcastToolInternetProtocol', 'Primary', EmptyStr);
+      fDreamcastToolInternetProtocol.fSecondary := IniFile.ReadString('DreamcastToolInternetProtocol', 'Secondary', EmptyStr);
+
+      fRuby.fPrimary := IniFile.ReadString('Ruby', 'Primary', EmptyStr);
+      fRuby.fSecondary := IniFile.ReadString('Ruby', 'Secondary', EmptyStr);
+
+      Result := True;
+    finally
+      IniFile.Free;
+    end;
+  end;
+end;
+
+function TDefaultRepository.Load: Boolean;
+begin
+  Result := Load(GetConfigurationDirectory + REPOSITORIES_DEFAULT_FILE_NAME);
 end;
 
 { TDreamcastSoftwareDevelopmentSettingsRuby }
@@ -1049,6 +1241,12 @@ begin
     IniFile.Free;
   end;
 end;
+
+initialization
+  DefaultRepository := TDefaultRepository.Create;
+
+finalization
+  DefaultRepository.Free;
 
 end.
 
