@@ -283,18 +283,22 @@ var
   S: string;
 
 begin
-  MS := TMemoryStream.Create;
-  try
-    MS.LoadFromFile(FileName);
-    MS.Position := 0;
+  Result := #0;
+  if FileExists(FileName) then
+  begin
+    MS := TMemoryStream.Create;
+    try
+      MS.LoadFromFile(FileName);
+      MS.Position := 0;
 
-    // UTF-16 to UTF-8 with BOM
-    S := UTF16ToUTF8(PWideChar(MS.Memory), MS.Size div SizeOf(WideChar));
+      // UTF-16 to UTF-8 with BOM
+      S := UTF16ToUTF8(PWideChar(MS.Memory), MS.Size div SizeOf(WideChar));
 
-    // UTF-8 without BOM
-    Result := string(UTF8BOMToUTF8(S));
-  finally
-    MS.Free;
+      // UTF-8 without BOM
+      Result := string(UTF8BOMToUTF8(S));
+    finally
+      MS.Free;
+    end;
   end;
 end;
 
@@ -348,12 +352,15 @@ var
 
 begin
   Result := EmptyStr;
-  Buffer := TStringList.Create;
-  try
-    Buffer.LoadFromFile(FileName);
-    Result := Trim(Buffer.Text);
-  finally
-    Buffer.Free;
+  if FileExists(FileName) then
+  begin
+    Buffer := TStringList.Create;
+    try
+      Buffer.LoadFromFile(FileName);
+      Result := Trim(Buffer.Text);
+    finally
+      Buffer.Free;
+    end;
   end;
 end;
 

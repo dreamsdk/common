@@ -310,7 +310,8 @@ begin
   begin
     ProcessExitCode := StrToIntDef(LoadFileToString(ErrorLevelFileName), -1);
     Result := (ProcessExitCode = 0);
-    OutputBuffer := LoadFileToStringFunction(OutputFileName);
+    if FileExists(OutputFileName) then
+      OutputBuffer := LoadFileToStringFunction(OutputFileName);
   end;
 
   KillFile(BatchFileName);
