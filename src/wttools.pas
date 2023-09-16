@@ -56,6 +56,16 @@ var
   False
 {$ENDIF};
 
+function GetWindowsTerminalResourceDirectory: TFileName;
+const
+  RESOURCE_DIR_PATH = '/opt/dreamsdk/helpers';
+
+begin
+  Result := IncludeTrailingPathDelimiter(
+    DreamSdkPathToSystem(RESOURCE_DIR_PATH)
+  );
+end;
+
 function IsWindowsTerminalInstalled: Boolean;
 const
   WINDOWS_TERMINAL_CODE_IN_PATH = 'Microsoft\WindowsApps\wt.exe';
@@ -176,7 +186,7 @@ begin
                   Profile.Add('commandline', GetMSysBaseDirectory + 'bin\sh.exe --login -i');
                   Profile.Add('guid', Settings.WindowsTerminalProfileGuid);
                   Profile.Add('hidden', False);
-                  Profile.Add('icon', GetMSysBaseDirectory + 'dreamsdk-wt.ico');
+                  Profile.Add('icon', GetWindowsTerminalResourceDirectory + 'wt.ico');
                   Profile.Add('name', 'DreamSDK');
                   Profiles.Add(Profile);
                 end;
