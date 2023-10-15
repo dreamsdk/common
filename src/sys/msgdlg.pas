@@ -50,6 +50,8 @@ begin
   Result := MB_OK;
   if (mbYes in Buttons) or (mbNo in Buttons) then
     Result := MB_YESNO;
+  if (mbOk in Buttons) and (mbCancel in Buttons) then
+    Result := MB_OKCANCEL;
 end;
 
 function DefaultButtonToMsgDlg(DefaultButton: TMsgDlgBtn): Integer;
