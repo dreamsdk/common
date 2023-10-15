@@ -2,6 +2,8 @@ unit SysTools;
 
 {$mode objfpc}{$H+}
 
+// {$DEFINE SYSTOOLS_DETAILED_DEBUG_HANDLELOGONSERVERVARIABLE}
+
 interface
 
 uses
@@ -599,7 +601,9 @@ var
 
 begin
 {$IFDEF DEBUG}
+{$IFDEF SYSTOOLS_DETAILED_DEBUG_HANDLELOGONSERVERVARIABLE}
   DebugLog('### HandleLogonServerVariable ###');
+{$ENDIF}
 {$ENDIF}
   if not Assigned(EnvironmentVariables) then
     Exit;
@@ -615,15 +619,19 @@ begin
     if not IsEmpty(Temp) then
     begin
 {$IFDEF DEBUG}
+{$IFDEF SYSTOOLS_DETAILED_DEBUG_HANDLELOGONSERVERVARIABLE}
       DebugLog(LOGONSERVER_ENVIRONMENT_VARIABLE + ' is OK: ' + Temp);
+{$ENDIF}
 {$ENDIF}
       Exit; // Nothing to do
     end;
   end;
 
 {$IFDEF DEBUG}
+{$IFDEF SYSTOOLS_DETAILED_DEBUG_HANDLELOGONSERVERVARIABLE}
   DebugLog(LOGONSERVER_ENVIRONMENT_VARIABLE + ' is NOT OK, setting it to '
     + LogonServerValue);
+{$ENDIF}
 {$ENDIF}
 
   EnvironmentVariables.Add(
@@ -633,30 +641,50 @@ end;
 function GetFileLocationsInSystemPath(const FileName: TFileName;
   Output: TStringList): Boolean;
 const
+  PATHEXT_ENV_VAR = 'PATHEXT';
   PATH_ENV_VAR = 'PATH';
   PATH_SEPARATOR = ';';
 
 var
-  FullFileName: TFileName;
-  Buffer: TStringList;
-  i: Integer;
+  FullFileName,
+  FullFileNameWithExtension: TFileName;
+  Buffer,
+  Extensions: TStringList;
+  i, j: Integer;
 
 begin
   Result := False;
   if Assigned(Output) then
   begin
     Buffer := TStringList.Create;
+    Extensions := TStringList.Create;
     try
       StringToStringList(SysUtils.GetEnvironmentVariable(PATH_ENV_VAR),
         PATH_SEPARATOR, Buffer);
+      StringToStringList(SysUtils.GetEnvironmentVariable(PATHEXT_ENV_VAR),
+        PATH_SEPARATOR, Extensions);
+
       for i := 0 to Buffer.Count - 1 do
       begin
         FullFileName := IncludeTrailingPathDelimiter(Buffer[i]) + FileName;
+
         if FileExists(FullFileName) then
-          Output.Add(FullFileName);
+          Output.Add(FullFileName)
+        else
+          for j := 0 to Extensions.Count - 1 do
+          begin
+            FullFileNameWithExtension := FullFileName + LowerCase(Extensions[j]);
+            if FileExists(FullFileNameWithExtension) then
+            begin
+              Output.Add(FullFileNameWithExtension);
+              Break;
+            end;
+          end;
       end;
+
       Result := (Output.Count > 0);
     finally
+      Extensions.Free;
       Buffer.Free;
     end;
   end;
