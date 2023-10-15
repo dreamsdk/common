@@ -2,6 +2,7 @@ unit RunCmd;
 
 {$mode objfpc}{$H+}
 
+{$DEFINE DUMP_ALL_ENVIRONMENT}
 // {$DEFINE DUMP_PROCESS_PIPE}
 
 interface
@@ -148,6 +149,7 @@ begin
   Buffer[0] := #0;
 
 {$IFDEF DEBUG}
+  DebugLog('### RunCommand Invoke ###');
   DebugLog('  Executable: ' + Executable);
   TempBufferString := StringListToString(Parameters, WhiteSpaceStr);
   DebugLog('  Parameters: ' + TempBufferString);
@@ -159,9 +161,11 @@ begin
   fProcess.Environment.AddStrings(fEnvironment);
 
 {$IFDEF DEBUG}
+{$IFDEF DUMP_ALL_ENVIRONMENT}
   DebugLog('  Environment:');
   for i := 0 to fEnvironment.Count - 1 do
     DebugLog('    ' + fEnvironment[i]);
+{$ENDIF}
 {$ENDIF}
 
   // NoConsole / NewProcessGroup are used for handling CTRL+BREAK signals without exiting our app
