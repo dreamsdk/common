@@ -30,6 +30,8 @@ procedure SaveModuleVersion(const FileName: TFileName; const ProcessId: Integer)
 function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string): string; overload;
 function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string;
   EnableRegister: Boolean): string; overload;
+function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string;
+  EnableRegister, UseShellRunner: Boolean): string; overload;
 function RetrieveVersionWithFind(FindTargetFileName: TFileName;
   Tag: string): string; overload;
 function RetrieveVersionWithFind(FindTargetFileName: TFileName;
@@ -46,6 +48,7 @@ uses
   IniFiles,
   RefBase,
   SysTools,
+  Runner,
   RunTools,
   Version,
   FSTools;
@@ -59,6 +62,7 @@ var
   GrepFileName: TFileName;
   ComSpecFileName: TFileName;
   VersionInformationRegistry: TIniFile;
+  ShellRunner: TDreamcastSoftwareDevelopmentKitRunner;
 
 function GetRegisteredVersion(const FileName: TFileName): string;
 begin
@@ -174,35 +178,79 @@ end;
 function RetrieveVersion(Executable, CommandLine, StartTag,
   EndTag: string): string;
 begin
-  Result := RetrieveVersion(Executable, CommandLine, StartTag, EndTag, True);
+  Result := RetrieveVersion(Executable, CommandLine, StartTag, EndTag,
+    True, True);
+end;
+
+function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string;
+  EnableRegister: Boolean): string; overload;
+begin
+  Result := RetrieveVersion(Executable, CommandLine, StartTag, EndTag,
+    EnableRegister, True);
 end;
 
 function RetrieveVersion(Executable, CommandLine, StartTag,
-  EndTag: string; EnableRegister: Boolean): string;
+  EndTag: string; EnableRegister, UseShellRunner: Boolean): string;
 var
   Buffer: string;
   UseRegister: Boolean;
+  ExecutableFileName: TFileName;
+  FileLocations: TStringList;
 
 begin
   Result := EmptyStr;
+  Buffer := EmptyStr;
+  UseRegister := False;
 
-  UseRegister := EnableRegister and FileExists(Executable);
+  if EnableRegister then
+  begin
+    // By default, executable is a physical filename
+    ExecutableFileName := Executable;
 
-  if UseRegister then
-    Result := GetRegisteredVersion(Executable);
+    if not FileExists(ExecutableFileName) then
+    begin
+      // Try to find the executable passed in parameter in PATH
+      FileLocations := TStringList.Create;
+      try
+        if GetFileLocationsInSystemPath(ExecutableFileName, FileLocations) then
+          ExecutableFileName := FileLocations[0];
+      finally
+        FileLocations.Free;
+      end;
+    end;
+
+    // We can register if executable is found
+    UseRegister := FileExists(ExecutableFileName);
+
+    // Get the version if we can
+    if UseRegister then
+      Result := GetRegisteredVersion(ExecutableFileName);
+  end;
 
   if IsEmpty(Result) then
   begin
     try
-      Buffer := Run(Executable, CommandLine);
+      if UseShellRunner and ShellRunner.Healthy then
+      begin
+        // Execute the command from the Shell (bash)
+        ShellRunner.StartShellCommand(
+          Format('%s %s', [Executable, CommandLine]),
+          Buffer
+        );
+      end
+      else
+        // Execute the command from the Windows Prompt (cmd)
+        Buffer := Run(Executable, CommandLine);
 
+      // Extract the version into StartTag/EndTag
       Result := Buffer;
       if not IsEmpty(EndTag) then
         Result := ExtractStr(StartTag, EndTag, Buffer);
       Result := Trim(Result);
 
+      // Save version if we can
       if UseRegister and (not IsEmpty(Result)) then
-        SetRegisteredVersion(Executable, Result);
+        SetRegisteredVersion(ExecutableFileName, Result);
     except
       Result := INVALID_VERSION;
     end;
@@ -245,13 +293,13 @@ begin
       // Windows XP
       CommandLine := Format('/c type "%s" | "%s" --text "%s" ', [FindTargetFileName,
         GrepFileName, StartTag]);
-      Result := RetrieveVersion('cmd', CommandLine, StartTag, EndTag);
+      Result := RetrieveVersion(ComSpecFileName, CommandLine, StartTag, EndTag, False, False);
     end
     else
     begin
       // Windows Vista+
       CommandLine := Format('"%s" %s', [StartTag, FindTargetFileName]);
-      Result := RetrieveVersion('find', CommandLine, StartTag, EndTag);
+      Result := RetrieveVersion('find', CommandLine, StartTag, EndTag, False, False);
     end;
 
     if EnableRegister and (not IsEmpty(Result)) then
@@ -260,6 +308,11 @@ begin
 
   if IsEmpty(Result) then
     Result := INVALID_VERSION;
+
+{$IFDEF DEBUG}
+  DebugLog(Format('RetrieveVersionWithFind: FileName="%s", Version="%s"', [
+    FindTargetFileName, Result]))
+{$ENDIF}
 end;
 
 function ProcessModuleVersion(ModuleVersion: TModuleVersion;
@@ -312,6 +365,7 @@ begin
 end;
 
 initialization
+  ShellRunner := TDreamcastSoftwareDevelopmentKitRunner.Create(True);
   GrepFileName := GetInstallationBaseDirectory + GREP_FILE_SYSTEM_LOCATION;
   ComSpecFileName := GetEnvironmentVariable('COMSPEC');
   if DirectoryExists(GetConfigurationDirectory) then
@@ -319,6 +373,8 @@ initialization
       GetConfigurationDirectory + VERSION_REGISTRY_FILE_SYSTEM_LOCATION);
 
 finalization
+  if Assigned(ShellRunner) then
+    ShellRunner.Free;
   if Assigned(VersionInformationRegistry) then
     VersionInformationRegistry.Free;
 

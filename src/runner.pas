@@ -2,6 +2,8 @@ unit Runner;
 
 {$mode objfpc}{$H+}
 
+// {$DEFINE RUNNER_DETAILED_DEBUG}
+
 interface
 
 uses
@@ -18,6 +20,8 @@ type
   { TDreamcastSoftwareDevelopmentKitRunner }
   TDreamcastSoftwareDevelopmentKitRunner = class(TObject)
   private
+    fEmbeddedMode: Boolean;
+    fShellCommandOutputBuffer: TStringList;
     fInteractiveShell: Boolean;
     fShellRunnerClientExitCodeTempFileName: TFileName;
     fShellCommand: TRunCommandEx;
@@ -27,25 +31,37 @@ type
     fSettings: TDreamcastSoftwareDevelopmentSettings;
     fWorkingDirectory: TFileName;
     fShellProcessID: LongWord;
-    procedure InitializeEnvironment;
+
     function GetHealthy: Boolean;
-    procedure RetrieveEnvironmentVariables;
     procedure HandleNewLine(Sender: TObject; NewLine: string);
     procedure HandleTerminate(Sender: TObject);
+    procedure Initialize(const EmbeddedMode: Boolean);
+    procedure InitializeEnvironment;
+    procedure RetrieveEnvironmentVariables;
     procedure SetWorkingDirectory(AValue: TFileName);
   protected
     function GetClientExitCode: Integer;
+    function GetShellCommandOutputBuffer: string;
     procedure ExecuteShellWindowWatchdogThread(const AShellWindowProcessId: LongWord);
     property Settings: TDreamcastSoftwareDevelopmentSettings read fSettings;
   public
-    constructor Create;
+    constructor Create; overload;
+    constructor Create(const EmbeddedMode: Boolean); overload;
     destructor Destroy; override;
+
     function CheckHealty: Boolean;
     procedure StartShell;
-    function StartShellCommand(const CommandLine: string): Integer;
-    property Healthy: Boolean read GetHealthy;
-    property InteractiveShell: Boolean read fInteractiveShell write fInteractiveShell;
-    property WorkingDirectory: TFileName read fWorkingDirectory write SetWorkingDirectory;
+    function StartShellCommand(const CommandLine: string): Integer; overload;
+    function StartShellCommand(const CommandLine: string;
+      var OutputBuffer: string): Integer; overload;
+
+    property Healthy: Boolean
+      read GetHealthy;
+
+    property InteractiveShell: Boolean
+      read fInteractiveShell write fInteractiveShell;
+    property WorkingDirectory: TFileName
+      read fWorkingDirectory write SetWorkingDirectory;
   end;
 
 implementation
@@ -91,7 +107,9 @@ resourcestring
 procedure TShellWindowWatchdogThread.Execute;
 begin
 {$IFDEF DEBUG}
+{$IFDEF RUNNER_DETAILED_DEBUG}
   DebugLog('Shell Window Process Id: ' + IntToStr(ShellProcessId));
+{$ENDIF}
 {$ENDIF}
 
   WaitForWindowCreationForProcessId(ShellProcessId);
@@ -130,14 +148,31 @@ end;
 procedure TDreamcastSoftwareDevelopmentKitRunner.HandleNewLine(Sender: TObject;
   NewLine: string);
 begin
-  WriteLn(NewLine);
+  if not fEmbeddedMode then
+    WriteLn(NewLine);
+  fShellCommandOutputBuffer.Add(NewLine);
 end;
 
 procedure TDreamcastSoftwareDevelopmentKitRunner.HandleTerminate(Sender: TObject);
 begin
 {$IFDEF DEBUG}
+{$IFDEF RUNNER_DETAILED_DEBUG}
   DebugLog('*** END ***');
 {$ENDIF}
+{$ENDIF}
+end;
+
+procedure TDreamcastSoftwareDevelopmentKitRunner.Initialize(
+  const EmbeddedMode: Boolean);
+begin
+  fEmbeddedMode := EmbeddedMode;
+  fShellCommandOutputBuffer := TStringList.Create;
+  fShellProcessID := 0;
+  fInteractiveShell := False;
+  fEnvironmentVariables := TStringList.Create;
+  fSettings := TDreamcastSoftwareDevelopmentSettings.Create;
+  Settings.LoadConfiguration;
+  InitializeEnvironment;
 end;
 
 procedure TDreamcastSoftwareDevelopmentKitRunner.SetWorkingDirectory(
@@ -174,6 +209,12 @@ begin
   end;
 end;
 
+function TDreamcastSoftwareDevelopmentKitRunner.GetShellCommandOutputBuffer: string;
+begin
+  Result := fShellCommandOutputBuffer.Text;
+  fShellCommandOutputBuffer.Clear;
+end;
+
 procedure TDreamcastSoftwareDevelopmentKitRunner.ExecuteShellWindowWatchdogThread(
   const AShellWindowProcessId: LongWord);
 var
@@ -194,13 +235,15 @@ begin
 end;
 
 function TDreamcastSoftwareDevelopmentKitRunner.StartShellCommand(
-  const CommandLine: string): Integer;
+  const CommandLine: string; var OutputBuffer: string): Integer; overload;
 var
   ClientExitCodeUnixFileName: TFileName;
 
 begin
 {$IFDEF DEBUG}
+{$IFDEF RUNNER_DETAILED_DEBUG}
   DebugLog('CommandLine: ' + CommandLine);
+{$ENDIF}
 {$ENDIF}
 
   Result := UNKNOWN_EXIT_CODE;
@@ -226,25 +269,39 @@ begin
     Add('_EXITCODE=' + ClientExitCodeUnixFileName);
   end;
 
-//  SetConsoleTitle(PChar(GetFileDescription));
-
   fShellCommand.OnNewLine := @HandleNewLine;
   fShellCommand.OnTerminate := @HandleTerminate;
 
   fShellCommand.Start;
 
 {$IFDEF DEBUG}
+{$IFDEF RUNNER_DETAILED_DEBUG}
   DebugLog('WaitFor is starting...');
+{$ENDIF}
 {$ENDIF}
 
   fShellCommand.WaitFor;
 
 {$IFDEF DEBUG}
+{$IFDEF RUNNER_DETAILED_DEBUG}
   DebugLog('WaitFor is done!');
+{$ENDIF}
 {$ENDIF}
 
   if (fShellCommand.ExitCode = 0) then
     Result := GetClientExitCode;
+
+  OutputBuffer := GetShellCommandOutputBuffer;
+end;
+
+function TDreamcastSoftwareDevelopmentKitRunner.StartShellCommand(
+  const CommandLine: string): Integer; overload;
+var
+  Dummy: string;
+
+begin
+  Dummy := EmptyStr;
+  Result := StartShellCommand(CommandLine, Dummy);
 end;
 
 procedure TDreamcastSoftwareDevelopmentKitRunner.StartShell;
@@ -322,16 +379,19 @@ end;
 
 constructor TDreamcastSoftwareDevelopmentKitRunner.Create;
 begin
-  fShellProcessID := 0;
-  fInteractiveShell := False;
-  fEnvironmentVariables := TStringList.Create;
-  fSettings := TDreamcastSoftwareDevelopmentSettings.Create;
-  Settings.LoadConfiguration;
-  InitializeEnvironment;
+  Initialize(False);
+end;
+
+constructor TDreamcastSoftwareDevelopmentKitRunner.Create(
+  const EmbeddedMode: Boolean);
+begin
+  Initialize(EmbeddedMode);
 end;
 
 destructor TDreamcastSoftwareDevelopmentKitRunner.Destroy;
 begin
+  if Assigned(fShellCommandOutputBuffer) then
+    fShellCommandOutputBuffer.Free;
   FreeAndNil(fShellCommand);
   fEnvironmentVariables.Free;
   fSettings.Free;
