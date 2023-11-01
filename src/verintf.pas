@@ -248,6 +248,10 @@ begin
         Result := ExtractStr(StartTag, EndTag, Buffer);
       Result := Trim(Result);
 
+      // If Result is nil/NULL, then it's an invalid version...
+      if Pointer(Result) = nil then
+        raise Exception.Create('Unable to retrieve version');
+
       // Save version if we can
       if UseRegister and (not IsEmpty(Result)) then
         SetRegisteredVersion(ExecutableFileName, Result);

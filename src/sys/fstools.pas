@@ -22,6 +22,12 @@ type
     pifsobExcludeTrailingPathDelimiter
   );
 
+  { TPatchTextFileBehaviour }
+  TPatchTextFileBehaviour = (
+    ptfbAlwaysPatch,
+    ptfbPatchWithWatermark
+  );
+
   { TFileListItem }
   TFileListItem = class(TObject)
   private
@@ -70,7 +76,14 @@ function LoadFileToString(const FileName: TFileName): string;
 function LoadUTF16FileToString(const FileName: TFileName): string;
 function ParseInputFileSystemObject(const Parameter: TFileName;
   const Behaviour: TParseInputFileSystemObjectBehaviour = pifsobNoAlteration): TFileName;
-function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string): Boolean;
+function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string;
+  const Behaviour: TPatchTextFileBehaviour): Boolean; overload;
+function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string;
+  const Behaviour: TPatchTextFileBehaviour;
+  const WatermarkPrefix: string): Boolean; overload;
+function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string;
+  const Behaviour: TPatchTextFileBehaviour;
+  const WatermarkPrefix, WatermarkSuffix: string): Boolean; overload;
 procedure SaveStringToFile(const InString: string; FileName: TFileName); overload;
 procedure SaveStringToFile(const InString: string; FileName: TFileName; const Append: Boolean); overload;
 function SetDirectoryRights(const DirectoryFullPath: TFileName;
@@ -302,12 +315,22 @@ begin
   end;
 end;
 
-function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string): Boolean;
+function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string;
+  const Behaviour: TPatchTextFileBehaviour;
+  const WatermarkPrefix, WatermarkSuffix: string): Boolean; overload;
+const
+  WATERMARK_HEADER  = 'This file has been patched by DreamSDK Manager';
+  WATERMARK_STAMP   = 'dreamsdk-patch';
+
 var
   Buffer: TStringList;
+  PatchWatermark,
+  PatchWatermarkHeader: string;
+  HeaderAdded: Boolean;
 
 begin
   Result := False;
+  HeaderAdded := False;
   if FileExists(FileName) then
   begin
     Buffer := TStringList.Create;
@@ -315,14 +338,65 @@ begin
       Buffer.LoadFromFile(FileName);
       if IsInString(OldValue, Buffer.Text) then
       begin
-        Buffer.Text := StringReplace(Buffer.Text, OldValue, NewValue, [rfReplaceAll]);
-        Buffer.SaveToFile(FileName);
+        // Do something only if the old value has been found
+
+        // Compute unique watermark code for specific instruction
+        PatchWatermark := MD5Print(MD5String(OldValue + NewValue));
+
+        // Patch if always required (ptfbAlwaysPatch) or if the PatchWatermark is not found
+        if (Behaviour = ptfbAlwaysPatch)
+          or ((Behaviour = ptfbPatchWithWatermark) and (not IsInString(PatchWatermark, Buffer.Text))) then
+        begin
+          // This is just used for adding a 'warning' in the file beginning
+          if (Behaviour = ptfbPatchWithWatermark) and (not IsInString(WATERMARK_HEADER, Buffer.Text)) then
+          begin
+            Buffer.Insert(0, Format('%s %s%s', [WatermarkPrefix, WATERMARK_HEADER, sLineBreak]));
+            HeaderAdded := True;
+          end;
+
+          // Apply the patch for real
+          Buffer.Text := StringReplace(Buffer.Text, OldValue, NewValue, [rfReplaceAll]);
+
+          // Save the watermark code in the file
+          if (Behaviour = ptfbPatchWithWatermark) then
+          begin
+            PatchWatermarkHeader := EmptyStr;
+            if HeaderAdded then
+              PatchWatermarkHeader := sLineBreak;
+            Buffer.Add(Format('%s%s %s: %s%s', [
+              PatchWatermarkHeader, // sLineBreak or EmptyStr
+              WatermarkPrefix,      // # or <!--
+              WATERMARK_STAMP,      // Fixed value (e.g., "code")
+              PatchWatermark,       // Watermark value
+              WatermarkSuffix       // EmptyStr or -->
+            ]));
+          end;
+
+          // Save the patched file
+          Buffer.SaveToFile(FileName);
+        end;
+
         Result := True;
       end;
     finally
       Buffer.Free;
     end;
   end;
+end;
+
+function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string;
+  const Behaviour: TPatchTextFileBehaviour): Boolean; overload;
+begin
+  Result := PatchTextFile(FileName, OldValue, NewValue, Behaviour, '#',
+    EmptyStr);
+end;
+
+function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string;
+  const Behaviour: TPatchTextFileBehaviour;
+  const WatermarkPrefix: string): Boolean; overload;
+begin
+  Result := PatchTextFile(FileName, OldValue, NewValue, Behaviour,
+    WatermarkPrefix, EmptyStr);
 end;
 
 function UncompressZipFile(const FileName, OutputDirectory: TFileName): Boolean;
