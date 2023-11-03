@@ -1170,6 +1170,17 @@ begin
       )
     );
 
+    // Fail-safe check
+    // This part will be removed at some point.
+    if (not SameText(fInstallPath, GetInstallationBaseDirectory)) then
+    begin
+{$IFDEF DEBUG}
+      DebugLog('*** ERROR: Incorrect InstallPath detected...');
+{$ENDIF}
+      fInstallPath := GetInstallationBaseDirectory;
+    end;
+
+
     fUseMintty := IniFile.ReadBool(
       CONFIG_DREAMSDK_SECTION_SETTINGS,
       'UseMinTTY',
