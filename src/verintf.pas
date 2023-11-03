@@ -234,7 +234,7 @@ begin
       begin
         // Execute the command from the Shell (bash)
         ShellRunner.StartShellCommand(
-          Format('%s %s', [Executable, CommandLine]),
+          Format('%s %s', [SystemToUnixPath(Executable), CommandLine]),
           Buffer
         );
       end

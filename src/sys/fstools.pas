@@ -511,8 +511,12 @@ end;
 
 function SystemToUnixPath(const SystemPathName: TFileName): TFileName;
 begin
-  Result := StringReplace(SystemPathName, DirectorySeparator, '/', [rfReplaceAll]);
-  Result := '/' + StringReplace(Result, ':', EmptyStr, [rfReplaceAll]);
+  Result := SystemPathName;
+  if IsInString(DirectorySeparator, SystemPathName) then
+  begin
+    Result := StringReplace(SystemPathName, DirectorySeparator, '/', [rfReplaceAll]);
+    Result := '/' + StringReplace(Result, ':', EmptyStr, [rfReplaceAll]);
+  end;
 end;
 
 function GetWorkingPath: TFileName;
