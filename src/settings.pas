@@ -1180,7 +1180,6 @@ begin
       fInstallPath := GetInstallationBaseDirectory;
     end;
 
-
     fUseMintty := IniFile.ReadBool(
       CONFIG_DREAMSDK_SECTION_SETTINGS,
       'UseMinTTY',

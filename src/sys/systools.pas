@@ -58,6 +58,7 @@ function GetUserList(var UserList: TStringList): Boolean;
 function GetUserFullNameFromUserName(const UserName: string): string;
 procedure HandleLogonServerVariable(EnvironmentVariables: TStringList);
 function IsEmpty(const S: string): Boolean;
+function IsInArray(A: array of string; const S: string): Boolean;
 function IsInString(const SubStr, S: string): Boolean;
 function IsProcessRunning(FileName: TFileName): Boolean;
 function IsProcessRunning(const ProcessId: LongWord): Boolean;
@@ -558,6 +559,17 @@ end;
 function IsEmpty(const S: string): Boolean;
 begin
   Result := SameText(S, EmptyStr);
+end;
+
+function IsInArray(A: array of string; const S: string): Boolean;
+var
+  Item: string;
+
+begin
+  Result := False;
+  for Item in A do
+    if (Item = S) then
+      Exit(True);
 end;
 
 function IsProcessRunning(FileName: TFileName): Boolean;
