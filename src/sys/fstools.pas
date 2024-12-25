@@ -59,6 +59,8 @@ type
 function ExtractDirectoryName(const DirectoryName: string): string;
 function ExtractEmbeddedFileToWorkingPath(const ResourceName: string;
   const FileName: TFileName): TFileName;
+function ExtractFileFromAr(const ArchiveFileName,
+  FileNameToExtract: TFileName; var ADestination: TByteArray): Boolean;
 function GetApplicationPath: TFileName;
 function GetFileHash(const FileName: TFileName): string;
 function GetProgramName: string;
@@ -589,6 +591,92 @@ begin
   TempVariable := LowerCase(ChangeFileExt(GetTemporaryFileName, EmptyStr));
   WorkingPath := IncludeTrailingPathDelimiter(TempVariable);
   ForceDirectories(WorkingPath);
+end;
+
+function ExtractFileFromAr(const ArchiveFileName,
+  FileNameToExtract: TFileName; var ADestination: TByteArray): Boolean;
+type
+  TArFileSignature = array[0..7] of Char;
+  TArFileHeader = packed record
+    Name: array[0..15] of Char;
+    ModTime: array[0..11] of Char;
+    OwnerID: array[0..5] of Char;
+    GroupID: array[0..5] of Char;
+    Mode: array[0..7] of Char;
+    Size: array[0..9] of Char;
+    Magic: array[0..1] of Char;
+  end;
+
+const
+  FILE_SIGNATURE = '!<arch>'#$0A;
+
+var
+  Signature: TArFileSignature;
+  ArchiveFile: TFileStream;
+  Header: TArFileHeader;
+  FileName: TFileName;
+  FileSize: Int64;
+  FileData: TMemoryStream;
+  Found: Boolean;
+
+begin
+  Result := False;
+  Signature := Default(TArFileSignature);
+
+  ArchiveFile := TFileStream.Create(ArchiveFileName, fmOpenRead or fmShareDenyNone);
+  try
+    // Check if we have a correct ar file
+    ArchiveFile.Read(Signature, SizeOf(TArFileSignature));
+    if not SameText(FILE_SIGNATURE, Signature) then
+      Exit;
+
+    // Check every files in the ar file
+    Found := False;
+    Header := Default(TArFileHeader);
+    while ArchiveFile.Position < ArchiveFile.Size do
+    begin
+      // Read the header
+      ArchiveFile.Read(Header, SizeOf(Header));
+
+      // Check magic number
+      if (Header.Magic[0] <> '`') or (Header.Magic[1] <> #10) then
+        Break;
+
+      // Extract the name and the size of the current entry
+      FileName := LowerCase(ExcludeTrailingPathDelimiter(TrimRight(string(Header.Name))));
+      FileSize := StrToInt64Def(TrimRight(string(Header.Size)), 0);
+
+      // Check if it's the file we want
+      if SameText(LowerCase(FileNameToExtract), LowerCase(FileName)) then
+      begin
+        Found := True;
+        Break;
+      end;
+
+      // Next file
+      ArchiveFile.Seek(FileSize, soFromCurrent);
+
+      // Align if needed (padding could be necessary)
+      if (ArchiveFile.Position mod 2) <> 0 then
+        ArchiveFile.Seek(1, soFromCurrent);
+    end;
+
+    // Extract the found file from the ar file
+    if Found then
+    begin
+      FileData := TMemoryStream.Create;
+      try
+        FileData.CopyFrom(ArchiveFile, FileSize);
+        FileData.Seek(0, soFromBeginning);
+        FileData.Read(ADestination, FileSize);
+        Result := True;
+      finally
+        FileData.Free;
+      end;
+    end;
+  finally
+    ArchiveFile.Free;
+  end;
 end;
 
 { TFileListItem }

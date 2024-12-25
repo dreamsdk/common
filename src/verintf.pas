@@ -5,7 +5,8 @@ unit VerIntf;
 interface
 
 uses
-  Classes, SysUtils;
+  SysUtils,
+  Classes;
 
 type
   TModuleVersion = packed record
@@ -32,6 +33,8 @@ function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string;
   EnableRegister: Boolean): string; overload;
 function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string;
   EnableRegister, UseShellRunner: Boolean): string; overload;
+function RetrieveVersionKallisti(const KallistiLibraryFileName: TFileName;
+  EnableRegister: Boolean): string;
 function RetrieveVersionWithFind(FindTargetFileName: TFileName;
   Tag: string): string; overload;
 function RetrieveVersionWithFind(FindTargetFileName: TFileName;
@@ -45,6 +48,7 @@ procedure SetRegisteredVersion(const FileName: TFileName; const Version: string)
 implementation
 
 uses
+  StrUtils,
   IniFiles,
   RefBase,
   SysTools,
@@ -250,7 +254,8 @@ begin
 
       // If Result is nil/NULL, then it's an invalid version...
       if Pointer(Result) = nil then
-        raise Exception.Create('Unable to retrieve version');
+        raise Exception.CreateFmt('Unable to retrieve version ("%s"; "%s")',
+          [Executable, CommandLine]);
 
       // Save version if we can
       if UseRegister and (not IsEmpty(Result)) then
@@ -259,6 +264,81 @@ begin
       Result := INVALID_VERSION;
     end;
   end;
+end;
+
+function RetrieveVersionKallisti(const KallistiLibraryFileName: TFileName;
+  EnableRegister: Boolean): string;
+const
+  TAG_START = 'KallistiOS';
+  TAG_END = 'sh-elf-gcc.exe (GCC)';
+  BANNER_O = 'banner.o';
+
+  TAG_EXTR_MAJOR = TAG_START + ' v';
+  TAG_EXTR_GITREV = 'Git revision:';
+  TAG_EXTR_END = #$0A;
+
+var
+  Buffer: TByteArray;
+  AnsiStr: AnsiString;
+  StartIndex,
+  EndIndex: Integer;
+  UseRegister: Boolean;
+  MajorVersion,
+  GitRevision: string;
+
+begin
+  Result := INVALID_VERSION;
+  Buffer := Default(TByteArray);
+  UseRegister := False;
+
+  if EnableRegister then
+  begin
+    UseRegister := FileExists(KallistiLibraryFileName);
+    if UseRegister then
+      Result := GetRegisteredVersion(KallistiLibraryFileName);
+  end;
+
+  if not IsVersionValid(Result) then
+  begin
+    try
+      // Extract 'banner.o' into memory; in Buffer variable
+      ExtractFileFromAr(KallistiLibraryFileName, BANNER_O, Buffer);
+      SetString(AnsiStr, PAnsiChar(@Buffer[0]), Length(Buffer));
+
+      // Extract the valuable part from this buffer
+      EndIndex := Pos(TAG_END, AnsiStr) - 1;
+      StartIndex := RPos(TAG_START, AnsiStr);
+      Result := Copy(AnsiStr, StartIndex, EndIndex - StartIndex);
+
+{$IFDEF DEBUG}
+      DebugLog('  --- RetrieveVersionKallisti: START ---');
+      DebugLog( Result );
+      DebugLog('  --- RetrieveVersionKallisti: END ---');
+{$ENDIF}
+
+      MajorVersion := Trim(ExtractStr(TAG_EXTR_MAJOR, TAG_EXTR_END, Result));
+      GitRevision := Trim(ExtractStr(TAG_EXTR_GITREV, TAG_EXTR_END, Result));
+
+      Result := MajorVersion;
+      if not IsEmpty(GitRevision) then
+        Result := Format('%s-%s', [MajorVersion, GitRevision]);
+
+      // Save version if we can
+      if UseRegister and (not IsEmpty(Result)) then
+        SetRegisteredVersion(KallistiLibraryFileName, Result);
+    except
+      Result := INVALID_VERSION;
+    end;
+  end;
+
+  // Fallback if nothing has been read correctly...
+  if IsEmpty(Result) then
+    Result := INVALID_VERSION;
+
+{$IFDEF DEBUG}
+  DebugLog(Format('RetrieveVersionKallisti: FileName="%s", Version="%s"', [
+    KallistiLibraryFileName, Result]))
+{$ENDIF}
 end;
 
 function RetrieveVersionWithFind(FindTargetFileName: TFileName;
@@ -290,7 +370,7 @@ begin
   if EnableRegister then
     Result := GetRegisteredVersion(FindTargetFileName);
 
-  if IsEmpty(Result) then
+  if not IsVersionValid(Result) then
   begin
     if (not IsWindowsVistaOrGreater) and FileExists(GrepFileName) then
     begin
