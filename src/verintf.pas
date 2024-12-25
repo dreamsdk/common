@@ -274,8 +274,10 @@ const
   BANNER_O = 'banner.o';
 
   TAG_EXTR_MAJOR = TAG_START + ' v';
+  TAG_EXTR_MAJOR2 = TAG_START + ' ';
   TAG_EXTR_GITREV = 'Git revision:';
   TAG_EXTR_END = #$0A;
+  TAG_EXTR_END2 = ':';
 
 var
   Buffer: TByteArray;
@@ -317,6 +319,8 @@ begin
 {$ENDIF}
 
       MajorVersion := Trim(ExtractStr(TAG_EXTR_MAJOR, TAG_EXTR_END, Result));
+      if IsEmpty(MajorVersion) then
+        MajorVersion := Trim(ExtractStr(TAG_EXTR_MAJOR2, TAG_EXTR_END2, Result));
       GitRevision := Trim(ExtractStr(TAG_EXTR_GITREV, TAG_EXTR_END, Result));
 
       Result := MajorVersion;
