@@ -623,59 +623,62 @@ begin
   Result := False;
   Signature := Default(TArFileSignature);
 
-  ArchiveFile := TFileStream.Create(ArchiveFileName, fmOpenRead or fmShareDenyNone);
-  try
-    // Check if we have a correct ar file
-    ArchiveFile.Read(Signature, SizeOf(TArFileSignature));
-    if not SameText(FILE_SIGNATURE, Signature) then
-      Exit;
+  if FileExists(ArchiveFileName) then
+  begin
+    ArchiveFile := TFileStream.Create(ArchiveFileName, fmOpenRead or fmShareDenyNone);
+    try
+      // Check if we have a correct ar file
+      ArchiveFile.Read(Signature, SizeOf(TArFileSignature));
+      if not SameText(FILE_SIGNATURE, Signature) then
+        Exit;
 
-    // Check every files in the ar file
-    Found := False;
-    Header := Default(TArFileHeader);
-    while ArchiveFile.Position < ArchiveFile.Size do
-    begin
-      // Read the header
-      ArchiveFile.Read(Header, SizeOf(Header));
-
-      // Check magic number
-      if (Header.Magic[0] <> '`') or (Header.Magic[1] <> #10) then
-        Break;
-
-      // Extract the name and the size of the current entry
-      FileName := LowerCase(ExcludeTrailingPathDelimiter(TrimRight(string(Header.Name))));
-      FileSize := StrToInt64Def(TrimRight(string(Header.Size)), 0);
-
-      // Check if it's the file we want
-      if SameText(LowerCase(FileNameToExtract), LowerCase(FileName)) then
+      // Check every files in the ar file
+      Found := False;
+      Header := Default(TArFileHeader);
+      while ArchiveFile.Position < ArchiveFile.Size do
       begin
-        Found := True;
-        Break;
+        // Read the header
+        ArchiveFile.Read(Header, SizeOf(Header));
+
+        // Check magic number
+        if (Header.Magic[0] <> '`') or (Header.Magic[1] <> #10) then
+          Break;
+
+        // Extract the name and the size of the current entry
+        FileName := LowerCase(ExcludeTrailingPathDelimiter(TrimRight(string(Header.Name))));
+        FileSize := StrToInt64Def(TrimRight(string(Header.Size)), 0);
+
+        // Check if it's the file we want
+        if SameText(LowerCase(FileNameToExtract), LowerCase(FileName)) then
+        begin
+          Found := True;
+          Break;
+        end;
+
+        // Next file
+        ArchiveFile.Seek(FileSize, soFromCurrent);
+
+        // Align if needed (padding could be necessary)
+        if (ArchiveFile.Position mod 2) <> 0 then
+          ArchiveFile.Seek(1, soFromCurrent);
       end;
 
-      // Next file
-      ArchiveFile.Seek(FileSize, soFromCurrent);
-
-      // Align if needed (padding could be necessary)
-      if (ArchiveFile.Position mod 2) <> 0 then
-        ArchiveFile.Seek(1, soFromCurrent);
-    end;
-
-    // Extract the found file from the ar file
-    if Found then
-    begin
-      FileData := TMemoryStream.Create;
-      try
-        FileData.CopyFrom(ArchiveFile, FileSize);
-        FileData.Seek(0, soFromBeginning);
-        FileData.Read(ADestination, FileSize);
-        Result := True;
-      finally
-        FileData.Free;
+      // Extract the found file from the ar file
+      if Found then
+      begin
+        FileData := TMemoryStream.Create;
+        try
+          FileData.CopyFrom(ArchiveFile, FileSize);
+          FileData.Seek(0, soFromBeginning);
+          FileData.Read(ADestination, FileSize);
+          Result := True;
+        finally
+          FileData.Free;
+        end;
       end;
+    finally
+      ArchiveFile.Free;
     end;
-  finally
-    ArchiveFile.Free;
   end;
 end;
 
