@@ -538,17 +538,17 @@ begin
 end;
 
 function GetFileDate(const FileName: TFileName): TDateTime;
-const
-  c_UnassignedDate = -693594;
-
 var
   BuildDate: Integer;
 
 begin
-  Result := c_UnassignedDate;
-  BuildDate := FileAge(FileName);
-  if BuildDate <> -1 then
-    Result := FileDateToDateTime(BuildDate);
+  Result := Default(TDateTime);
+  if FileExists(FileName) then
+  begin
+    BuildDate := FileAge(FileName);
+    if BuildDate <> -1 then
+      Result := FileDateToDateTime(BuildDate);
+  end;
 end;
 
 function SetDirectoryRights(const DirectoryFullPath: TFileName;
