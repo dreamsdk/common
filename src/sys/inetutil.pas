@@ -34,6 +34,7 @@ type
 procedure DumpNetworkCardAdapterList(var ANetworkAdapterCardList: TNetworkCardAdapterList);
 {$ENDIF}
 function GetExternalInternetProtocolAddress: string;
+function GetHostFromUri(const Uri: string): string;
 function GetNetworkCardAdapterList(var ANetworkAdapterCardList: TNetworkCardAdapterList): Boolean;
 function FindMediaAccessControlAddress(var ANetworkAdapterCardList: TNetworkCardAdapterList;
   MediaAccessControlAddress: string): Integer;
@@ -53,11 +54,23 @@ uses
   SynaIP,
   FPHTTPClient,
   RegExpr,
+  URIParser,
   SysTools,
   FSTools,
   Version,
   RegTools,
   UtilWMI;
+
+function GetHostFromUri(const Uri: string): string;
+var
+  Buffer: TUri;
+
+begin
+  Result := EmptyStr;
+  Buffer := ParseURI(Uri);
+  if not IsEmpty(Buffer.Host) then
+    Result := Left('.', Buffer.Host);
+end;
 
 function ParseInternetProtocolAddress(const InputValue: string): string;
 var
