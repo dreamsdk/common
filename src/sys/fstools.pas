@@ -89,7 +89,9 @@ function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string;
   const Behaviour: TPatchTextFileBehaviour;
   const WatermarkPrefix, WatermarkSuffix: string): Boolean; overload;
 (* Renames the passed file or directory in parameter, with a ".old" suffix *)
-function RenameFileOrDirectoryAsBackup(const TargetFileOrDirectory: TFileName): Boolean;
+function RenameFileOrDirectoryAsBackup(const TargetFileOrDirectory: TFileName): Boolean; overload;
+function RenameFileOrDirectoryAsBackup(const TargetFileOrDirectory: TFileName;
+  var NewTargetPath: TFileName): Boolean; overload;
 procedure SaveStringToFile(const InString: string; FileName: TFileName); overload;
 procedure SaveStringToFile(const InString: string; FileName: TFileName; const Append: Boolean); overload;
 function SetDirectoryRights(const DirectoryFullPath: TFileName;
@@ -686,11 +688,20 @@ begin
   end;
 end;
 
+function RenameFileOrDirectoryAsBackup(const TargetFileOrDirectory: TFileName): Boolean; overload;
+var
+  NewTargetPath: TFileName;
+
+begin
+  Result := RenameFileOrDirectoryAsBackup(TargetFileOrDirectory, NewTargetPath);
+end;
+
 (* This function rename the object (file or directory) passed parameter with the
  * ".old" suffix in order to keep a backup, instead of just deleting the object.
  * This is used in the "RenDir" Setup Helper, for the DreamSDK Setup.
  *)
-function RenameFileOrDirectoryAsBackup(const TargetFileOrDirectory: TFileName): Boolean;
+function RenameFileOrDirectoryAsBackup(const TargetFileOrDirectory: TFileName;
+  var NewTargetPath: TFileName): Boolean;
 const
   MAX_TRIES = 999;
 
@@ -699,8 +710,7 @@ var
 
   SourcePath,
   OldObjectName,
-  NewObjectName,
-  NewTargetPath: TFileName;
+  NewObjectName: TFileName;
 
   IsTargetFile,
   IsTargetDirectory,
