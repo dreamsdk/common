@@ -10,22 +10,30 @@ uses
 type
   EHomeDirectoryNotFound = class(Exception);
 
-const
-  MSYS_BASE_DIRECTORY = 'msys\1.0\';
-  SETTINGS_DIRECTORY = 'etc\dreamsdk\';
-  SETTINGS_SYSTEM_FULL_PATH = MSYS_BASE_DIRECTORY + SETTINGS_DIRECTORY;
+  TEnvironmentFoundationKind = (
+    efkUndefined,
+    efkMinGWMSYS,
+    efkMinGW64MSYS2
+  );
 
 function DreamSdkPathToSystem(const UnixPathName: TFileName): TFileName;
+function GetBaseEnvironmentFoundationKind: TEnvironmentFoundationKind;
 function GetBaseEnvironmentVariableName: string;
 function GetConfigurationDirectory: TFileName;
+function GetConfigurationPartialPath: TFileName;
 function GetInstallationBaseDirectory: TFileName;
 function GetMSysBaseDirectory: TFileName;
+function GetUserBinariesBaseDirectory: TFileName;
+function GetWindowsToolchainBaseDirectory: TFileName;
 function IsDefinedInstallationBaseDirectoryVariable: Boolean;
 function SystemToDreamSdkPath(const SystemPathName: TFileName): TFileName;
 
 implementation
 
 uses
+{$IFDEF DEBUG}
+  TypInfo,
+{$ENDIF}
 {$IFDEF GUI}
   Interfaces,
   Dialogs,
@@ -34,10 +42,18 @@ uses
   SysTools,
   FSTools;
 
+const
+  MSYS2_FLAVOUR = 'mingw64';
+  MSYS_BASE_DIRECTORY = 'msys\1.0\';
+  SETTINGS_DIRECTORY = 'etc\dreamsdk\';
+
 var
+  FoundationKind: TEnvironmentFoundationKind;
   InstallationBaseDirectory,
   MsysBaseDirectory,
   ConfigurationDirectory,
+  WindowsToolchainBaseDirectory,
+  UserBinariesBaseDirectory,
   CommandLineInstallationDirectory: TFileName;
 
 function GetBaseEnvironmentVariableName: string;
@@ -81,6 +97,18 @@ const
     'InstallationBaseDirectory: "%s", ConfigurationDirectory: "%s", ' +
     'ConfigurationDirectory: "%s", CommandLineInstallationDirectory: "%s".';
 {$ENDIF}  
+
+  procedure DetectFoundationKind;
+  begin
+    FoundationKind := efkUndefined;
+    if FileExists(InstallationBaseDirectory + 'usr\bin\pacman.exe') then
+      FoundationKind := efkMinGW64MSYS2
+    else if DirectoryExists(InstallationBaseDirectory + MSYS_BASE_DIRECTORY) then
+      FoundationKind := efkMinGWMSYS;
+{$IFDEF DEBUG}
+    DebugLog('  Environment: ' + GetEnumName(TypeInfo(TEnvironmentFoundationKind), Ord(FoundationKind)));
+{$ENDIF}
+  end;
 
 {$IFNDEF DISABLE_REFBASE_WARNING}
 var
@@ -133,8 +161,16 @@ begin
 
     if DirectoryExists(InstallationBaseDirectory) then
     begin
+      // Detect the foundation kind: if we are under MinGW/MSYS or MinGW-w64/MSYS2
+      DetectFoundationKind;
+
       // Compute MSYS Base directory (i.e. '/')
-      MsysBaseDirectory := InstallationBaseDirectory + MSYS_BASE_DIRECTORY;
+      case FoundationKind of
+        efkMinGWMSYS:
+          MsysBaseDirectory := InstallationBaseDirectory + MSYS_BASE_DIRECTORY;
+        efkMinGW64MSYS2:
+          MsysBaseDirectory := InstallationBaseDirectory;
+      end;
 {$IFDEF DEBUG}
       DebugLog('  MsysBaseDirectory: ' + MsysBaseDirectory);
 {$ENDIF}
@@ -144,7 +180,25 @@ begin
 {$IFDEF DEBUG}
       DebugLog('  ConfigurationDirectory: ' + ConfigurationDirectory);
 {$ENDIF}
-    end;
+
+      // Compute Windows toolchain directory
+      WindowsToolchainBaseDirectory := InstallationBaseDirectory;
+      if (FoundationKind = efkMinGW64MSYS2) then
+        WindowsToolchainBaseDirectory := WindowsToolchainBaseDirectory + MSYS2_FLAVOUR + DirectorySeparator;
+      WindowsToolchainBaseDirectory := WindowsToolchainBaseDirectory + 'bin' + DirectorySeparator;
+{$IFDEF DEBUG}
+      DebugLog('  WindowsToolchainBaseDirectory: ' + WindowsToolchainBaseDirectory);
+{$ENDIF}
+
+      // User binaries directory
+      UserBinariesBaseDirectory := MsysBaseDirectory + 'bin';
+      if (FoundationKind = efkMinGW64MSYS2) then
+        UserBinariesBaseDirectory := MsysBaseDirectory + 'usr\bin';
+      UserBinariesBaseDirectory := UserBinariesBaseDirectory + DirectorySeparator;
+{$IFDEF DEBUG}
+      DebugLog('  UserBinariesBaseDirectory: ' + UserBinariesBaseDirectory);
+{$ENDIF}
+    end; // InstallationBaseDirectory exists
 
 {$IFNDEF DISABLE_REFBASE_WARNING}
     // If the MSYS Base directory doesn't exist, then there is a issue somewhere!
@@ -204,6 +258,31 @@ begin
     Result := GetMSysBaseDirectory + Result;
 end;
 
+function GetConfigurationPartialPath: TFileName;
+begin
+  Result := SETTINGS_DIRECTORY;
+  if GetBaseEnvironmentFoundationKind = efkMinGWMSYS then
+    Result := MSYS_BASE_DIRECTORY + Result;
+end;
+
+function GetBaseEnvironmentFoundationKind: TEnvironmentFoundationKind;
+begin
+  RetrieveBaseDirectories;
+  Result := FoundationKind;
+end;
+
+function GetWindowsToolchainBaseDirectory: TFileName;
+begin
+  RetrieveBaseDirectories;
+  Result := WindowsToolchainBaseDirectory;
+end;
+
+function GetUserBinariesBaseDirectory: TFileName;
+begin
+  RetrieveBaseDirectories;
+  Result := UserBinariesBaseDirectory;
+end;
+
 {$IFNDEF DISABLE_REFBASE_HOME_DIR_OVERRIDE}
 procedure ParseParameters;
 const
@@ -224,10 +303,12 @@ end;
 {$ENDIF}
 
 initialization
+  FoundationKind := Default(TEnvironmentFoundationKind);
   InstallationBaseDirectory := EmptyStr;
   MsysBaseDirectory := EmptyStr;
   ConfigurationDirectory := EmptyStr;
   CommandLineInstallationDirectory := EmptyStr;
+  UserBinariesBaseDirectory := EmptyStr;
 {$IFNDEF DISABLE_REFBASE_HOME_DIR_OVERRIDE}
   ParseParameters;
 {$ENDIF}

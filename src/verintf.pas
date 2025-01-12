@@ -28,6 +28,7 @@ function IsVersionValid(const Version: string): Boolean;
 function LoadModuleVersion(const FileName: TFileName; const ProcessId: Integer): TModuleVersion;
 procedure SaveModuleVersion; overload;
 procedure SaveModuleVersion(const FileName: TFileName; const ProcessId: Integer); overload;
+function RetrieveVersion(Executable, CommandLine: string; EnableRegister: Boolean): string; overload;
 function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string): string; overload;
 function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string;
   EnableRegister: Boolean): string; overload;
@@ -58,7 +59,7 @@ uses
   FSTools;
 
 const
-  GREP_FILE_SYSTEM_LOCATION = MSYS_BASE_DIRECTORY + 'bin\grep.exe';
+  GREP_BINARY_FILENAME = 'grep.exe';
   GET_MODULE_VERSION_SWITCH = '--internal-get-module-version';
   VERSION_REGISTRY_FILE_SYSTEM_LOCATION = 'versions.conf';
 
@@ -190,6 +191,13 @@ function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string;
   EnableRegister: Boolean): string; overload;
 begin
   Result := RetrieveVersion(Executable, CommandLine, StartTag, EndTag,
+    EnableRegister, True);
+end;
+
+function RetrieveVersion(Executable, CommandLine: string;
+  EnableRegister: Boolean): string; overload;
+begin
+  Result := RetrieveVersion(Executable, CommandLine, EmptyStr, EmptyStr,
     EnableRegister, True);
 end;
 
@@ -454,7 +462,7 @@ end;
 
 initialization
   ShellRunner := TDreamcastSoftwareDevelopmentKitRunner.Create(True);
-  GrepFileName := GetInstallationBaseDirectory + GREP_FILE_SYSTEM_LOCATION;
+  GrepFileName := GetUserBinariesBaseDirectory + GREP_BINARY_FILENAME;
   ComSpecFileName := GetEnvironmentVariable('COMSPEC');
   if DirectoryExists(GetConfigurationDirectory) then
     VersionInformationRegistry := TIniFile.Create(

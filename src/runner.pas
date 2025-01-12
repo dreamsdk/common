@@ -2,7 +2,7 @@ unit Runner;
 
 {$mode objfpc}{$H+}
 
-// {$DEFINE RUNNER_DETAILED_DEBUG}
+{$DEFINE RUNNER_DETAILED_DEBUG}
 
 interface
 
@@ -20,6 +20,7 @@ type
   { TDreamcastSoftwareDevelopmentKitRunner }
   TDreamcastSoftwareDevelopmentKitRunner = class(TObject)
   private
+    fCurrentCommandLine: string;
     fEmbeddedMode: Boolean;
     fShellCommandOutputBuffer: TStringList;
     fInteractiveShell: Boolean;
@@ -131,12 +132,9 @@ end;
 { TDreamcastSoftwareDevelopmentKitRunner }
 
 procedure TDreamcastSoftwareDevelopmentKitRunner.InitializeEnvironment;
-const
-  BINARY_DIRECTORY = MSYS_BASE_DIRECTORY + 'bin\';
-
 begin
-  fExecutableMinTTY := Settings.InstallPath + BINARY_DIRECTORY + 'mintty.exe';
-  fExecutableShell := Settings.InstallPath + BINARY_DIRECTORY + 'sh.exe';
+  fExecutableMinTTY := GetUserBinariesBaseDirectory + 'mintty.exe';
+  fExecutableShell := GetUserBinariesBaseDirectory + 'sh.exe';
 end;
 
 function TDreamcastSoftwareDevelopmentKitRunner.GetHealthy: Boolean;
@@ -165,6 +163,7 @@ end;
 procedure TDreamcastSoftwareDevelopmentKitRunner.Initialize(
   const EmbeddedMode: Boolean);
 begin
+  fCurrentCommandLine := EmptyStr;
   fEmbeddedMode := EmbeddedMode;
   fShellCommandOutputBuffer := TStringList.Create;
   fShellProcessID := 0;
@@ -210,8 +209,29 @@ begin
 end;
 
 function TDreamcastSoftwareDevelopmentKitRunner.GetShellCommandOutputBuffer: string;
+{$IFDEF DEBUG}
+{$IFDEF RUNNER_DETAILED_DEBUG}
+var
+  DebugTag: string;
+{$ENDIF}
+{$ENDIF}
+
 begin
   Result := fShellCommandOutputBuffer.Text;
+{$IFDEF DEBUG}
+{$IFDEF RUNNER_DETAILED_DEBUG}
+  DebugTag := Format('GetShellCommandOutputBuffer ["%s"]', [fCurrentCommandLine]);
+  DebugLog('START :: ' + DebugTag + ' >>>' + sLineBreak
+    + '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' + sLineBreak
+    + sLineBreak
+    + Result + sLineBreak
+    + sLineBreak
+    + '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' + sLineBreak
+    + '<<< END :: ' + DebugTag + sLineBreak
+    + sLineBreak
+  );
+{$ENDIF}
+{$ENDIF}
   fShellCommandOutputBuffer.Clear;
 end;
 
@@ -260,12 +280,12 @@ begin
 
   fShellCommand.Executable := fExecutableShell;
   fShellCommand.Parameters.Add('--login');
-  fShellCommand.Parameters.Add('-i');
 
+  fCurrentCommandLine := CommandLine;
   ClientExitCodeUnixFileName := SystemToUnixPath(fShellRunnerClientExitCodeTempFileName);
   with fShellCommand.Environment do
   begin
-    Add('_EXTERNAL_COMMAND=' + CommandLine);
+    Add('_EXTERNAL_COMMAND=' + fCurrentCommandLine);
     Add('_EXITCODE=' + ClientExitCodeUnixFileName);
   end;
 
@@ -339,7 +359,8 @@ begin
     begin
       OurProcess.Executable := fExecutableShell;
       OurProcess.Parameters.Add('--login');
-      OurProcess.Parameters.Add('-i');
+      if InteractiveShell then
+        OurProcess.Parameters.Add('-i');
     end;
 
     // Execute our process

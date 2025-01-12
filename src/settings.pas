@@ -299,7 +299,7 @@ const
   DEFAULT_CODEBLOCKS_BACKUP_DIR = '%s\support\ide\codeblocks\';
 
   // Export Library Path for DreamSDK Wizard for Code::Blocks
-  EXPORT_LIBRARY_INFORMATION_DIR = '%s\' + SETTINGS_SYSTEM_FULL_PATH + 'ide\codeblocks\';
+  EXPORT_LIBRARY_INFORMATION_DIR = '%s\ide\codeblocks\';
 
   // dreamsdk.conf: sections
   CONFIG_DREAMSDK_SECTION_SETTINGS = 'Settings';
@@ -752,11 +752,14 @@ end;
 function TDreamcastSoftwareDevelopmentSettingsCodeBlocks
   .GetRegistryFileName: TFileName;
 const
-  IDE_CONFIGURATION_FILE = SETTINGS_SYSTEM_FULL_PATH + 'ide.conf';
+  IDE_CONFIGURATION_FILE = 'ide.conf';
 
 begin
   Result := IncludeTrailingPathDelimiter(HomeDirectory)
-    + IDE_CONFIGURATION_FILE;
+    + GetConfigurationPartialPath + IDE_CONFIGURATION_FILE;
+{$IFDEF DEBUG}
+  DebugLog('Settings Code::Blocks GetRegistryFileName: "' + Result + '"');
+{$ENDIF}
 end;
 
 function TDreamcastSoftwareDevelopmentSettingsCodeBlocks.GetHomeDirectory: TFileName;
@@ -820,7 +823,12 @@ end;
 procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocks.HandleDynamicDirectories;
 begin
   BackupDirectory := Format(DEFAULT_CODEBLOCKS_BACKUP_DIR, [HomeDirectory]);
-  fExportLibraryInformationPath := Format(EXPORT_LIBRARY_INFORMATION_DIR, [HomeDirectory]);
+  fExportLibraryInformationPath := Format(EXPORT_LIBRARY_INFORMATION_DIR, [
+    ExcludeTrailingPathDelimiter(GetConfigurationDirectory)]);
+{$IFDEF DEBUG}
+  DebugLog('Settings Code::Blocks HandleDynamicDirectories: "'
+    + fExportLibraryInformationPath + '"');
+{$ENDIF}
 end;
 
 constructor TDreamcastSoftwareDevelopmentSettingsCodeBlocks.Create;
