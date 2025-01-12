@@ -9,6 +9,8 @@ uses
   SysUtils;
 
 type
+  ERenameFileOrDirectoryAsBackupException = class(Exception);
+
   { TAppDataKind }
   TAppDataKind = (
     adkRoaming,
@@ -86,6 +88,8 @@ function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string;
 function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string;
   const Behaviour: TPatchTextFileBehaviour;
   const WatermarkPrefix, WatermarkSuffix: string): Boolean; overload;
+(* Renames the passed file or directory in parameter, with a ".old" suffix *)
+function RenameFileOrDirectoryAsBackup(const TargetFileOrDirectory: TFileName): Boolean;
 procedure SaveStringToFile(const InString: string; FileName: TFileName); overload;
 procedure SaveStringToFile(const InString: string; FileName: TFileName; const Append: Boolean); overload;
 function SetDirectoryRights(const DirectoryFullPath: TFileName;
@@ -680,6 +684,89 @@ begin
       ArchiveFile.Free;
     end;
   end;
+end;
+
+(* This function rename the object (file or directory) passed parameter with the
+ * ".old" suffix in order to keep a backup, instead of just deleting the object.
+ * This is used in the "RenDir" Setup Helper, for the DreamSDK Setup.
+ *)
+function RenameFileOrDirectoryAsBackup(const TargetFileOrDirectory: TFileName): Boolean;
+const
+  MAX_TRIES = 999;
+
+var
+  Count: Integer;
+
+  SourcePath,
+  OldObjectName,
+  NewObjectName,
+  NewTargetPath: TFileName;
+
+  IsTargetFile,
+  IsTargetDirectory,
+  ShouldContinue: Boolean;
+
+begin
+  Result := False;
+
+  IsTargetFile := FileExists(TargetFileOrDirectory);
+  IsTargetDirectory := DirectoryExists(TargetFileOrDirectory);
+
+{$IFDEF DEBUG}
+  DebugLog(Format('RenameFileOrDirectoryAsBackup [IsFile: %s, IsDir: %s]: "%s"', [
+    BoolToStr(IsTargetFile, True),
+    BoolToStr(IsTargetDirectory, True),
+    TargetFileOrDirectory
+  ]));
+{$ENDIF}
+
+  if not IsTargetFile and not IsTargetDirectory then
+    Exit;
+
+  Count := 0;
+  OldObjectName := ExtractFileName(TargetFileOrDirectory);
+  SourcePath := IncludeTrailingPathDelimiter(ExtractFilePath(TargetFileOrDirectory));
+
+  // Find the new name
+  repeat
+    if (Count = 0) then
+      NewObjectName := Format('%s.old', [OldObjectName])
+    else
+      NewObjectName := Format('%s.old.%.3d', [OldObjectName, Count]);
+
+    NewTargetPath := SourcePath + NewObjectName;
+
+    ShouldContinue := FileExists(NewTargetPath) or DirectoryExists(NewTargetPath);
+
+{$IFDEF DEBUG}
+    DebugLog(Format('  [ShouldContinue: %s, Counter: %d] "%s"', [
+      BoolToStr(ShouldContinue, True),
+      Count,
+      NewTargetPath
+    ]));
+{$ENDIF}
+
+    // Fail-safe
+    if (Count > MAX_TRIES) then
+      raise ERenameFileOrDirectoryAsBackupException.CreateFmt('Unable to rename the object: "%s"', [
+        TargetFileOrDirectory]);
+
+    // Next try (if needed)
+    Inc(Count);
+  until (not ShouldContinue);
+
+{$IFDEF DEBUG}
+    DebugLog('  RenameFileOrDirectoryAsBackup defined the new name:');
+    DebugLog(Format('    Old: "%s"', [
+      TargetFileOrDirectory
+    ]));
+    DebugLog(Format('    New: "%s"', [
+      NewTargetPath
+    ]));
+{$ENDIF}
+
+  // The new name has been found, in NewObjectName (full path in NewTargetPath)
+  Result := RenameFile(TargetFileOrDirectory, NewTargetPath);
 end;
 
 { TFileListItem }
