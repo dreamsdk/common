@@ -14,6 +14,7 @@ type
   TRunCommandEx = class(TRunCommand)
   private
     procedure HandleHomeVariable;
+    procedure HandleWorkingDirectoryVariable;
   protected
     procedure Execute; override;
   public
@@ -37,9 +38,19 @@ begin
   end;
 end;
 
+procedure TRunCommandEx.HandleWorkingDirectoryVariable;
+begin
+  if (WorkingDirectory <> EmptyStr) then
+  begin
+    Environment.Add('_WORKING_DIRECTORY='
+      + SystemToDreamSdkPath(WorkingDirectory));
+  end;
+end;
+
 procedure TRunCommandEx.Execute;
 begin
   HandleHomeVariable;
+  HandleWorkingDirectoryVariable;
   inherited Execute;
 end;
 

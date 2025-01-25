@@ -272,14 +272,9 @@ begin
   FreeAndNil(fShellCommand);
   fShellCommand := TRunCommandEx.Create(True);
 
-  // Handle working directory
-  if (WorkingDirectory <> EmptyStr) then
-  begin
-    fShellCommand.WorkingDirectory := WorkingDirectory;
-  end;
-
   fShellCommand.Executable := fExecutableShell;
   fShellCommand.Parameters.Add('--login');
+  fShellCommand.WorkingDirectory := Self.WorkingDirectory;
 
   fCurrentCommandLine := CommandLine;
   ClientExitCodeUnixFileName := SystemToUnixPath(fShellRunnerClientExitCodeTempFileName);
@@ -332,6 +327,7 @@ var
 begin
   RetrieveEnvironmentVariables;
 
+  // We use here standard TProcess (just for launching the Shell)
   OurProcess := {$IFDEF Windows}TProcess{$ELSE}TProcessUTF8{$ENDIF}.Create(nil);
   try
     // Initialize Environment context
@@ -342,7 +338,8 @@ begin
     if WorkingDirectory <> EmptyStr then
     begin
       OurProcess.CurrentDirectory := WorkingDirectory;
-      OurProcess.Environment.Add('_WORKING_DIRECTORY=' + WorkingDirectory);
+      OurProcess.Environment.Add('_WORKING_DIRECTORY='
+        + SystemToDreamSdkPath(WorkingDirectory));
     end;
 
     // Extracted from msys.bat
