@@ -693,6 +693,7 @@ var
   NewTargetPath: TFileName;
 
 begin
+  NewTargetPath := Default(string);
   Result := RenameFileOrDirectoryAsBackup(TargetFileOrDirectory, NewTargetPath);
 end;
 
