@@ -381,8 +381,13 @@ var
 
   function GetSourceHandle: THandle;
   begin
+{$IFDEF CPU64}
+    if not TryStrToQWord(ParamStr(3), Result) then
+      Result := INVALID_HANDLE_VALUE;
+{$ELSE}
     if not TryStrToDWord(ParamStr(3), Result) then
       Result := INVALID_HANDLE_VALUE;
+{$ENDIF}
   end;
 
   function GetArgsForElevatedTask: string;
