@@ -5,7 +5,8 @@ unit EnumCom;
 interface
 
 uses
-  Classes, SysUtils;
+  Classes,
+  SysUtils;
 
 type
   TSerialPort = packed record
@@ -26,78 +27,118 @@ implementation
 {$R embedded/enumcom.rc}
 
 uses
+  Windows,
   SysTools,
   FSTools,
-  RunTools,
-  Version,
-  CSVDocument;
+  Version;
 
 const
-  EMBEDDED_RESOURCE_ENUMCOM  = 'ENUMCOM';
-  EMBEDDED_FILENAME_ENUMCOM  = 'enumcom.exe';
+{$IFDEF CPU64}
+  EMBEDDED_RESOURCE_ENUMCOM64   = 'ENUMCOM64';
+{$ELSE}
+  EMBEDDED_RESOURCE_ENUMCOM32   = 'ENUMCOM32';
+{$ENDIF}
+  EMBEDDED_FILENAME_ENUMCOM     = 'enumcom.dll';
 
 var
   EnumComFileName: TFileName = '';
 
-function ParseResultFile(Buffer: string;
-  var SerialPortList: TSerialPortList): Boolean;
-var 
-  CSVDoc: TCSVDocument;
-  i: Integer;
-  SerialPort: TSerialPort;
-
-begin
-  Result := False;
-  CSVDoc := TCSVDocument.Create;
-  try
-    CSVDoc.Delimiter := '|';
-    CSVDoc.CSVText := Buffer;
-
-    // Allocate the required memory
-    SetLength(SerialPortList, CSVDoc.RowCount - 1);
-
-    // Looping on all CSV rows extracted from EnumCom
-    for i := 1 to CSVDoc.RowCount - 1 do
-    begin
-      // Parsing the row
-      SerialPort.PortIndex := StrToInt(CSVDoc.Cells[0, i]);
-      SerialPort.DevicePath := CSVDoc.Cells[1, i];
-      SerialPort.Name := CSVDoc.Cells[2, i];
-      SerialPort.FriendlyName := CSVDoc.Cells[3, i];
-      SerialPort.IsUSBDevice := StrToBool(CSVDoc.Cells[4, i]);
-      SerialPort.Description := CSVDoc.Cells[5, i];
-
-      // Adding the COM Port to the final Array
-      SerialPortList[i - 1] := SerialPort;
-    end;
-
-    Result := (High(SerialPortList) + 1) = (CSVDoc.RowCount - 1);
-  finally
-    CSVDoc.Free;
-  end;
-end;
-
 function GetSerialPortList(var SerialPortList: TSerialPortList): Boolean;
+const
+  BUFFERSIZE = 1024;
+
+type
+  TSharedSerialPortInformation = packed record
+    intPortIndex: Integer;
+    bUsbDevice: Integer;                                    // Provided through a USB connection?
+    strDevPath: array[0..BUFFERSIZE - 1] of AnsiChar;       // Device path for use with CreateFile()
+    strPortName: array[0..BUFFERSIZE - 1] of AnsiChar;      // Simple name (i.e. COM1)
+    strFriendlyName: array[0..BUFFERSIZE - 1] of AnsiChar;  // Full name to be displayed to a user
+    strPortDesc: array[0..BUFFERSIZE - 1] of AnsiChar;      // friendly name without the COMx*)
+  end;
+  PSharedSerialPortInformation = ^TSharedSerialPortInformation;
+  TSharedSerialPortInformationArray = array of TSharedSerialPortInformation;
+
+  TGetSerialPorts = function(outArray: PSharedSerialPortInformation; maxCount: Integer): Integer; stdcall;
+  TGetSerialPortsCount = function(): Integer; stdcall;
+
 var
-  OutputBuffer: string;
-  ProcessExitCode: Integer;
+  DLLHandle: THandle;
+  GetSerialPorts: TGetSerialPorts;
+  GetSerialPortsCount: TGetSerialPortsCount;
+  SerialPortInformationArray: TSharedSerialPortInformationArray;
+  i,
+  SerialPortsCount,
+  EffectiveSerialPortsCount: Integer;
+  SerialPort: TSerialPort;
+  CurrentItem: TSharedSerialPortInformation;
 
 begin
   Result := False;
-  try
-    OutputBuffer := Default(string);
-    ProcessExitCode := Default(Integer);
-    if RunSingleCommand(EnumComFileName, OutputBuffer, ProcessExitCode) then
-      Result := ParseResultFile(OutputBuffer, SerialPortList);
-  except
-    Result := False;
-  end;
+{$IFDEF DEBUG}
+  DebugLog('GetSerialPortList');
+{$ENDIF}
+
+  SerialPortInformationArray := Default(TSharedSerialPortInformationArray);
+  DLLHandle := LoadLibrary(PChar(EnumComFileName));
+  if DLLHandle <> 0 then
+  begin
+    try
+      GetSerialPorts := TGetSerialPorts(GetProcAddress(DLLHandle, 'GetSerialPorts'));
+      GetSerialPortsCount := TGetSerialPortsCount(GetProcAddress(DLLHandle, 'GetSerialPortsCount'));
+
+      if Assigned(GetSerialPorts) and Assigned(GetSerialPortsCount) then
+      begin
+        SerialPortsCount := GetSerialPortsCount();
+
+        SetLength(SerialPortInformationArray, SerialPortsCount);
+        SetLength(SerialPortList, SerialPortsCount);
+
+        if Assigned(SerialPortInformationArray) then
+        begin
+          EffectiveSerialPortsCount := GetSerialPorts(@SerialPortInformationArray[0], SerialPortsCount);
+          for i := 0 to SerialPortsCount - 1 do
+          begin
+            CurrentItem := SerialPortInformationArray[i];
+
+            // Assigning the values
+            SerialPort.PortIndex := CurrentItem.intPortIndex;
+            SerialPort.DevicePath := CurrentItem.strDevPath;
+            SerialPort.Name := CurrentItem.strPortName;
+            SerialPort.FriendlyName := CurrentItem.strFriendlyName;
+            SerialPort.IsUSBDevice := (CurrentItem.bUsbDevice = 1);
+            SerialPort.Description := CurrentItem.strPortDesc;
+
+            // Adding the COM Port to the final Array
+            SerialPortList[i] := SerialPort;
+          end;
+
+          Result := (Length(SerialPortList) = SerialPortsCount) and
+            (EffectiveSerialPortsCount = SerialPortsCount);
+        end;
+      end
+{$IFDEF DEBUG}
+      else
+        DebugLog('  Error: SerialPortInformationArray not assigned');
+{$ELSE}
+      ;
+{$ENDIF}
+    finally
+      FreeLibrary(DLLHandle);
+    end;
+  end
+{$IFDEF DEBUG}
+  else
+    DebugLog('  Error: Library not loaded');
+{$ELSE}
+  ;
+{$ENDIF}
 end;
 
 initialization
-  if not FileExists(EnumComFileName) then
-    EnumComFileName := ExtractEmbeddedFileToWorkingPath(
-      EMBEDDED_RESOURCE_ENUMCOM, EMBEDDED_FILENAME_ENUMCOM);
+  EnumComFileName := ExtractEmbeddedFileToWorkingPath(
+    {$IFDEF CPU64}EMBEDDED_RESOURCE_ENUMCOM64{$ELSE}EMBEDDED_RESOURCE_ENUMCOM32{$ENDIF},
+    EMBEDDED_FILENAME_ENUMCOM);
 
 finalization
   KillFile(EnumComFileName);

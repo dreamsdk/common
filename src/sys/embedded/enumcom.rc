@@ -1,1 +1,2 @@
-ENUMCOM RCDATA "enumcom\\enumcom.exe"
+ENUMCOM32 RCDATA "enumcom\\x86\\enumcom.dll"
+ENUMCOM64 RCDATA "enumcom\\x64\\enumcom.dll"
