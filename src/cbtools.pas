@@ -136,6 +136,9 @@ var
   Dummy: TFileList;
 
 begin
+{$IFDEF DEBUG}
+  DebugLog('GetCodeBlocksAvailableConfigurationFileNames');
+{$ENDIF}
   Dummy := TFileList.Create;
   try
     Result := GetCodeBlocksConfigurationFileNames(ConfigurationFileNames, Dummy);
@@ -157,9 +160,16 @@ var
   CodeBlocksConfigurationFileName: TFileName;
 
 begin
+{$IFDEF DEBUG}
+  DebugLog('GetCodeBlocksConfigurationFileNames');
+{$ENDIF}
   UsersAppData := TStringList.Create;
   try
     Result := GetAppDataListFromUsers(UsersAppData);
+{$IFDEF DEBUG}
+    DebugLog(Format('  Account Count: %d', [UsersAppData.Count]));
+    DebugLog('  Configuration File Names:');
+{$ENDIF}
 
     for i := 0 to UsersAppData.Count - 1 do
     begin
@@ -168,7 +178,7 @@ begin
         [ IncludeTrailingPathDelimiter(UsersAppData[i]) ]
       );
 {$IFDEF DEBUG}
-      Write(CodeBlocksConfigurationFileName, ' ... ');
+      Write('    "', CodeBlocksConfigurationFileName, '" ... ');
 {$ENDIF}
       if FileExists(CodeBlocksConfigurationFileName) then
       begin
@@ -196,18 +206,38 @@ procedure ConvertCodeBlocksConfigurationFileNamesToUsers(
 var
   i: Integer;
   UsersDirectory: TFileName;
-  CurrentUserName: string;
+  CurrentUserName,
+  FriendlyUserName: string;
 
 begin
+{$IFDEF DEBUG}
+  DebugLog('ConvertCodeBlocksConfigurationFileNamesToUsers');
+{$ENDIF}
+
   if Assigned(ConfigurationFileNames) and Assigned(AvailableUsers) then
   begin
+{$IFDEF DEBUG}
+    DebugLog(Format('  Configuration File Names Count: %d', [ConfigurationFileNames.Count]));
+{$ENDIF}
+
     AvailableUsers.Clear;
     UsersDirectory := GetUsersDirectory;
     for i := 0 to ConfigurationFileNames.Count - 1 do
     begin
       CurrentUserName := ExtractStr(UsersDirectory, DirectorySeparator,
-	    ConfigurationFileNames[i]);
-      AvailableUsers.Add(GetFriendlyUserName(CurrentUserName));
+        ConfigurationFileNames[i]);
+{$IFDEF DEBUG}
+      DebugLog(Format('    [%d/%d] CurrentUserName: %s', [i,
+        ConfigurationFileNames.Count, CurrentUserName]));
+{$ENDIF}
+
+      FriendlyUserName := GetFriendlyUserName(CurrentUserName);
+{$IFDEF DEBUG}
+      DebugLog(Format('    [%d/%d] FriendlyUserName: %s', [i,
+        ConfigurationFileNames.Count, FriendlyUserName]));
+{$ENDIF}
+
+      AvailableUsers.Add(FriendlyUserName);
     end;
   end;
 end;
@@ -217,6 +247,9 @@ var
   Buffer: TFileList;
 
 begin
+{$IFDEF DEBUG}
+  DebugLog('GetCodeBlocksAvailableUsers');
+{$ENDIF}
   Buffer := TFileList.Create;
   try
     GetCodeBlocksAvailableConfigurationFileNames(Buffer);
