@@ -266,7 +266,10 @@ var
 
 begin
   if (ItemIndex < Low(QueryResult)) or (ItemIndex > High(QueryResult)) then
-    raise EArgumentOutOfRangeException.CreateFmt('Index is out of bound: %d', [ItemIndex]);
+    raise EArgumentOutOfRangeException.CreateFmt('UtilWMI [%s]: index is out of bound: %d', [
+      WMIPropertyName,
+      ItemIndex
+    ]);
 
   ColumnIndex := -1;
   Buffer := QueryResult[0];
@@ -275,7 +278,7 @@ begin
       ColumnIndex := i;
 
   if ColumnIndex = -1 then
-    raise EArgumentException.CreateFmt('WMI property not found: %s', [WMIPropertyName]);
+    raise EArgumentException.CreateFmt('UtilWMI: property not found: %s', [WMIPropertyName]);
 
   Result := QueryResult[ItemIndex][ColumnIndex].Values;
 end;

@@ -5,11 +5,13 @@ unit FSTools; // File System Tools
 interface
 
 uses
+  Windows,
   Classes,
   SysUtils;
 
 type
-  ERenameFileOrDirectoryAsBackupException = class(Exception);
+  EFileSystemTools = class(Exception);
+  ERenameFileOrDirectoryAsBackupException = class(EFileSystemTools);
 
   { TAppDataKind }
   TAppDataKind = (
@@ -108,6 +110,7 @@ uses
   LazUTF8,
   LConvEncoding,
   LazFileUtils,
+  ActiveX,
   FileUtil,
   MD5,
 {$IFDEF GUI}
@@ -140,13 +143,77 @@ begin
 end;
 
 function GetUsersDirectory: TFileName;
+
+  function TrySHGetKnownFolderPath(out Folder: WideString): Boolean;
+  const
+    // See: https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
+    FOLDERID_UserProfiles: TGUID = '{0762D272-C50A-4BB0-A382-697DCD729B80}';
+
+  type
+    TSHGetKnownFolderPath = function(const rfid: TGUID; dwFlags: DWord;
+      hToken: THandle; out ppszPath: PWideChar): HResult; stdcall;
+
+  var
+    Shell32Handle: HMODULE;
+    SHGetKnownFolderPath: TSHGetKnownFolderPath;
+    Path: PWideChar;
+    Res: HResult;
+
+  begin
+    Result := False;
+    Shell32Handle := LoadLibrary('shell32.dll');
+    if Shell32Handle <> 0 then
+    begin
+      Pointer(SHGetKnownFolderPath) := GetProcAddress(Shell32Handle, 'SHGetKnownFolderPath');
+      if Assigned(SHGetKnownFolderPath) then
+      begin
+        Res := SHGetKnownFolderPath(FOLDERID_UserProfiles, 0, 0, Path);
+        if Succeeded(Res) then
+        begin
+          Folder := WideCharToString(Path);
+          CoTaskMemFree(Path);
+          Result := True;
+        end;
+      end;
+      FreeLibrary(Shell32Handle);
+    end;
+  end;
+
+const
+  WINXP_USERS_DIRECTORY = 'Documents and Settings';
+
 var
-  CurrentUserName: string;
+  UserPath: WideString;
+  WinDir: array[0..MAX_PATH - 1] of Char;
 
 begin
-  CurrentUserName := GetEnvironmentVariable('USERNAME');
-  Result := IncludeTrailingPathDelimiter(Left(DirectorySeparator
-    + CurrentUserName, GetEnvironmentVariable('APPDATA')));
+{$IFDEF DEBUG}
+  DebugLog('GetUsersDirectory');
+{$ENDIF}
+
+  CoInitialize(nil);
+  try
+    UserPath := Default(WideString);
+    if TrySHGetKnownFolderPath(UserPath) then
+      Result := string(UserPath)
+    else
+    begin
+      GetWindowsDirectory(WinDir, MAX_PATH);
+      Result := ExtractFileDrive(WinDir) + DirectorySeparator
+        + WINXP_USERS_DIRECTORY;
+    end;
+    Result := IncludeTrailingPathDelimiter(Result);
+  finally
+    CoUninitialize;
+  end;
+
+{$IFDEF DEBUG}
+  DebugLog(Format('  GetUsersDirectory::Result = "%s"', [Result]));
+{$ENDIF}
+
+  if not DirectoryExists(Result) then
+    raise EFileSystemTools
+      .CreateFmt('GetUsersDirectory returned an invalid directory: "%s"', [Result]);
 end;
 
 function GetAppDataTemplate(const AppDataKind: TAppDataKind): TFileName;
