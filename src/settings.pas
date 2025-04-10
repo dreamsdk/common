@@ -8,6 +8,7 @@ uses
   Classes,
   SysUtils,
   IniFiles,
+  SysTools,
   FSTools;
 
 const
@@ -130,6 +131,7 @@ type
   TDreamcastSoftwareDevelopmentSettingsCodeBlocks = class(TObject)
   private
     fAvailableUsers: TStringList;
+    fConfiguredUsers: TWindowsUserAccountInformationArray;
     fExportLibraryInformation: Boolean;
     fExportLibraryInformationPath: TFileName;
     fInstalledUsers: TStringList;
@@ -289,7 +291,7 @@ implementation
 uses
   TypInfo,
   RefBase,
-  SysTools,
+  StrTools,
   Version,
   CBTools,
   RunTools;
@@ -655,7 +657,8 @@ begin
   InitializeCodeBlocksInstallationDirectory;
 
   // Code::Blocks Configuration Files
-  GetCodeBlocksAvailableConfigurationFileNames(ConfigurationFileNames);
+  GetCodeBlocksAvailableConfigurationFileNames(fConfiguredUsers,
+    ConfigurationFileNames);
   fAvailableConfigurationFileNames.Assign(ConfigurationFileNames);
 
   // Code::Blocks Backup and Export Directories
@@ -704,11 +707,7 @@ procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher.Save(
     if Installed then
       for i := 0 to ConfigurationFileNames.Count - 1 do
       begin
-        UserName := GetUserFromAppDataDirectory(ConfigurationFileNames[i]);
-        if not IsEmpty(UserName) then
-          UserName := GetFriendlyUserName(UserName)
-        else
-          UserName := Format('<%s>', [ExtractFileName(ConfigurationFileNames[i])]);
+        UserName := fConfiguredUsers[i].FriendlyName;
         fInstalledUsers.Add(UserName);
       end;
   end;
@@ -742,8 +741,6 @@ end;
 
 procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher.WriteRegistry;
 begin
-  ConvertCodeBlocksConfigurationFileNamesToUsers(
-    fAvailableConfigurationFileNames, fAvailableUsers);
   SaveConfiguration;
 end;
 

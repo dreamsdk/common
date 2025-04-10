@@ -56,6 +56,7 @@ uses
   RegExpr,
   URIParser,
   SysTools,
+  StrTools,
   FSTools,
   Version,
   RegTools,
@@ -184,7 +185,10 @@ var
   i,
   CurrentCardItemIndex: Integer;
   NetworkCardAdapter: TNetworkCardAdapter;
-  MacAddress: string;
+  MacAddress,
+  OutputBuffer: string;
+  OutputIPAddresses,
+  OutputIPSubnets: TStringArray;
   IpAddressesHashMap: TStringIntegerMap;
 
   function _HandleIpAddressesSubnets(
@@ -370,8 +374,9 @@ begin
     for i := Low(NetworkAdapter) to High(NetworkAdapter) do
     begin
       // Retrieving MAC Address
-      MacAddress := SanitizeMediaAccessControlAddress(
-        GetWindowsManagementInstrumentationSingleValueByPropertyName(NetworkAdapter, 'MACAddress', i));
+      MacAddress := EmptyStr;
+      if GetWindowsManagementInstrumentationSingleValueByPropertyName(NetworkAdapter, 'MACAddress', i, OutputBuffer) then
+        MacAddress := SanitizeMediaAccessControlAddress(OutputBuffer);
 
 {$IFDEF DEBUG}
 {$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
@@ -388,13 +393,15 @@ begin
         // In WinXP there is no InterfaceIndex field
         if IsWindowsVistaOrGreater then
         begin
-          NetworkCardAdapter.InterfaceIndex :=
-            StrToInt(GetWindowsManagementInstrumentationSingleValueByPropertyName(NetworkAdapter, 'InterfaceIndex', i));
+          NetworkCardAdapter.InterfaceIndex := -1;
+          if GetWindowsManagementInstrumentationSingleValueByPropertyName(NetworkAdapter, 'InterfaceIndex', i, OutputBuffer) then
+            NetworkCardAdapter.InterfaceIndex := StrToInt(OutputBuffer);
         end;
 
         // NetworkCardName
-        NetworkCardAdapter.NetworkCardName :=
-          GetWindowsManagementInstrumentationSingleValueByPropertyName(NetworkAdapter, 'NetConnectionID', i);
+        NetworkCardAdapter.NetworkCardName := EmptyStr;
+        if GetWindowsManagementInstrumentationSingleValueByPropertyName(NetworkAdapter, 'NetConnectionID', i, OutputBuffer) then
+          NetworkCardAdapter.NetworkCardName := OutputBuffer;
 
         // Pushing the NetworkCardAdapter
         Insert(NetworkCardAdapter, ANetworkAdapterCardList, MaxInt);
@@ -405,8 +412,8 @@ begin
     Result := False; // Initialization, this will be reset by the loop below
     for i := Low(NetworkAdapterConfiguration) to High(NetworkAdapterConfiguration) do
     begin
-      MacAddress := SanitizeMediaAccessControlAddress(
-        GetWindowsManagementInstrumentationSingleValueByPropertyName(NetworkAdapterConfiguration, 'MACAddress', i));
+      if GetWindowsManagementInstrumentationSingleValueByPropertyName(NetworkAdapterConfiguration, 'MACAddress', i, OutputBuffer) then
+        MacAddress := SanitizeMediaAccessControlAddress(OutputBuffer);
 
 {$IFDEF DEBUG}
 {$IFDEF DEBUG_GET_NETWORK_CARD_ADAPTER}
@@ -419,19 +426,24 @@ begin
         CurrentCardItemIndex := FindMediaAccessControlAddress(ANetworkAdapterCardList, MacAddress);
         if CurrentCardItemIndex <> -1 then
         begin
+          IsIpAddressExtractSuccess := False;
+
           // Parsing IP address and net mask (subnet) from WMI data
-          IsIpAddressExtractSuccess := _HandleIpAddressesSubnets(
-            CurrentCardItemIndex,
-            GetWindowsManagementInstrumentationMultipleValuesByPropertyName(NetworkAdapterConfiguration, 'IPAddress', i),
-            GetWindowsManagementInstrumentationMultipleValuesByPropertyName(NetworkAdapterConfiguration, 'IPSubnet', i)
-          );
+          if (GetWindowsManagementInstrumentationMultipleValuesByPropertyName(NetworkAdapterConfiguration, 'IPAddress', i, OutputIPAddresses))
+            and (GetWindowsManagementInstrumentationMultipleValuesByPropertyName(NetworkAdapterConfiguration, 'IPSubnet', i, OutputIPSubnets)) then
+              IsIpAddressExtractSuccess := _HandleIpAddressesSubnets(
+                CurrentCardItemIndex,
+                OutputIPAddresses,
+                OutputIPSubnets
+              );
 
           // Fail-back: try to read from registry if possible
-          if not IsIpAddressExtractSuccess then
-            IsIpAddressExtractSuccess := _HandleIpAddressesSubnetsFromRegistry(
-              CurrentCardItemIndex,
-              GetWindowsManagementInstrumentationSingleValueByPropertyName(NetworkAdapterConfiguration, 'SettingID', i)
-            );
+          if not IsIpAddressExtractSuccess
+            and GetWindowsManagementInstrumentationSingleValueByPropertyName(NetworkAdapterConfiguration, 'SettingID', i, OutputBuffer) then
+              IsIpAddressExtractSuccess := _HandleIpAddressesSubnetsFromRegistry(
+                CurrentCardItemIndex,
+                OutputBuffer
+              );
 
           // Saving the result...
           Result := Result or IsIpAddressExtractSuccess;

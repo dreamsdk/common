@@ -1,3 +1,28 @@
+(*
+================================================================================
+  ____                         _____  ____   _____
+ |    .  ___  ___  ___  _____ |   __||    . |  |  |
+ |  |  ||  _|| -_|| .'||     ||__   ||  |  ||    -|
+ |____/ |_|  |___||__,||_|_|_||_____||____/ |__|__|
+
+================================================================================
+DreamSDK Common Library - Operating System Tools
+================================================================================
+
+This file is part of DreamSDK.
+
+DreamSDK is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+DreamSDK is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+DreamSDK. If not, see <https://www.gnu.org/licenses/>.
+*)
 unit SysTools;
 
 {$mode objfpc}{$H+}
@@ -7,84 +32,123 @@ unit SysTools;
 interface
 
 uses
+{$IFDEF WINDOWS}
+  Windows,
+  JwaTlHelp32,
+{$ENDIF}
   Classes,
   SysUtils,
-  FGL
-  {$IFDEF Windows}
-  , Windows,
-  JwaTlHelp32
-  {$ENDIF} ;
+  FGL;
 
 const
+  ACL_RIGHT_FULL = 'F';
+
   TabStr = #9;
   EscapeStr = #27;
   WhiteSpaceStr = ' ';
   ArraySeparator = '|';
 
   sError = 'Error';
+
 {$IFDEF DEBUG}
   sDebugLogTitle = 'DebugLog';
 {$ENDIF}
 
   STRING_DATE_FORMAT = 'YYYY-MM-DD @ HH:mm:ss';
   STRING_DATE_FORMAT_SHORT = 'YYYY-MM-DD';
-  ACL_RIGHT_FULL = 'F';
 
 type
   TIntegerList = specialize TFPGList<Integer>;
   TStringIntegerMap = specialize TFPGMap<string, Integer>;
   TIntegerStringMap = specialize TFPGMap<Integer, string>;
 
-{$IFDEF DEBUG}
-function DebugBoolToStr(const Value: Boolean): string;
-procedure DebugLog(const Message: string);
-{$ENDIF}
-{$IFDEF GUI}procedure Delay(Milliseconds: Integer);{$ENDIF}
-{$IFDEF DEBUG}procedure DumpCharArrayToFile(A: array of Char; const FileName: TFileName);{$ENDIF}
-function EndsWith(const SubStr, S: string): Boolean;
-function ExpandEnvironmentStrings(const InputString: string): string;
+  EOperatingSystemTools = class(Exception);
+
+  (* Used to store all the information from the Windows users *)
+  TWindowsUserAccountInformation = record
+    SID: string;
+    UserName: string;
+    FullName: string;
+    FriendlyName: string;
+    ProfilePath: TFileName;
+    LocalAppDataPath: TFileName;
+    RoamingAppDataPath: TFileName;
+  end;
+  TWindowsUserAccountInformationArray = array of TWindowsUserAccountInformation;
+
+(* Extract a embedded file from the current executed program *)
 function ExtractEmbeddedResourceToFile(const ResourceName: string;
   const FileName: TFileName): Boolean;
-function ExtractStr(LeftSubStr, RightSubStr, S: string): string;
-function ExtremeRight(SubStr: string; S: string): string;
-function GetSubStrCount(SubStr, S: string): Integer;
+
+function ExpandEnvironmentStrings(const InputString: string): string;
+
+(* Get the username of the Everyone Windows account on this system *)
 function GetEveryoneName: string;
+
+(* Search for a specific file in PATH *)
 function GetFileLocationsInSystemPath(const FileName: TFileName;
   Output: TStringList): Boolean;
-function GetFriendlyUserName(const UserName: string): string;
+
+(* Get parent PID from another PID - reverse of GetProcessIdFromParentProcessId *)
 function GetParentProcessIdFromProcessId(const ProcessId: LongWord): LongWord;
+
+(* Get PID from parent PID - reverse of GetParentProcessIdFromProcessId *)
 function GetProcessIdFromParentProcessId(const ParentProcessId: LongWord): LongWord;
-function GetUserList(var UserList: TStringList): Boolean;
-function GetUserFullNameFromUserName(const UserName: string): string;
+
+(* Returns the list of all users from this system with various information *)
+function GetUserList(out UsersList: TWindowsUserAccountInformationArray): Boolean;
+
+(* Returns the Windows Users directory, typically "C:\Users\" *)
+function GetUsersRootDirectory: TFileName;
+
 procedure HandleLogonServerVariable(EnvironmentVariables: TStringList);
-function IsEmpty(const S: string): Boolean;
-function IsInArray(A: array of string; const S: string): Boolean;
-function IsInString(const SubStr, S: string): Boolean;
+
+(* Checks if a process is running using image file name *)
 function IsProcessRunning(FileName: TFileName): Boolean;
+
+(* Checks if a process is running using a PID *)
 function IsProcessRunning(const ProcessId: LongWord): Boolean;
-function IsRegExMatch(const InputValue, RegEx: string): Boolean;
+
+(* Kill a running process by image file name *)
 function KillProcessByName(const FileName: TFileName): Boolean;
-function Left(SubStr: string; S: string): string;
-function LeftNRight(SubStr, S: string; N: Integer): string;
-function Right(SubStr: string; S: string): string;
-function StartsWith(const SubStr, S: string): Boolean;
-procedure StringToStringList(const S, Delimiter: string; SL: TStringList);
-function StringListToString(SL: TStringList; const Delimiter: string;
-  const IgnoreBlank: Boolean = True): string;
-function StringListSubstringIndexOf(SL: TStringList; SubStr: string): Integer; overload;
-function StringListSubstringIndexOf(SL: TStringList; SubStr: string;
-  CaseSensitive: Boolean): Integer; overload;
-procedure StringListRemoveDuplicates(SL: TStringList; ProcessFromEnd: Boolean = False);
-function SuppressUselessWhiteSpaces(const S: string): string;
+
+(* Waits for the ends of execution of a specific PID *)
 procedure WaitForProcessId(const ProcessId: LongWord);
+
+// =============================================================================
+// Graphical User Interface (GUI) Utilities
+// =============================================================================
+
+{$IFDEF GUI}
+
+(* Wait for some milliseconds, it's Sleep but better way for GUI apps *)
+procedure Delay(Milliseconds: Integer);
+
+{$ENDIF}
+
+// =============================================================================
+// Debug Utilities
+// =============================================================================
+
+{$IFDEF DEBUG}
+
+function DebugBoolToStr(const Value: Boolean): string;
+
+procedure DebugLog(const Message: string);
+
+procedure DumpCharArrayToFile(A: array of Char; const FileName: TFileName);
+
+{$ENDIF}
 
 implementation
 
 uses
-  StrUtils,
   RegExpr,
   LazUTF8,
   LConvEncoding,
+{$IFDEF WINDOWS}
+  ActiveX,
+{$ENDIF}
 {$IFDEF GUI}
   Interfaces,
   Forms,
@@ -94,223 +158,11 @@ uses
   DbgLog,
 {$ENDIF}
 {$ENDIF}
+  FSTools,
   RunTools,
-  Version,
-  UtilWMI;
-
-function GetUserList(var UserList: TStringList): Boolean;
-var
-  i: Integer;
-  UserAccounts: TWindowsManagementInstrumentationQueryResult;
-
-begin
-  Result := False;
-  if Assigned(UserList) then
-  begin
-    UserAccounts := QueryWindowsManagementInstrumentation('Win32_UserAccount',
-      ['Name'], 'LocalAccount = TRUE and Disabled = FALSE and SIDType = 1 and not Name like ''%$''');
-    for i := Low(UserAccounts) to High(UserAccounts) do
-      UserList.Add(
-        Trim(GetWindowsManagementInstrumentationSingleValueByPropertyName(UserAccounts, 'Name', i))
-      );
-    Result := (UserList.Count > 0);
-  end;
-end;
-
-// Thanks Michel (Phidels.com)
-function GetSubStrCount(SubStr, S: string): Integer;
-begin
-  result:=0;
-  while pos(substr,s)<>0 do
-  begin
-    S:=Right(substr,s);
-    inc(result);
-  end;
-end;
-
-// Thanks Michel (Phidels.com)
-function LeftNRight(SubStr, S: string; N: Integer): string;
-var i:integer;
-begin
-  S:=S+substr;
-  for i:=1 to n do
-  begin
-    S:=copy(s, pos(substr, s)+length(substr), length(s)-pos(substr, s)+length(substr));
-  end;
-  result:=copy(s, 1, pos(substr, s)-1);
-end;
-
-// Thanks Michel (Phidels.com)
-function Right(SubStr: string; S: string): string;
-begin
-  if pos(substr,s)=0 then result:='' else
-    result:=copy(s, pos(substr, s)+length(substr), length(s)-pos(substr, s)+length(substr));
-end;
-
-function KillProcessByName(const FileName: TFileName): Boolean;
-begin
-  Result := False;
-  if FileExists(FileName) then
-    Result := RunSingleCommand(Format('taskkill /im "%s" /f', [
-      ExtractFileName(FileName)
-    ]));
-end;
-
-// Thanks Michel (Phidels.com)
-function Left(SubStr: string; S: string): string;
-begin
-  result:=copy(s, 1, pos(substr, s)-1);
-end;
-
-// Thanks Michel (Phidels.com)
-function ExtractStr(LeftSubStr, RightSubStr, S: string): string;
-begin
-  Result := Left(RightSubStr, Right(LeftSubStr, S));
-end;
-
-// Thanks Michel (Phidels.com)
-function ExtremeRight(SubStr: string; S: string): string;
-begin
-  Repeat
-    S:= Right(substr,s);
-  until pos(substr,s)=0;
-  result:=S;
-end;
-
-function IsInString(const SubStr, S: string): Boolean;
-begin
-  Result := Pos(LowerCase(SubStr), LowerCase(S)) > 0;
-end;
-
-function SuppressUselessWhiteSpaces(const S: string): string;
-var
-  Buffer: TStringList;
-  i: Integer;
-  Entry, Separator: string;
-
-begin
-  Result := EmptyStr;
-  Buffer := TStringList.Create;
-  try
-    Buffer.Text := StringReplace(Trim(S), WhiteSpaceStr, sLineBreak, [rfReplaceAll]);
-    Separator := EmptyStr;
-    for i := 0 to Buffer.Count - 1 do
-    begin
-      Entry := Buffer[i];
-      if not SameText(Entry, EmptyStr) then
-        Result := Result + Separator + Entry;
-      Separator := WhiteSpaceStr;
-    end;
-    Result := Trim(Result);
-  finally
-    Buffer.Free;
-  end;
-end;
-
-function IsRegExMatch(const InputValue, RegEx: string): Boolean;
-var
-  RegexObj: TRegExpr;
-
-begin
-  RegexObj := TRegExpr.Create;
-  try
-    RegexObj.Expression := RegEx;
-    Result := RegexObj.Exec(InputValue);
-  finally
-    RegexObj.Free;
-  end;
-end;
-
-function EndsWith(const SubStr, S: string): Boolean;
-begin
-  if SubStr = EmptyStr then
-    Result := True
-  else
-    Result := AnsiEndsStr(SubStr, S);
-end;
-
-function StartsWith(const SubStr, S: string): Boolean;
-begin
-  Result := AnsiStartsStr(SubStr, S);
-end;
-
-{$IFDEF DEBUG}
-procedure DebugLog(const Message: string);
-{$IFNDEF CONSOLE}
-var
-  MsgHandle: THandle;
-{$ENDIF}
-begin
-{$IFDEF CONSOLE}
-  WriteLn(Message);
-{$ELSE}
-  MsgHandle := 0;
-{$IFDEF GUI}
-  MsgHandle := Application.Handle;
-{$ENDIF}
-  if not DbgLog.DebugLog(Message) then
-    MessageBox(MsgHandle, PChar(Trim(Message)), sDebugLogTitle,
-      MB_ICONINFORMATION + MB_OK);
-{$ENDIF}
-end;
-{$ENDIF}
-
-function StringListToString(SL: TStringList; const Delimiter: string;
-  const IgnoreBlank: Boolean = True): string;
-var
-  Buffer: string;
-
-begin
-  Result := EmptyStr;
-  if Assigned(SL) then
-  begin
-    Buffer := SL.Text;
-    if IgnoreBlank then
-      Buffer := Trim(Buffer);
-    Result := StringReplace(Buffer, sLineBreak, Delimiter, [rfReplaceAll]);
-    if IgnoreBlank then
-      Result := Trim(Result);
-  end;
-end;
-
-procedure StringToStringList(const S, Delimiter: string; SL: TStringList);
-begin
-  if Assigned(SL) then
-    SL.Text := StringReplace(Trim(S), Delimiter, sLineBreak, [rfReplaceAll]);
-end;
-
-function StringListSubstringIndexOf(SL: TStringList;
-  SubStr: string): Integer; overload;
-begin
-  Result := StringListSubstringIndexOf(SL, SubStr, True);
-end;
-
-function StringListSubstringIndexOf(SL: TStringList; SubStr: string;
-  CaseSensitive: Boolean): Integer; overload;
-var
-  i: Integer;
-  Str: string;
-
-begin
-  Result := -1;
-
-  if not CaseSensitive then
-    SubStr := LowerCase(SubStr);
-
-  if Assigned(SL) then
-  begin
-    i := 0;
-    while (i < SL.Count) and (Result = -1) do
-    begin
-      Str := SL[i];
-      if not CaseSensitive then
-        Str := LowerCase(Str);
-      if IsInString(SubStr, Str) then
-        Result := i;
-      Inc(i);
-    end;
-  end;
-end;
+  StrTools,
+  UtilWMI,
+  Version;
 
 // See: https://wiki.freepascal.org/Lazarus_Resources
 function ExtractEmbeddedResourceToFile(const ResourceName: string;
@@ -340,46 +192,291 @@ begin
   Result := FileExists(FileName);
 end;
 
-function ExpandEnvironmentStrings(const InputString: string): string;
-{$IFDEF WINDOWS}
+function GetUsersRootDirectory: TFileName;
+
+  function TrySHGetKnownFolderPath(out Folder: WideString): Boolean;
+  const
+    // See: https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
+    FOLDERID_UserProfiles: TGUID = '{0762D272-C50A-4BB0-A382-697DCD729B80}';
+
+  type
+    TSHGetKnownFolderPath = function(const rfid: TGUID; dwFlags: DWord;
+      hToken: THandle; out ppszPath: PWideChar): HResult; stdcall;
+
+  var
+    Shell32Handle: HMODULE;
+    SHGetKnownFolderPath: TSHGetKnownFolderPath;
+    Path: PWideChar;
+    Res: HResult;
+
+  begin
+    Result := False;
+    Shell32Handle := LoadLibrary('shell32.dll');
+    if Shell32Handle <> 0 then
+    begin
+      Pointer(SHGetKnownFolderPath) := GetProcAddress(Shell32Handle, 'SHGetKnownFolderPath');
+      if Assigned(SHGetKnownFolderPath) then
+      begin
+        Res := SHGetKnownFolderPath(FOLDERID_UserProfiles, 0, 0, Path);
+        if Succeeded(Res) then
+        begin
+          Folder := WideCharToString(Path);
+          CoTaskMemFree(Path);
+          Result := True;
+        end;
+      end;
+      FreeLibrary(Shell32Handle);
+    end;
+  end;
+
 const
-  MAXSIZE = 32768;
+  WINXP_USERS_DIRECTORY = 'Documents and Settings';
+
+var
+  UserPath: WideString;
+  WinDir: array[0..MAX_PATH - 1] of Char;
+
+begin
+{$IFDEF DEBUG}
+  DebugLog('GetUsersDirectory');
+{$ENDIF}
+
+  CoInitialize(nil);
+  try
+    UserPath := Default(WideString);
+    if TrySHGetKnownFolderPath(UserPath) then
+      Result := string(UserPath)
+    else
+    begin
+      GetWindowsDirectory(WinDir, MAX_PATH);
+      Result := ExtractFileDrive(WinDir) + DirectorySeparator
+        + WINXP_USERS_DIRECTORY;
+    end;
+    Result := IncludeTrailingPathDelimiter(Result);
+  finally
+    CoUninitialize;
+  end;
+
+{$IFDEF DEBUG}
+  DebugLog(Format('  GetUsersDirectory::Result = "%s"', [Result]));
+{$ENDIF}
+
+  if not DirectoryExists(Result) then
+    raise EOperatingSystemTools
+      .CreateFmt('GetUsersDirectory returned an invalid directory: "%s"', [Result]);
+end;
+
+function GetUserList(out UsersList: TWindowsUserAccountInformationArray): Boolean;
+type
+  TAppDataKind = (
+    adkRoaming,
+    adkLocal
+  );
+
+var
+  i: Integer;
+  UserAccounts,
+  UserProfileInfo: TWindowsManagementInstrumentationQueryResult;
+  Buffer,
+  LocalAppDataTemplate,
+  RoamingAppDataTemplate: string;
+  CurrentUser: TWindowsUserAccountInformation;
+
+  function GetAppDataTemplate(const AppDataKind: TAppDataKind): TFileName;
+  var
+    AppDataTemplate,
+    CurrentUserProfilePath: TFileName;
+    AppDataVariable: string;
+
+  begin
+    AppDataVariable := '%AppData%';
+    if AppDataKind = adkLocal then
+      AppDataVariable := '%LocalAppData%';
+
+    AppDataTemplate := IncludeTrailingPathDelimiter(
+      ParseInputFileSystemObject(AppDataVariable));
+    CurrentUserProfilePath := IncludeTrailingPathDelimiter(
+      SysUtils.GetEnvironmentVariable('USERPROFILE'));
+
+    // Returns something like: "%sAppData\Roaming" if adkRoaming is asked
+    // This is not hardcoded as we want to get this from %AppData% variables
+    // %s will be replaced by LocalPath for the user. The "\" is included in "%s".
+    Result := '%s' + Right(CurrentUserProfilePath, AppDataTemplate);
+  end;
+
+begin
+  Result := False;
+  UsersList := Default(TWindowsUserAccountInformationArray);
+
+  LocalAppDataTemplate := GetAppDataTemplate(adkLocal);
+  RoamingAppDataTemplate := GetAppDataTemplate(adkRoaming);
+
+  UserAccounts := QueryWindowsManagementInstrumentation('Win32_UserAccount',
+    ['SID', 'Name', 'FullName'], 'LocalAccount = TRUE and Disabled = FALSE and SIDType = 1 and not Name like ''%$''');
+
+  SetLength(UsersList, Length(UserAccounts));
+
+  for i := Low(UserAccounts) to High(UserAccounts) do
+  begin
+    CurrentUser := Default(TWindowsUserAccountInformation);
+
+    // Grab SID
+    if GetWindowsManagementInstrumentationSingleValueByPropertyName(UserAccounts, 'SID', i, Buffer) then
+    begin
+      CurrentUser.SID := Buffer;
+
+      // Grab the folder name of the current profile
+      UserProfileInfo := QueryWindowsManagementInstrumentation('Win32_UserProfile', ['LocalPath'],
+        Format('SID = ''%s''', [Buffer]));
+      if GetWindowsManagementInstrumentationSingleValueByPropertyName(UserProfileInfo, 'LocalPath', 0, Buffer) then
+        CurrentUser.ProfilePath := IncludeTrailingPathDelimiter(Buffer);
+    end;
+
+    // Grab UserName
+    if GetWindowsManagementInstrumentationSingleValueByPropertyName(UserAccounts, 'Name', i, Buffer) then
+      CurrentUser.UserName := Buffer;
+
+    // Grab FullName
+    if GetWindowsManagementInstrumentationSingleValueByPropertyName(UserAccounts, 'FullName', i, Buffer) then
+      CurrentUser.FullName := Buffer;
+
+    // Grab Local App Data
+    CurrentUser.LocalAppDataPath := IncludeTrailingPathDelimiter(
+      Format(LocalAppDataTemplate, [CurrentUser.ProfilePath]));
+
+    // Grab Roaming App Data
+    CurrentUser.RoamingAppDataPath := IncludeTrailingPathDelimiter(
+      Format(RoamingAppDataTemplate, [CurrentUser.ProfilePath]));
+
+    CurrentUser.FriendlyName := CurrentUser.UserName;
+    if not IsEmpty(CurrentUser.FullName) then
+      CurrentUser.FriendlyName := Format('%s (%s)', [CurrentUser.FullName, CurrentUser.UserName]);
+
+    // Adding item to the array
+    UsersList[i] := CurrentUser;
+  end;
+
+{$IFDEF DEBUG}
+  DebugLog('GetUserList:');
+  for i := Low(UsersList) to High(UsersList) do
+  begin
+    DebugLog(Format('  User #%d:', [i]));
+    DebugLog(
+      Format('   SID: "%s"', [UsersList[i].SID]) + sLineBreak +
+      Format('   UserName: "%s"', [UsersList[i].UserName]) + sLineBreak +
+      Format('   FullName: "%s"', [UsersList[i].FullName]) + sLineBreak +
+      Format('   ProfilePath: "%s"', [UsersList[i].ProfilePath]) + sLineBreak +
+      Format('   LocalAppDataPath: "%s"', [UsersList[i].LocalAppDataPath]) + sLineBreak +
+      Format('   RoamingAppDataPath: "%s"', [UsersList[i].RoamingAppDataPath])
+    );
+  end;
+{$ENDIF}
+
+  Result := Length(UsersList) > 0;
+end;
+
+(*
+function GetUserFromAppDataDirectory(const AppDataDirectory: TFileName;
+  out UserAccount: TWindowsUserAccountInformation): Boolean;
+var
+  AppDataTemplate,
+  LocalPath: TFileName;
+  TempLeft,
+  TempRight: string;
+  UsersList: TWindowsUserAccountInformationArray;
+  i: Integer;
+
+begin
+  Result := False;
+  UserAccount := Default(TWindowsUserAccountInformation);
+
+  if GetUserList(UsersList) then
+  begin
+    AppDataTemplate := GetAppDataTemplate(adkRoaming);
+    TempLeft := Left('%s', AppDataTemplate);
+    TempRight := Right('%s', AppDataTemplate);
+    LocalPath := Right(TempLeft, AppDataDirectory); // ExtractStr(TempLeft, TempRight, AppDataDirectory);
+
+    raise Exception.create ('TODO');
+    i := 0;
+    while i < Count(UsersList) - 1 do
+    begin
+      if UsersList[i].LocalPath
+    end;
+  end;
+end;
+*)
+
+// {$DEFINE DEBUG_USER_APP_DATA_LIST}
+(*function GetAppDataListFromUsers(out UserAppDataList: TStringArray;
+  const AppDataKind: TAppDataKind = adkRoaming): Boolean;
+var
+  AppDataTemplate: TFileName;
+  i: Integer;
+  UsersList: TWindowsUserAccountInformationArray;
+
+begin
+{$IFDEF DEBUG_USER_APP_DATA_LIST}
+{$IFDEF DEBUG}
+    DebugLog('UserAppDataList:');
+{$ENDIF}
+{$ENDIF}
+
+  Result := False;
+  UserAppDataList := Default(TStringArray);
+
+  if GetUserList(UsersList) then
+  begin
+    SetLength(UserAppDataList, Length(UsersList));
+    AppDataTemplate := GetAppDataTemplate(AppDataKind);
+    for i := 0 to Length(UsersList) - 1 do
+    begin
+      UserAppDataList[i] := Format(AppDataTemplate, [
+        UsersList[i].LocalPath
+      ]);
+
+{$IFDEF DEBUG_USER_APP_DATA_LIST}
+{$IFDEF DEBUG}
+      DebugLog('  ' + UserAppDataList[i]);
+{$ENDIF}
+{$ENDIF}
+    end;
+  end;
+end;
+
+function GetUserFullNameFromUserName(const UserName: string): string;
+var
+  UserAccount: TWindowsManagementInstrumentationQueryResult;
+  UserAccountFullName: string;
 
 begin
   Result := EmptyStr;
-  SetLength(Result, MAXSIZE);
-  SetLength(Result, Windows.ExpandEnvironmentStrings(PChar(InputString), @Result[1], Length(Result)) - 1);
-{$ELSE}
-begin
-  Result := InputString;
-{$ENDIF}
+  UserAccount := QueryWindowsManagementInstrumentation(
+    'Win32_UserAccount', ['FullName'], Format('Name = ''%s''', [UserName]));
+  if GetWindowsManagementInstrumentationSingleValueByPropertyName(UserAccount, 'FullName', 0, UserAccountFullName) then
+    Result := Trim(UserAccountFullName);
 end;
 
-{$IFDEF GUI}
-procedure Delay(Milliseconds: Integer);
+function GetFriendlyUserName(const UserName: string): string;
 var
-  PastTime: LongInt;
+  CurrentUserFullName: string;
 
 begin
-  PastTime := GetTickCount;
-  repeat
-    Application.ProcessMessages;
-  until (GetTickCount - PastTime) >= LongInt(Milliseconds);
+  Result := UserName;
+  CurrentUserFullName := GetUserFullNameFromUserName(UserName);
+  if not IsEmpty(CurrentUserFullName) then
+    Result := Format('%s (%s)', [CurrentUserFullName, UserName]);
 end;
-{$ENDIF}
+*)
 
-{$IFDEF DEBUG}
-procedure DumpCharArrayToFile(A: array of Char; const FileName: TFileName);
-var
-  F: file;
-
+function KillProcessByName(const FileName: TFileName): Boolean;
 begin
-  AssignFile(F, FileName);
-  ReWrite(F, SizeOf(A));
-  BlockWrite(F, A[0], 1);
-  CloseFile(F);
+  Result := False;
+  if FileExists(FileName) then
+    Result := RunSingleCommand(Format('taskkill /im "%s" /f', [
+      ExtractFileName(FileName)
+    ]));
 end;
-{$ENDIF}
 
 {$IFDEF Windows}
 
@@ -533,52 +630,13 @@ begin
 {$ENDIF}
 end;
 
-function GetUserFullNameFromUserName(const UserName: string): string;
-var
-  UserAccount: TWindowsManagementInstrumentationQueryResult;
-
-begin
-  UserAccount := QueryWindowsManagementInstrumentation(
-    'Win32_UserAccount', ['FullName'], Format('Name = ''%s''', [UserName]));
-  Result := Trim(
-    GetWindowsManagementInstrumentationSingleValueByPropertyName(UserAccount, 'FullName', 0)
-  );
-end;
-
-function GetFriendlyUserName(const UserName: string): string;
-var
-  CurrentUserFullName: string;
-
-begin
-  Result := UserName;
-  CurrentUserFullName := GetUserFullNameFromUserName(UserName);
-  if not IsEmpty(CurrentUserFullName) then
-    Result := Format('%s (%s)', [CurrentUserFullName, UserName]);
-end;
-
-function IsEmpty(const S: string): Boolean;
-begin
-  Result := SameText(S, EmptyStr);
-end;
-
-function IsInArray(A: array of string; const S: string): Boolean;
-var
-  Item: string;
-
-begin
-  Result := False;
-  for Item in A do
-    if (Item = S) then
-      Exit(True);
-end;
-
 function IsProcessRunning(FileName: TFileName): Boolean;
 {$IFDEF Windows}
 var
   ContinueLoop: Boolean;
   FSnapshotHandle: THandle;
   FProcessEntry32: TProcessEntry32;
-  
+
 begin
   FSnapshotHandle := CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
   FProcessEntry32.dwSize := SizeOf(FProcessEntry32);
@@ -650,57 +708,21 @@ begin
     Format('%s=%s', [LOGONSERVER_ENVIRONMENT_VARIABLE, LogonServerValue]));
 end;
 
-function GetFileLocationsInSystemPath(const FileName: TFileName;
-  Output: TStringList): Boolean;
+function ExpandEnvironmentStrings(const InputString: string): string;
+{$IFDEF WINDOWS}
 const
-  PATHEXT_ENV_VAR = 'PATHEXT';
-  PATH_ENV_VAR = 'PATH';
-  PATH_SEPARATOR = ';';
-
-var
-  FullFileName,
-  FullFileNameWithExtension: TFileName;
-  Buffer,
-  Extensions: TStringList;
-  i, j: Integer;
+  MAXSIZE = 32768;
 
 begin
-  Result := False;
-  if Assigned(Output) then
-  begin
-    Buffer := TStringList.Create;
-    Extensions := TStringList.Create;
-    try
-      StringToStringList(SysUtils.GetEnvironmentVariable(PATH_ENV_VAR),
-        PATH_SEPARATOR, Buffer);
-      StringToStringList(SysUtils.GetEnvironmentVariable(PATHEXT_ENV_VAR),
-        PATH_SEPARATOR, Extensions);
-
-      for i := 0 to Buffer.Count - 1 do
-      begin
-        FullFileName := IncludeTrailingPathDelimiter(Buffer[i]) + FileName;
-
-        if FileExists(FullFileName) then
-          Output.Add(FullFileName)
-        else
-          for j := 0 to Extensions.Count - 1 do
-          begin
-            FullFileNameWithExtension := FullFileName + LowerCase(Extensions[j]);
-            if FileExists(FullFileNameWithExtension) then
-            begin
-              Output.Add(FullFileNameWithExtension);
-              Break;
-            end;
-          end;
-      end;
-
-      Result := (Output.Count > 0);
-    finally
-      Extensions.Free;
-      Buffer.Free;
-    end;
-  end;
+  Result := EmptyStr;
+  SetLength(Result, MAXSIZE);
+  SetLength(Result, Windows.ExpandEnvironmentStrings(PChar(InputString), @Result[1], Length(Result)) - 1);
+{$ELSE}
+begin
+  Result := InputString;
+{$ENDIF}
 end;
+
 
 function GetParentProcessIdFromProcessId(const ProcessId: LongWord): LongWord;
 var
@@ -791,62 +813,118 @@ begin
 {$ENDIF}
 end;
 
-{$PUSH}
-{$WARN 6058 OFF}
-procedure StringListRemoveDuplicates(SL: TStringList; ProcessFromEnd: Boolean = False);
+function GetFileLocationsInSystemPath(const FileName: TFileName;
+  Output: TStringList): Boolean;
+const
+  PATHEXT_ENV_VAR = 'PATHEXT';
+  PATH_ENV_VAR = 'PATH';
+  PATH_SEPARATOR = ';';
+
 var
-  Dict: TStringIntegerMap;
-  i: Integer;
-  Indexes: TIntegerList;
-
-  function ProcessItem(const ItemIndex: Integer): Integer;
-  var
-    Value: string;
-    Dummy: Integer;
-
-  begin
-    Result := -1;
-    Value := SL[ItemIndex];
-    if not Dict.Find(Value, Dummy) then
-      Dict.Add(Value, 0)
-    else
-      Result := ItemIndex;
-  end;
+  FullFileName,
+  FullFileNameWithExtension: TFileName;
+  Buffer,
+  Extensions: TStringList;
+  i, j: Integer;
 
 begin
-  Dict := TStringIntegerMap.Create;
-  try
-    Dict.Sorted := True;
-    if ProcessFromEnd then
-    begin
-      for i := SL.Count - 1 downto 0 do
-        if ProcessItem(i) <> -1 then
-          SL.Delete(i);
-    end
-    else
-    begin
-      Indexes := TIntegerList.Create;
-      try
-        for i := 0 to SL.Count - 1 do
-          if ProcessItem(i) <> -1 then
-            Indexes.Add(i);
-        for i := Indexes.Count - 1 downto 0 do
-          SL.Delete(Indexes[i]);
-      finally
-        Indexes.Free;
+  Result := False;
+  if Assigned(Output) then
+  begin
+    Buffer := TStringList.Create;
+    Extensions := TStringList.Create;
+    try
+      StringToStringList(SysUtils.GetEnvironmentVariable(PATH_ENV_VAR),
+        PATH_SEPARATOR, Buffer);
+      StringToStringList(SysUtils.GetEnvironmentVariable(PATHEXT_ENV_VAR),
+        PATH_SEPARATOR, Extensions);
+
+      for i := 0 to Buffer.Count - 1 do
+      begin
+        FullFileName := IncludeTrailingPathDelimiter(Buffer[i]) + FileName;
+
+        if FileExists(FullFileName) then
+          Output.Add(FullFileName)
+        else
+          for j := 0 to Extensions.Count - 1 do
+          begin
+            FullFileNameWithExtension := FullFileName + LowerCase(Extensions[j]);
+            if FileExists(FullFileNameWithExtension) then
+            begin
+              Output.Add(FullFileNameWithExtension);
+              Break;
+            end;
+          end;
       end;
+
+      Result := (Output.Count > 0);
+    finally
+      Extensions.Free;
+      Buffer.Free;
     end;
-  finally
-    Dict.Free;
   end;
 end;
-{$POP}
+
+// =============================================================================
+// Graphical User Interface (GUI) Utilities
+// =============================================================================
+
+{$IFDEF GUI}
+
+procedure Delay(Milliseconds: Integer);
+var
+  PastTime: LongInt;
+
+begin
+  PastTime := GetTickCount;
+  repeat
+    Application.ProcessMessages;
+  until (GetTickCount - PastTime) >= LongInt(Milliseconds);
+end;
+
+{$ENDIF}
+
+// =============================================================================
+// Debug Utilities
+// =============================================================================
 
 {$IFDEF DEBUG}
+
+procedure DebugLog(const Message: string);
+{$IFNDEF CONSOLE}
+var
+  MsgHandle: THandle;
+{$ENDIF}
+begin
+{$IFDEF CONSOLE}
+  WriteLn(Message);
+{$ELSE}
+  MsgHandle := 0;
+{$IFDEF GUI}
+  MsgHandle := Application.Handle;
+{$ENDIF}
+  if not DbgLog.DebugLog(Message) then
+    MessageBox(MsgHandle, PChar(Trim(Message)), sDebugLogTitle,
+      MB_ICONINFORMATION + MB_OK);
+{$ENDIF}
+end;
+
+procedure DumpCharArrayToFile(A: array of Char; const FileName: TFileName);
+var
+  F: file;
+
+begin
+  AssignFile(F, FileName);
+  ReWrite(F, SizeOf(A));
+  BlockWrite(F, A[0], 1);
+  CloseFile(F);
+end;
+
 function DebugBoolToStr(const Value: Boolean): string;
 begin
   Result := BoolToStr(Value, 'TRUE', 'FALSE');
 end;
+
 {$ENDIF}
 
 initialization

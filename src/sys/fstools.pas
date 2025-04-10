@@ -5,19 +5,12 @@ unit FSTools; // File System Tools
 interface
 
 uses
-  Windows,
   Classes,
   SysUtils;
 
 type
   EFileSystemTools = class(Exception);
   ERenameFileOrDirectoryAsBackupException = class(EFileSystemTools);
-
-  { TAppDataKind }
-  TAppDataKind = (
-    adkRoaming,
-    adkLocal
-  );
 
   { TParseInputFileSystemObjectBehaviour }
   TParseInputFileSystemObjectBehaviour = (
@@ -69,12 +62,8 @@ function GetApplicationPath: TFileName;
 function GetFileHash(const FileName: TFileName): string;
 function GetProgramName: string;
 function GetWorkingPath: TFileName;
-function GetUsersDirectory: TFileName;
-function GetAppDataListFromUsers(var UserAppDataList: TStringList;
-  const AppDataKind: TAppDataKind = adkRoaming): Boolean;
 function GetFileDate(const FileName: TFileName): TDateTime;
 function GetTemporaryFileName: TFileName;
-function GetUserFromAppDataDirectory(const AppDataDirectory: TFileName): string;
 function IsCorrectFileHash(const FileName: TFileName; const Hash: string): Boolean;
 function KillDirectory(const DirectoryName: TFileName): Boolean;
 function KillFile(const FileName: TFileName): Boolean;
@@ -94,8 +83,8 @@ function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string;
 function RenameFileOrDirectoryAsBackup(const TargetFileOrDirectory: TFileName): Boolean; overload;
 function RenameFileOrDirectoryAsBackup(const TargetFileOrDirectory: TFileName;
   var NewTargetPath: TFileName): Boolean; overload;
-procedure SaveStringToFile(const InString: string; FileName: TFileName); overload;
-procedure SaveStringToFile(const InString: string; FileName: TFileName; const Append: Boolean); overload;
+procedure SaveStringToFile(const InString: string; FileName: TFileName;
+  const Append: Boolean = False);
 function SetDirectoryRights(const DirectoryFullPath: TFileName;
   const UserName, Rights: string): Boolean;
 function SystemToUnixPath(const SystemPathName: TFileName): TFileName;
@@ -110,21 +99,21 @@ uses
   LazUTF8,
   LConvEncoding,
   LazFileUtils,
-  ActiveX,
   FileUtil,
   MD5,
 {$IFDEF GUI}
   Interfaces,
   Forms,
 {$ENDIF}
-  Zipper,
   SysTools,
+  StrTools,
+  Zipper,
   RunTools,
   Version;
 
 var
-  ApplicationPath: TFileName = '';
-  WorkingPath: TFileName = '';
+  ApplicationPath: TFileName = Default(TFileName);
+  WorkingPath: TFileName = Default(TFileName);
 
 function GetFileHash(const FileName: TFileName): string;
 begin
@@ -140,147 +129,6 @@ function ExtractDirectoryName(const DirectoryName: string): string;
 begin
   Result := ExtremeRight(DirectorySeparator,
     ExcludeTrailingPathDelimiter(DirectoryName));
-end;
-
-function GetUsersDirectory: TFileName;
-
-  function TrySHGetKnownFolderPath(out Folder: WideString): Boolean;
-  const
-    // See: https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
-    FOLDERID_UserProfiles: TGUID = '{0762D272-C50A-4BB0-A382-697DCD729B80}';
-
-  type
-    TSHGetKnownFolderPath = function(const rfid: TGUID; dwFlags: DWord;
-      hToken: THandle; out ppszPath: PWideChar): HResult; stdcall;
-
-  var
-    Shell32Handle: HMODULE;
-    SHGetKnownFolderPath: TSHGetKnownFolderPath;
-    Path: PWideChar;
-    Res: HResult;
-
-  begin
-    Result := False;
-    Shell32Handle := LoadLibrary('shell32.dll');
-    if Shell32Handle <> 0 then
-    begin
-      Pointer(SHGetKnownFolderPath) := GetProcAddress(Shell32Handle, 'SHGetKnownFolderPath');
-      if Assigned(SHGetKnownFolderPath) then
-      begin
-        Res := SHGetKnownFolderPath(FOLDERID_UserProfiles, 0, 0, Path);
-        if Succeeded(Res) then
-        begin
-          Folder := WideCharToString(Path);
-          CoTaskMemFree(Path);
-          Result := True;
-        end;
-      end;
-      FreeLibrary(Shell32Handle);
-    end;
-  end;
-
-const
-  WINXP_USERS_DIRECTORY = 'Documents and Settings';
-
-var
-  UserPath: WideString;
-  WinDir: array[0..MAX_PATH - 1] of Char;
-
-begin
-{$IFDEF DEBUG}
-  DebugLog('GetUsersDirectory');
-{$ENDIF}
-
-  CoInitialize(nil);
-  try
-    UserPath := Default(WideString);
-    if TrySHGetKnownFolderPath(UserPath) then
-      Result := string(UserPath)
-    else
-    begin
-      GetWindowsDirectory(WinDir, MAX_PATH);
-      Result := ExtractFileDrive(WinDir) + DirectorySeparator
-        + WINXP_USERS_DIRECTORY;
-    end;
-    Result := IncludeTrailingPathDelimiter(Result);
-  finally
-    CoUninitialize;
-  end;
-
-{$IFDEF DEBUG}
-  DebugLog(Format('  GetUsersDirectory::Result = "%s"', [Result]));
-{$ENDIF}
-
-  if not DirectoryExists(Result) then
-    raise EFileSystemTools
-      .CreateFmt('GetUsersDirectory returned an invalid directory: "%s"', [Result]);
-end;
-
-function GetAppDataTemplate(const AppDataKind: TAppDataKind): TFileName;
-var
-  AppDataTemplate: TFileName;
-  AppDataVariable,
-  CurrentUserName: string;
-
-begin
-  AppDataVariable := '%AppData%';
-  if AppDataKind = adkLocal then
-    AppDataVariable := '%LocalAppData%';
-
-  AppDataTemplate := IncludeTrailingPathDelimiter(
-    ParseInputFileSystemObject(AppDataVariable));
-  CurrentUserName := GetEnvironmentVariable('USERNAME');
-
-  AppDataTemplate := StringReplace(
-    AppDataTemplate,
-    DirectorySeparator + CurrentUserName + DirectorySeparator,
-    DirectorySeparator + '%s' + DirectorySeparator,
-    [rfIgnoreCase]
-  );
-
-  Result := AppDataTemplate;
-end;
-
-// {$DEFINE DEBUG_USER_APP_DATA_LIST}
-function GetAppDataListFromUsers(var UserAppDataList: TStringList;
-  const AppDataKind: TAppDataKind = adkRoaming): Boolean;
-var
-  AppDataTemplate: TFileName;
-  i: Integer;
-
-begin
-  Result := GetUserList(UserAppDataList);
-  if Result then
-  begin
-{$IFDEF DEBUG_USER_APP_DATA_LIST}
-{$IFDEF DEBUG}
-    DebugLog('UserAppDataList:');
-{$ENDIF}
-{$ENDIF}
-
-    AppDataTemplate := GetAppDataTemplate(AppDataKind);
-    for i := 0 to UserAppDataList.Count - 1 do
-    begin
-      UserAppDataList[i] := Format(AppDataTemplate, [UserAppDataList[i]]);
-{$IFDEF DEBUG_USER_APP_DATA_LIST}
-{$IFDEF DEBUG}
-      DebugLog('  ' + UserAppDataList[i]);
-{$ENDIF}
-{$ENDIF}
-    end;
-  end;
-end;
-
-function GetUserFromAppDataDirectory(const AppDataDirectory: TFileName): string;
-var
-  AppDataTemplate: TFileName;
-  TempLeft, TempRight: string;
-
-begin
-  AppDataTemplate := GetAppDataTemplate(adkRoaming);
-  TempLeft := Left('%s', AppDataTemplate);
-  TempRight := Right('%s', AppDataTemplate);
-  Result := Trim(ExtractStr(TempLeft, TempRight, AppDataDirectory));
 end;
 
 function GetProgramName: string;
@@ -513,7 +361,7 @@ begin
   end;
 end;
 
-procedure SaveStringToFile(const InString: string; FileName: TFileName; const Append: Boolean);
+procedure SaveStringToFile(const InString: string; FileName: TFileName; const Append: Boolean = False);
 var
   Buffer: TStringList;
 
@@ -527,11 +375,6 @@ begin
   finally
     Buffer.Free;
   end;
-end;
-
-procedure SaveStringToFile(const InString: string; FileName: TFileName); overload;
-begin
-  SaveStringToFile(InString, FileName, False);
 end;
 
 function GetApplicationPath: TFileName;
@@ -599,6 +442,7 @@ begin
   Result := WorkingPath;
 end;
 
+// {$DEFINE DEBUG_GET_TEMPORARY_FILE_NAME}
 function GetTemporaryFileName: TFileName;
 begin
   Result := ChangeFileExt(SysUtils.GetTempFileName, Format('-%s-%d-dreamsdk.tmp', [
@@ -606,7 +450,9 @@ begin
     GetProcessID
   ]));
 {$IFDEF DEBUG}
+{$IFDEF DEBUG_TEMPORARY_FILE_GENERATION}
   DebugLog('GetTemporaryFileName: "' + Result + '"');
+{$ENDIF}
 {$ENDIF}
 end;
 

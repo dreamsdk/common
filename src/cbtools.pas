@@ -5,7 +5,8 @@ interface
 uses
   Classes,
   SysUtils,
-  FSTools;
+  FSTools,
+  SysTools;
 
 const
   CODEBLOCKS_PATCHER_ERROR_TAG = 'Error: ';
@@ -22,16 +23,29 @@ type
 
 function GetCodeBlocksVersion(InstallationDirectory: TFileName;
   const ExpandInstallationDirectory: Boolean = True): TCodeBlocksVersion;
+
 function CodeBlocksVersionToString(const CodeBlocksVersion: TCodeBlocksVersion): string;
-procedure ConvertCodeBlocksConfigurationFileNamesToUsers(
-  ConfigurationFileNames: TFileList; AvailableUsers: TStringList);
+
+(*procedure ConvertCodeBlocksConfigurationFileNamesToUsers(
+  ConfigurationFileNames: TFileList; AvailableUsers: TStringList);*)
+
 function GetCodeBlocksAvailableConfigurationFileNames(
+  out AvailableUsers: TWindowsUserAccountInformationArray;
   ConfigurationFileNames: TFileList): Boolean;
-function GetCodeBlocksConfigurationFileNames(AvailableConfigurationFileNames: TFileList;
+
+function GetCodeBlocksConfigurationFileNames(
+  out AvailableUsers: TWindowsUserAccountInformationArray;
+  AvailableConfigurationFileNames: TFileList;
+  out NotConfiguredUsers: TWindowsUserAccountInformationArray;
   MissingConfigurationFileNames: TFileList): Boolean;
-procedure GetCodeBlocksAvailableUsers(AvailableUsers: TStringList);
+
+function GetCodeBlocksAvailableUsers(
+  out AvailableUsers: TWindowsUserAccountInformationArray): Boolean;
+
 function GetCodeBlocksDefaultInstallationDirectory: TFileName;
+
 procedure InitializeCodeBlocksProfiles;
+
 {$IFDEF ENABLE_CBTOOLS_SAVE_CB_VERSION}
 procedure DeleteCodeBlocksVersionFileFromInstallationDirectory(
   InstallationDirectory: TFileName);
@@ -43,7 +57,6 @@ implementation
 
 uses
   MD5,
-  SysTools,
   Version;
 
 type
@@ -131,76 +144,101 @@ begin
 end;
 
 function GetCodeBlocksAvailableConfigurationFileNames(
+  out AvailableUsers: TWindowsUserAccountInformationArray;
   ConfigurationFileNames: TFileList): Boolean;
 var
-  Dummy: TFileList;
+  Dummy1: TWindowsUserAccountInformationArray;
+  Dummy2: TFileList;
 
 begin
 {$IFDEF DEBUG}
   DebugLog('GetCodeBlocksAvailableConfigurationFileNames');
 {$ENDIF}
-  Dummy := TFileList.Create;
+  Dummy2 := TFileList.Create;
   try
-    Result := GetCodeBlocksConfigurationFileNames(ConfigurationFileNames, Dummy);
+    Result := GetCodeBlocksConfigurationFileNames(AvailableUsers,
+      ConfigurationFileNames, Dummy1, Dummy2);
   finally
-    Dummy.Free;
+    Dummy2.Free;
   end;
 end;
 
 function GetCodeBlocksConfigurationFileNames(
+  out AvailableUsers: TWindowsUserAccountInformationArray;
   AvailableConfigurationFileNames: TFileList;
+  out NotConfiguredUsers: TWindowsUserAccountInformationArray;
   MissingConfigurationFileNames: TFileList
 ): Boolean;
 const
   DEFAULT_CODEBLOCKS_CONFIGURATION_FILE = '%sCodeBlocks\default.conf';
 
 var
-  UsersAppData: TStringList;
-  i: Integer;
+  CurrentUser: TWindowsUserAccountInformation;
+  UsersList: TWindowsUserAccountInformationArray;
+  i,
+  ConfiguredUsersMaxCount,
+  NotConfiguredUsersMaxCount: Integer;
   CodeBlocksConfigurationFileName: TFileName;
 
 begin
 {$IFDEF DEBUG}
   DebugLog('GetCodeBlocksConfigurationFileNames');
 {$ENDIF}
-  UsersAppData := TStringList.Create;
-  try
-    Result := GetAppDataListFromUsers(UsersAppData);
+
+  Result := GetUserList(UsersList);
+
+  // Initialize the size of the both arrays
+  ConfiguredUsersMaxCount := 0;
+  AvailableUsers := Default(TWindowsUserAccountInformationArray);
+  SetLength(AvailableUsers, Length(UsersList));
+
+  NotConfiguredUsersMaxCount := 0;
+  NotConfiguredUsers := Default(TWindowsUserAccountInformationArray);
+  SetLength(NotConfiguredUsers, Length(UsersList));
+
 {$IFDEF DEBUG}
-    DebugLog(Format('  Account Count: %d', [UsersAppData.Count]));
-    DebugLog('  Configuration File Names:');
+  DebugLog(Format('  Account Count: %d', [Length(UsersList)]));
+  DebugLog('  Configuration File Names:');
 {$ENDIF}
 
-    for i := 0 to UsersAppData.Count - 1 do
+  for i := 0 to Length(UsersList) - 1 do
+  begin
+    CurrentUser := UsersList[i];
+
+    CodeBlocksConfigurationFileName := Format(
+      DEFAULT_CODEBLOCKS_CONFIGURATION_FILE, [
+        IncludeTrailingPathDelimiter(CurrentUser.RoamingAppDataPath)
+      ]);
+
+{$IFDEF DEBUG}
+    Write('    "', CodeBlocksConfigurationFileName, '" ... ');
+{$ENDIF}
+
+    if FileExists(CodeBlocksConfigurationFileName) then
     begin
-      CodeBlocksConfigurationFileName := Format(
-        DEFAULT_CODEBLOCKS_CONFIGURATION_FILE,
-        [ IncludeTrailingPathDelimiter(UsersAppData[i]) ]
-      );
 {$IFDEF DEBUG}
-      Write('    "', CodeBlocksConfigurationFileName, '" ... ');
+      WriteLn('exist!');
 {$ENDIF}
-      if FileExists(CodeBlocksConfigurationFileName) then
-      begin
+      AvailableConfigurationFileNames.Add(CodeBlocksConfigurationFileName);
+      AvailableUsers[ConfiguredUsersMaxCount] := CurrentUser;
+      Inc(ConfiguredUsersMaxCount);
+    end
+    else
+    begin
 {$IFDEF DEBUG}
-        WriteLn('exist!');
-{$ENDIF}
-        AvailableConfigurationFileNames.Add(CodeBlocksConfigurationFileName);
-      end
-      else
-      begin
-{$IFDEF DEBUG}
-        WriteLn('doesn''t exist!')
+      WriteLn('doesn''t exist!')
 {$ENDIF};
-        MissingConfigurationFileNames.Add(CodeBlocksConfigurationFileName);
-      end;
+      MissingConfigurationFileNames.Add(CodeBlocksConfigurationFileName);
+      NotConfiguredUsers[NotConfiguredUsersMaxCount] := CurrentUser;
+      Inc(NotConfiguredUsersMaxCount);
     end;
-
-  finally
-    UsersAppData.Free;
   end;
+
+  SetLength(AvailableUsers, ConfiguredUsersMaxCount);
+  SetLength(NotConfiguredUsers, NotConfiguredUsersMaxCount);
 end;
 
+(*
 procedure ConvertCodeBlocksConfigurationFileNamesToUsers(
   ConfigurationFileNames: TFileList; AvailableUsers: TStringList);
 var
@@ -221,7 +259,7 @@ begin
 {$ENDIF}
 
     AvailableUsers.Clear;
-    UsersDirectory := GetUsersDirectory;
+    UsersDirectory := GetUsersRootDirectory;
     for i := 0 to ConfigurationFileNames.Count - 1 do
     begin
       CurrentUserName := ExtractStr(UsersDirectory, DirectorySeparator,
@@ -241,21 +279,25 @@ begin
     end;
   end;
 end;
+*)
 
-procedure GetCodeBlocksAvailableUsers(AvailableUsers: TStringList);
+function GetCodeBlocksAvailableUsers(
+  out AvailableUsers: TWindowsUserAccountInformationArray): Boolean;
 var
-  Buffer: TFileList;
+  ConfigurationFileNames: TFileList;
 
 begin
 {$IFDEF DEBUG}
   DebugLog('GetCodeBlocksAvailableUsers');
 {$ENDIF}
-  Buffer := TFileList.Create;
+
+  ConfigurationFileNames := TFileList.Create;
   try
-    GetCodeBlocksAvailableConfigurationFileNames(Buffer);
-    ConvertCodeBlocksConfigurationFileNamesToUsers(Buffer, AvailableUsers);
+    Result := GetCodeBlocksAvailableConfigurationFileNames(
+      AvailableUsers, ConfigurationFileNames);
+    // ConvertCodeBlocksConfigurationFileNamesToUsers(Buffer, AvailableUsers);
   finally
-    Buffer.Free;
+    ConfigurationFileNames.Free;
   end;
 end;
 
@@ -314,8 +356,10 @@ end;
 
 procedure InitializeCodeBlocksProfiles;
 var
+  NotConfiguredUsers,
+  Unused1: TWindowsUserAccountInformationArray;
   MissingConfigurationFileNames,
-  Unused: TFileList;
+  Unused2: TFileList;
   i: Integer;
   MissingConfigurationFileName,
   MissingConfigurationPathName: TFileName;
@@ -325,9 +369,10 @@ begin
   WriteLn('InitializeProfiles');
 {$ENDIF}
   MissingConfigurationFileNames := TFileList.Create;
-  Unused := TFileList.Create;
+  Unused2 := TFileList.Create;
   try
-    GetCodeBlocksConfigurationFileNames(Unused, MissingConfigurationFileNames);
+    GetCodeBlocksConfigurationFileNames(Unused1, Unused2, NotConfiguredUsers,
+      MissingConfigurationFileNames);
     for i := 0 to MissingConfigurationFileNames.Count - 1 do
     begin
       MissingConfigurationFileName := MissingConfigurationFileNames[i];
@@ -347,7 +392,7 @@ begin
       );
     end;
   finally
-    Unused.Free;
+    Unused2.Free;
     MissingConfigurationFileNames.Free;
   end;
 end;
