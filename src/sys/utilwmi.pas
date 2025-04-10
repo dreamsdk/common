@@ -4,7 +4,7 @@ UtilWMI for Free Pascal/Lazarus
 A very simple utility for querying Windows Management Instrumentation (WMI).
 https://forum.lazarus.freepascal.org/index.php/topic,24490.0.html
 
-Copyright (c) 2016-2022 Jurassic Pork, Molly and SiZiOUS
+Copyright (c) 2016-2025 Jurassic Pork, Molly and SiZiOUS
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -28,10 +28,10 @@ unit UtilWMI;
 
 Changelog:
 
-Ver. 0.1 [July 2015] Jurassic Pork:
+Ver. 0.1 [ July 2015 ] Jurassic Pork:
 first public release
 
-Ver. 0.2 [January 2016] Molly:
+Ver. 0.2 [ January 2016 ] Molly:
   - improvement: fpc 3.0 compatibility + usage of TFPObjectList
   - updated/corrected comments
   - introduction of variable nrValue.
@@ -39,11 +39,16 @@ Ver. 0.2 [January 2016] Molly:
   - re-introduction of calling ShowMessage() when exception occurs
     (code only active when USE_DIALOG is defined) + reorganized defines
  
-Ver. 0.3 [November 2016] Molly:
+Ver. 0.3 [ November 2016 ] Molly:
 improvement : support for variant arrays
 
-Ver. 0.4  [April 2022]  SiZiOUS:
+Ver. 0.4  [ April 2022 ]  SiZiOUS:
 complete rewriting/revamping
+
+Ver. 0.5 [ April 2025 ]  SiZiOUS:
+critical fix into GetWindowsManagementInstrumentationMultipleValuesByPropertyName
+in case of the requested property isn't available
+thanks to Nnnn: https://x.com/nnnn2cat
 
 *)
 
@@ -89,12 +94,14 @@ function QueryWindowsManagementInstrumentation(
 function GetWindowsManagementInstrumentationMultipleValuesByPropertyName(
   const QueryResult: TWindowsManagementInstrumentationQueryResult;
   const WMIPropertyName: string;
-  const ItemIndex: Integer): TStringArray;
+  const ItemIndex: Integer;
+  out Values: TStringArray): Boolean;
 
 function GetWindowsManagementInstrumentationSingleValueByPropertyName(
   const QueryResult: TWindowsManagementInstrumentationQueryResult;
   const WMIPropertyName: string;
-  const ItemIndex: Integer): string;
+  const ItemIndex: Integer;
+  out Value: string): Boolean;
 
 {$IFDEF DEBUG}
 procedure DumpWindowsManagementInstrumentation(
@@ -258,49 +265,58 @@ end;
 function GetWindowsManagementInstrumentationMultipleValuesByPropertyName(
   const QueryResult: TWindowsManagementInstrumentationQueryResult;
   const WMIPropertyName: string;
-  const ItemIndex: Integer): TStringArray;
+  const ItemIndex: Integer;
+  out Values: TStringArray): Boolean;
 var
   i,
   ColumnIndex: Integer;
   Buffer: TWindowsManagementInstrumentationProperties;
 
 begin
-  if (ItemIndex < Low(QueryResult)) or (ItemIndex > High(QueryResult)) then
-    raise EArgumentOutOfRangeException.CreateFmt('UtilWMI [%s]: index is out of bound: %d', [
-      WMIPropertyName,
-      ItemIndex
-    ]);
+  Result := False;
+  Values := Default(TStringArray);
 
-  ColumnIndex := -1;
-  Buffer := QueryResult[0];
-  for i := Low(Buffer) to High(Buffer) do
-    if SameText(Buffer[i].Key, WMIPropertyName) then
-      ColumnIndex := i;
+  if Assigned(QueryResult) and (ItemIndex >= Low(QueryResult))
+    and (ItemIndex <= High(QueryResult)) then
+  begin
+    // Grab the values from the requested property
+    ColumnIndex := -1;
+    Buffer := QueryResult[0];
+    for i := Low(Buffer) to High(Buffer) do
+      if SameText(Buffer[i].Key, WMIPropertyName) then
+        ColumnIndex := i;
 
-  if ColumnIndex = -1 then
-    raise EArgumentException.CreateFmt('UtilWMI: property not found: %s', [WMIPropertyName]);
+    // Property was found?
+    Result := (ColumnIndex <> -1);
 
-  Result := QueryResult[ItemIndex][ColumnIndex].Values;
+    // Yes, so we can return the values!
+    if Result then
+      Values := QueryResult[ItemIndex][ColumnIndex].Values;
+  end;
 end;
 
 function GetWindowsManagementInstrumentationSingleValueByPropertyName(
   const QueryResult: TWindowsManagementInstrumentationQueryResult;
   const WMIPropertyName: string;
-  const ItemIndex: Integer): string;
+  const ItemIndex: Integer;
+  out Value: string): Boolean;
 var
   Buffer: TStringArray;
   BufferItemsCount: Integer;
 
 begin
-  Buffer := GetWindowsManagementInstrumentationMultipleValuesByPropertyName(
-    QueryResult, WMIPropertyName, ItemIndex);
+  Result := GetWindowsManagementInstrumentationMultipleValuesByPropertyName(
+    QueryResult, WMIPropertyName, ItemIndex, Buffer);
 
-  BufferItemsCount := Length(Buffer);
-  if BufferItemsCount > 1 then
-    raise EQueryWindowsManagementInstrumentation.CreateFmt(
-      'Illegal use: multiple values available (%d)', [BufferItemsCount]);
+  if Result then
+  begin
+    BufferItemsCount := Length(Buffer);
+    if BufferItemsCount > 1 then
+      raise EQueryWindowsManagementInstrumentation.CreateFmt(
+        'illegal use of single call: multiple values available (%d)', [BufferItemsCount]);
 
-  Result := Buffer[0];
+    Value := Buffer[0];
+  end;
 end;
 
 {$IFDEF DEBUG}
