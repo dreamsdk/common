@@ -71,33 +71,26 @@ const
   WINDOWS_TERMINAL_CODE_IN_PATH = 'Microsoft\WindowsApps\wt.exe';
 
 var
-  PathFileNames: TStringList;
   i: Integer;
   WindowsTerminalFileName: TFileName;
+  UsersList: TWindowsUserAccountInformationArray;
 
 begin
 {$IFDEF DEBUG}
   DebugLog('IsWindowsTerminalInstalled');
 {$ENDIF}
-  if not Cache_IsWindowsTerminalInstalled then
-  begin
-    PathFileNames := TStringList.Create;
-    try
-      if GetAppDataListFromUsers(PathFileNames, adkLocal) then
-        for i := 0 to PathFileNames.Count - 1 do
-        begin
-          WindowsTerminalFileName := PathFileNames[i] + WINDOWS_TERMINAL_CODE_IN_PATH;
+  if (not Cache_IsWindowsTerminalInstalled) and GetUserList(UsersList) then
+    for i := 0 to Length(UsersList) - 1 do
+    begin
+      WindowsTerminalFileName := UsersList[i].LocalAppDataPath
+        + WINDOWS_TERMINAL_CODE_IN_PATH;
 {$IFDEF DEBUG}
-          DebugLog('  Processing: "' + WindowsTerminalFileName + '"');
+      DebugLog('  Processing: "' + WindowsTerminalFileName + '"');
 {$ENDIF}
-          Cache_IsWindowsTerminalInstalled := FileExists(WindowsTerminalFileName);
-          if Cache_IsWindowsTerminalInstalled then
-            Break; // Don't continue, it isn't needed. Not so optimized but...
-        end;
-    finally
-      PathFileNames.Free;
+      Cache_IsWindowsTerminalInstalled := FileExists(WindowsTerminalFileName);
+      if Cache_IsWindowsTerminalInstalled then
+        Break; // Don't continue, it isn't needed. Not so optimized but...
     end;
-  end;
   Result := Cache_IsWindowsTerminalInstalled;
 {$IFDEF DEBUG}
   DebugLog('  IsWindowsTerminalInstalled RESULT: '
@@ -118,9 +111,9 @@ var
   ProfilesEnum: TJSONEnum;
   ProfileFound: Boolean;
   MemoryStream: TMemoryStream;
-  LocalAppDataDirectories: TStringList;
   WindowsTerminalSettingsFileName: TFileName;
   i: Integer;
+  UsersList: TWindowsUserAccountInformationArray;
 
 begin
   Result := False;
@@ -130,12 +123,11 @@ begin
   if IsWindowsTerminalInstalled then
   begin
     Settings := TDreamcastSoftwareDevelopmentSettings.Create;
-    LocalAppDataDirectories := TStringList.Create;
     try
-      if GetAppDataListFromUsers(LocalAppDataDirectories, adkLocal) then
-        for i := 0 to LocalAppDataDirectories.Count - 1 do
+      if GetUserList(UsersList) then
+        for i := 0 to Length(UsersList) - 1 do
         begin
-          WindowsTerminalSettingsFileName := IncludeTrailingPathDelimiter(LocalAppDataDirectories[i])
+          WindowsTerminalSettingsFileName := UsersList[i].LocalAppDataPath
             + WINDOWS_TERMINAL_SETTINGS_FILEPATH;
           if FileExists(WindowsTerminalSettingsFileName) then
           begin
@@ -203,7 +195,6 @@ begin
           end; // Check for WindowsTerminalSettingsFileName
         end; // for
     finally
-      LocalAppDataDirectories.Free;
       Settings.Free;
     end;
   end;

@@ -53,6 +53,7 @@ uses
   IniFiles,
   RefBase,
   SysTools,
+  StrTools,
   Runner,
   RunTools,
   Version,

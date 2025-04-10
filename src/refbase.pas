@@ -5,7 +5,8 @@ unit RefBase;
 interface
 
 uses
-  Classes, SysUtils;
+  Classes,
+  SysUtils;
 
 type
   EHomeDirectoryNotFound = class(Exception);
@@ -40,6 +41,7 @@ uses
   MsgDlg,
 {$ENDIF}
   SysTools,
+  StrTools,
   FSTools;
 
 const

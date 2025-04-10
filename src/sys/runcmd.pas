@@ -64,7 +64,8 @@ uses
   JwaWinCon,
 {$ENDIF}
 {$ENDIF}
-  SysTools;
+  SysTools,
+  StrTools;
 
 { TRunCommand }
 

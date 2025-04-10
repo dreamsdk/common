@@ -48,7 +48,12 @@ function IsRealOSError(ALastOSError: Cardinal): Boolean;
 implementation
 
 uses
-  SysUtils, Registry, ShellAPI, ComObj, SysTools;
+  SysUtils,
+  Registry,
+  ShellAPI,
+  ComObj,
+  SysTools,
+  StrTools;
 
 const
   RunElevatedTaskSwitch = '0C3B68CC5F5B900B64D50CB7DF000FFC'; // some unique value, just a GUID with removed '[', ']', and '-'
