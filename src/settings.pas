@@ -1,5 +1,7 @@
 unit Settings;
 
+// {$DEFINE DEBUG_SETTINGS_RECOMPUTE_DYNAMIC_DIRECTORIES}
+
 {$mode objfpc}{$H+}
 
 interface
@@ -144,7 +146,9 @@ type
     function GetRegistryFileName: TFileName;
     procedure SetBackupDirectory(AValue: TFileName);
     procedure SetExportLibraryInformation(AValue: Boolean);
+{$IFDEF DISABLE_REFBASE_HOME_DIR_AUTO_OVERRIDE}
     procedure SetHomeDirectory(AValue: TFileName);
+{$ENDIF}
     procedure SetInstallationDirectory(AValue: TFileName);
   protected
     fInstalled: Boolean;
@@ -195,7 +199,9 @@ type
     // DreamSDK Home
     property HomeDirectory: TFileName
       read GetHomeDirectory
-      write SetHomeDirectory;
+{$IFDEF DISABLE_REFBASE_HOME_DIR_AUTO_OVERRIDE}
+      write SetHomeDirectory
+{$ENDIF};
 
     (* This is equals to True if the patch for C::B has been installed.
        This property is overriden to False if the installation is now invalid.
@@ -290,6 +296,11 @@ implementation
 
 uses
   TypInfo,
+{$IFDEF GUI}
+  Interfaces,
+  Dialogs,
+  MsgDlg,
+{$ENDIF}
   RefBase,
   StrTools,
   Version,
@@ -373,6 +384,13 @@ type
 
 var
   DefaultRepository: TDefaultRepository;
+
+{$IFDEF DEBUG}
+{$IFDEF DEBUG_SETTINGS_RECOMPUTE_DYNAMIC_DIRECTORIES}
+resourcestring
+  RecomputeDynamicDirectoriesTriggered = 'Recompute Dynamic Directories Triggered: "%s"';
+{$ENDIF}
+{$ENDIF}
 
 function SerialPortToString(SerialPortIndex: Integer): string;
 begin
@@ -796,16 +814,20 @@ begin
   end;
 end;
 
+{$IFDEF DISABLE_REFBASE_HOME_DIR_AUTO_OVERRIDE}
+
 procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocks
   .SetHomeDirectory(AValue: TFileName);
 begin
   if fHomeDirectory <> AValue then
   begin
-    fHomeDirectory := ExcludeTrailingPathDelimiter(
-      ParseInputFileSystemObject(AValue));
+    fHomeDirectory := AValue;
+    SetBaseInstallationHomeDirectory(fHomeDirectory);
     HandleDynamicDirectories;
   end;
 end;
+
+{$ENDIF}
 
 procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocks
   .SetInstallationDirectory(AValue: TFileName);
@@ -834,7 +856,7 @@ begin
   fAvailableConfigurationFileNames := TFileList.Create;
   fAvailableUsers := TStringList.Create;
   fInstalledUsers := TStringList.Create;
-  HomeDirectory := GetInstallationBaseDirectory;
+  fHomeDirectory := GetBaseInstallationHomeDirectory;
   HandleDynamicDirectories;
 end;
 
@@ -852,9 +874,35 @@ function TDreamcastSoftwareDevelopmentSettingsCodeBlocks
 var
   IniFile: TIniFile; // ide.conf
   Temp: string;
+  RecomputeDynamicDirectories: Boolean;
+
+  procedure CheckIfRecomputeDynamicDirectories(const Directory: TFileName);
+{$IF DEFINED(DEBUG) AND DEFINED(DEBUG_SETTINGS_RECOMPUTE_DYNAMIC_DIRECTORIES)}
+  var
+    MessageRecomputeDynamicDirectoriesTriggered: string;
+{$ENDIF}
+  begin
+    RecomputeDynamicDirectories := RecomputeDynamicDirectories
+      or IsEmpty(Directory) or (not DirectoryExists(Directory));
+
+{$IF DEFINED(DEBUG) AND DEFINED(DEBUG_SETTINGS_RECOMPUTE_DYNAMIC_DIRECTORIES)}
+    if RecomputeDynamicDirectories then
+    begin
+      MessageRecomputeDynamicDirectoriesTriggered := Format(
+        RecomputeDynamicDirectoriesTriggered, [Directory]);
+{$IFDEF GUI}
+      MsgBoxDlg(0, sWarning, PChar(MessageRecomputeDynamicDirectoriesTriggered),
+        mtWarning, [mbOk]);
+{$ELSE}
+      DebugLog(MessageRecomputeDynamicDirectoriesTriggered);
+{$ENDIF}
+    end;
+{$ENDIF}
+  end;
 
 begin
   Result := FileExists(RegistryFileName);
+  RecomputeDynamicDirectories := False;
 
 {$IFDEF DEBUG}
   DebugLog('LoadConfiguration: ' + BoolToStr(Result));
@@ -879,6 +927,7 @@ begin
         CONFIG_IDE_SECTION_CODEBLOCKS,
         CONFIG_IDE_SECTION_CODEBLOCKS_KEY_EXPORT_LIBRARY_INFORMATION_PATH,
         ExportLibraryInformationPath);
+      CheckIfRecomputeDynamicDirectories(fExportLibraryInformationPath);
 
       // Installation Directory
       InstallationDirectory :=
@@ -890,6 +939,7 @@ begin
       BackupDirectory :=
         IniFile.ReadString(CONFIG_IDE_SECTION_CODEBLOCKS,
           CONFIG_IDE_SECTION_CODEBLOCKS_KEY_BACKUP_PATH, BackupDirectory);
+      CheckIfRecomputeDynamicDirectories(BackupDirectory);
 
       // Users Available
       Temp := IniFile.ReadString(CONFIG_IDE_SECTION_CODEBLOCKS,
@@ -908,6 +958,15 @@ begin
         CONFIG_IDE_SECTION_CODEBLOCKS_KEY_CONFIGURATION_FILENAMES, EmptyStr);
       if not IsEmpty(Temp) then
         ConfigurationFileNames.SetItems(Temp, ArraySeparator);
+
+      // Recompute directories if empty or not exists
+      if RecomputeDynamicDirectories then
+      begin
+{$IFDEF DEBUG}
+        DebugLog('* RecomputeDynamicDirectories after LoadConfiguration');
+{$ENDIF}
+        HandleDynamicDirectories;
+      end;
     finally
       IniFile.Free;
     end;
@@ -1166,7 +1225,7 @@ begin
   IniFile := TIniFile.Create(FileName);
   try
     // Settings
-    DefaultInstallationPath := GetInstallationBaseDirectory;
+    DefaultInstallationPath := GetBaseInstallationHomeDirectory;
     fInstallPath := IncludeTrailingPathDelimiter(
       IniFile.ReadString(
         CONFIG_DREAMSDK_SECTION_SETTINGS,
@@ -1177,12 +1236,12 @@ begin
 
     // Fail-safe check
     // This part will be removed at some point.
-    if (not SameText(fInstallPath, GetInstallationBaseDirectory)) then
+    if (not SameText(fInstallPath, GetBaseInstallationHomeDirectory)) then
     begin
 {$IFDEF DEBUG}
       DebugLog('*** ERROR: Incorrect InstallPath detected...');
 {$ENDIF}
-      fInstallPath := GetInstallationBaseDirectory;
+      fInstallPath := GetBaseInstallationHomeDirectory;
     end;
 
     fUseMintty := IniFile.ReadBool(

@@ -33,7 +33,7 @@ begin
   if not IsDefinedInstallationBaseDirectoryVariable then
   begin
     Environment.Add(Format('%s=%s', [
-      GetBaseEnvironmentVariableName, GetInstallationBaseDirectory])
+      GetBaseEnvironmentVariableName, GetBaseInstallationHomeDirectory])
     );
   end;
 end;

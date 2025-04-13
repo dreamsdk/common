@@ -337,13 +337,33 @@ end;
 
 procedure TSevenZipCommander.Abort;
 begin
-  fCurrentTaskIndex := -1;
-  fOperationSuccess := False;
-  if Assigned(fSevenZipProcess) then
-  begin
-    fSevenZipProcess.Abort;
-    fSevenZipProcess.WaitFor;
-    FreeAndNil(fSevenZipProcess);
+  LogMessageEnter('SevenZipCommander.Abort');
+  try
+    try
+
+      fCurrentTaskIndex := -1;
+      fOperationSuccess := False;
+      if Assigned(fSevenZipProcess) then
+      begin
+        LogMessage('Aborting SevenZipProcess...');
+        fSevenZipProcess.Abort;
+{$IFDEF DEBUG}
+        DebugLog('SevenZipProcess::WaitFor::Start');
+{$ENDIF}
+        LogMessage('SevenZipProcess::WaitFor::Start...');
+        fSevenZipProcess.WaitFor;
+        LogMessage('SevenZipProcess::WaitFor::Exit...');
+{$IFDEF DEBUG}
+        DebugLog('SevenZipProcess::WaitFor::End');
+{$ENDIF}
+        FreeAndNil(fSevenZipProcess);
+      end;
+
+    except
+      raise;
+    end;
+  finally
+    LogMessageExit('SevenZipCommander.Abort');
   end;
 end;
 

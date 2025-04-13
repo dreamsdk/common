@@ -27,6 +27,7 @@ unit SysTools;
 
 {$mode objfpc}{$H+}
 
+(* Use this if you want to debug the LogonServerVariable addition. *)
 // {$DEFINE SYSTOOLS_DETAILED_DEBUG_HANDLELOGONSERVERVARIABLE}
 
 interface
@@ -49,6 +50,7 @@ const
   ArraySeparator = '|';
 
   sError = 'Error';
+  sWarning = 'Warning';
 
 {$IFDEF DEBUG}
   sDebugLogTitle = 'DebugLog';
@@ -80,6 +82,9 @@ type
 function ExtractEmbeddedResourceToFile(const ResourceName: string;
   const FileName: TFileName): Boolean;
 
+(* Expands environment-variable strings and replaces them with the values
+   defined for the current user.
+   See: https://learn.microsoft.com/en-us/windows/win32/api/processenv/nf-processenv-expandenvironmentstringsa *)
 function ExpandEnvironmentStrings(const InputString: string): string;
 
 (* Get the username of the Everyone Windows account on this system *)
@@ -101,6 +106,7 @@ function GetUserList(out UsersList: TWindowsUserAccountInformationArray): Boolea
 (* Returns the Windows Users directory, typically "C:\Users\" *)
 function GetUsersRootDirectory: TFileName;
 
+(* Add a mandatory variable in TProcess environment when used with Bash. *)
 procedure HandleLogonServerVariable(EnvironmentVariables: TStringList);
 
 (* Checks if a process is running using image file name *)
@@ -112,6 +118,26 @@ function IsProcessRunning(const ProcessId: LongWord): Boolean;
 (* Kill a running process by image file name *)
 function KillProcessByName(const FileName: TFileName): Boolean;
 
+(* Log a message to the user. This can be used for a Debug log statement but
+   for the end-user and not for the programmers of DreamSDK. *)
+procedure LogMessage(const Args: array of const);
+
+(* Log a message to the user. This can be used for a Debug log statement but
+   for the end-user and not for the programmers of DreamSDK. *)
+procedure LogMessage(const Message: string);
+
+(* Log a message while entering a procedure/function. *)
+procedure LogMessageEnter(const Args: array of const);
+
+(* Log a message while entering a procedure/function. *)
+procedure LogMessageEnter(const Message: string);
+
+(* Log a message while exiting a procedure/function. *)
+procedure LogMessageExit(const Args: array of const);
+
+(* Log a message while exiting a procedure/function. *)
+procedure LogMessageExit(const Message: string);
+
 (* Waits for the ends of execution of a specific PID *)
 procedure WaitForProcessId(const ProcessId: LongWord);
 
@@ -121,7 +147,7 @@ procedure WaitForProcessId(const ProcessId: LongWord);
 
 {$IFDEF GUI}
 
-(* Wait for some milliseconds, it's Sleep but better way for GUI apps *)
+(* Wait for some milliseconds, it's Sleep function but better for GUI apps *)
 procedure Delay(Milliseconds: Integer);
 
 {$ENDIF}
@@ -132,17 +158,24 @@ procedure Delay(Milliseconds: Integer);
 
 {$IFDEF DEBUG}
 
+(* Similar to BoolToStr but for Debug console print. *)
 function DebugBoolToStr(const Value: Boolean): string;
 
+(* Print a message in the Console. Only works in Debug build. *)
 procedure DebugLog(const Message: string);
 
+(* Dump an array of Char to a file. *)
 procedure DumpCharArrayToFile(A: array of Char; const FileName: TFileName);
+
+(* Give a name to a thread. This is useful in Debug View > Thread in the IDE. *)
+procedure SetThreadName(const ThreadName: string; ThreadHandle: THandle = 0);
 
 {$ENDIF}
 
 implementation
 
 uses
+  Variants,
   RegExpr,
   LazUTF8,
   LConvEncoding,
@@ -876,10 +909,10 @@ var
   PastTime: LongInt;
 
 begin
-  PastTime := GetTickCount;
+  PastTime := GetTickCount64;
   repeat
     Application.ProcessMessages;
-  until (GetTickCount - PastTime) >= LongInt(Milliseconds);
+  until (GetTickCount64 - PastTime) >= LongInt(Milliseconds);
 end;
 
 {$ENDIF}
@@ -888,7 +921,158 @@ end;
 // Debug Utilities
 // =============================================================================
 
+procedure LogMessageEnter(const Message: string);
+begin
+  LogMessage(Concat(Message, '::Entering'));
+end;
+
+procedure LogMessageEnter(const Args: array of const);
+begin
+  LogMessage(Args);
+end;
+
+procedure LogMessageExit(const Message: string);
+begin
+  LogMessage(Concat(Message, '::Exiting'));
+end;
+
+procedure LogMessageExit(const Args: array of const);
+begin
+  LogMessage(Args);
+end;
+
+procedure LogMessage(const Message: string);
+begin
+{$IFDEF WINDOWS}
+  OutputDebugString(PChar(Message));
+{$ENDIF}
+end;
+
+procedure LogMessage(const Args: array of const);
+var
+  i: Integer;
+  TempList: TStringList;
+  Message: string;
+
+begin
+  TempList := TStringList.Create;
+  try
+    for i := Low(Args) to High(Args) do
+    begin
+      case Args[i].VType of
+        vtInteger:
+          TempList.Add(Format('%d', [Args[i].VInteger]));
+        vtBoolean:
+          TempList.Add(BoolToStr(Args[i].VBoolean, True));
+        vtChar:
+          TempList.Add(Args[i].VChar);
+{$IFNDEF FPUNONE}
+        vtExtended:
+          TempList.Add(FloatToStr(Args[i].VExtended^));
+{$ENDIF}
+        vtString:
+          TempList.Add(Format('%s', [Args[i].VString]));
+        vtPointer:
+          TempList.Add(Format('%p', [Args[i].VPointer]));
+        vtPChar:
+          TempList.Add(Format('%s', [Args[i].VPChar]));
+        vtObject:
+          TempList.Add(Format('[Object: "%s"]', [TObject(Args[i].VObject).ClassName]));
+        vtClass:
+          TempList.Add(Format('[ClassName: "%s"]', [Args[i].VClass.ClassName]));
+        vtWideChar:
+          TempList.Add(string(Args[i].VWideChar));
+        vtPWideChar:
+          TempList.Add(string(Args[i].VPWideChar));
+        vtAnsiString:
+          TempList.Add(string(Args[i].VAnsiString));
+        vtCurrency:
+          TempList.Add(Format('%m', [Args[i].VCurrency]));
+        vtVariant:
+          TempList.Add(Format('%s', [VarToStr(Args[i].VVariant^)]));
+        vtInterface:
+          TempList.Add(Format('[Interface: %p]', [Args[i].VInterface]));
+        vtWideString:
+          TempList.Add(Format('%s', [Args[i].VWideString]));
+        vtInt64:
+          TempList.Add(Format('%d', [Args[i].VInt64]));
+        vtQWord:
+          TempList.Add(Format('%u', [Args[i].VQWord]));
+        vtUnicodeString:
+          TempList.Add(Format('%s', [Args[i].VUnicodeString]));
+        else
+          // Handle unexpected types
+          TempList.Add(Format('<unknown type: %d>', [Args[i].VType]));
+      end;
+    end;
+    Message := StringListToString(TempList, ' ', False);
+
+{$IFDEF WINDOWS}
+    OutputDebugString(PChar(Message));
+{$ENDIF}
+
+  finally
+    TempList.Free;
+  end;
+end;
+
 {$IFDEF DEBUG}
+
+procedure SetThreadName(const ThreadName: string; ThreadHandle: THandle = 0);
+{$IFDEF WINDOWS}
+const
+  SVL_THREAD_NAMING_EXCEPTION = $406D1388;
+
+type
+  TThreadNameInfo = record
+    dwType     : DWORD;      // = 0x1000
+    szName     : PAnsiChar;  // Thread name
+    dwThreadID : DWORD;      // Thread ID (-1 = current thread)
+    dwFlags    : DWORD;      // Reserved, must be zero
+  end;
+
+  TSetThreadDescription = function(hThread: THandle; lpThreadDescription: PWideChar): HRESULT; stdcall;
+
+var
+  KernelHandle: THandle;
+  SetThreadDesc: TSetThreadDescription;
+  WideName: WideString;
+  info: TThreadNameInfo;
+
+begin
+  if ThreadHandle = 0 then
+    ThreadHandle := GetCurrentThread();
+
+  // Try SetThreadDescription if available (Windows 10+)
+  KernelHandle := GetModuleHandle('kernel32.dll');
+  if KernelHandle <> 0 then
+  begin
+    SetThreadDesc := TSetThreadDescription(GetProcAddress(KernelHandle, 'SetThreadDescription'));
+    if Assigned(SetThreadDesc) then
+    begin
+      WideName := WideString(ThreadName);
+      SetThreadDesc(ThreadHandle, PWideChar(WideName));
+      Exit;
+    end;
+  end;
+
+  // Fallback: Raise exception 0x406D1388 for old debuggers (Visual Studio, etc.)
+  info.dwType     := $1000;
+  info.szName     := PAnsiChar(AnsiString(ThreadName));
+  info.dwThreadID := GetCurrentThreadId;
+  info.dwFlags    := 0;
+
+  try
+    RaiseException(SVL_THREAD_NAMING_EXCEPTION, 0,
+      SizeOf(info) div SizeOf(DWORD), PDWORD(@info));
+  except
+    // Ignore this specific exception
+  end;
+{$ELSE}
+begin
+  raise ENotImplemented.Create('NameThread is not implemented for your system');
+{$ENDIF}
+end;
 
 procedure DebugLog(const Message: string);
 {$IFNDEF CONSOLE}
@@ -906,6 +1090,9 @@ begin
   if not DbgLog.DebugLog(Message) then
     MessageBox(MsgHandle, PChar(Trim(Message)), sDebugLogTitle,
       MB_ICONINFORMATION + MB_OK);
+{$ENDIF}
+{$IFDEF WINDOWS}
+  OutputDebugString(PChar(Message));
 {$ENDIF}
 end;
 
