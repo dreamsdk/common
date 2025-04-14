@@ -31,14 +31,14 @@ type
     fParameters: TStringList;
     fWorkingDirectory: TFileName;
     function GetExitCode: Integer;
-    function GetCommandProcessId: LongWord;
+    function GetTargetCommandLine: string;
+    function GetTargetProcessId: LongWord;
     procedure InitializeProcess;
     function IsValidNewLine(const NewLine: string): Boolean;
     procedure SyncSendNewLineEvent;
     procedure SendNewLine(const NewLine: string; ProcessEnd: Boolean);
   protected
     procedure Execute; override;
-    function GetProcessCommandLine: string;
     procedure KillRunningProcess;
   public
     constructor Create(CreateSuspended: Boolean);
@@ -51,7 +51,8 @@ type
     property Executable: TFileName read fExecutable write fExecutable;
     property ExitCode: Integer read GetExitCode;
     property Parameters: TStringList read fParameters;
-    property CommandProcessId: LongWord read GetCommandProcessId;
+    property TargetProcessId: LongWord read GetTargetProcessId;
+    property TargetCommandLine: string read GetTargetCommandLine;
     property WorkingDirectory: TFileName read fWorkingDirectory
       write fWorkingDirectory;
     property OnNewLine: TNewLineEvent read fNewLine write fNewLine;
@@ -104,7 +105,7 @@ begin
   Result := fProcess.ExitCode;
 end;
 
-function TRunCommand.GetCommandProcessId: LongWord;
+function TRunCommand.GetTargetProcessId: LongWord;
 begin
   Result := Default(LongWord);
   if Assigned(fProcess) and IsProcessRunning(fProcess.ProcessID) then
@@ -218,7 +219,7 @@ begin
       LogMessage(Format('TRunCommand.Execute::ThreadId: %d, ExecProcessId: %d, ExecCommandLine: "%s", Environment: [%s]', [
         ThreadID,
         fProcess.ProcessID,
-        GetProcessCommandLine,
+        GetTargetCommandLine,
         StringListToString(fEnvironment, '|')
       ]));
 
@@ -255,7 +256,7 @@ begin
   end;
 end;
 
-function TRunCommand.GetProcessCommandLine: string;
+function TRunCommand.GetTargetCommandLine: string;
 var
   i: Integer;
   ProcessParams: string;
@@ -273,73 +274,40 @@ begin
 end;
 
 procedure TRunCommand.KillRunningProcess;
-{$IF DEFINED(RELEASE) AND DEFINED(WINDOWS)}
 const
-  CTRL_BREAK_EVENT_TIMEOUT = 1000;
-{$ENDIF}
+  KILL_PROCESS_TIMEOUT = 2000;
 
 var
   AExitCode: Integer;
-{$IF DEFINED(RELEASE) AND DEFINED(WINDOWS)}
-  ProcessHandle: THandle;
-  ProcessId: LongWord;
-  WaitForOutput: LongWord;
-{$ENDIF}
+  ProcessIdToKill: LongWord;
 
 begin
   LogMessageEnter('TRunCommand.KillRunningProcess');
   try
     try
+
       AExitCode := -1;
       if Assigned(fProcess) and (fProcess.Running) then
       begin
-{$IF DEFINED(RELEASE) AND DEFINED(WINDOWS)}
-        {
-          This code is only working on RELEASE mode.
-          Indeed, the SIGINT signal sent destroy the console created in DEBUG mode.
-          Since the DEBUG mode is not intended to be distributed, it's safe to do
-          this only in RELEASE mode.
-          See: https://docs.microsoft.com/en-us/windows/console/ctrl-c-and-ctrl-break-signals
-        }
-        ProcessId := fProcess.ProcessID;
-        LogMessage(Format('ProcessId to kill: %d', [ProcessId]));
-        ProcessHandle := OpenProcess(JwaWinNT.SYNCHRONIZE, False, CommandProcessId);
-	      if ProcessHandle <> INVALID_HANDLE_VALUE then
-        begin
-          LogMessage(Format('ProcessHandle to kill: %d', [ProcessHandle]));
-          if AttachConsole(CommandProcessId) then
-          begin
-            LogMessage('AttachConsole successfully made');
-            if SetConsoleCtrlHandler(nil, True) then
-            begin
-              LogMessage('SetConsoleCtrlHandler success');
-              // Send CTRL+BREAK event to all children processes
-              if GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, CommandProcessId) then
-              begin
-                LogMessage('GenerateConsoleCtrlEvent success, entering WaitForSingleObject...');
-                WaitForOutput := WaitForSingleObject(ProcessHandle, CTRL_BREAK_EVENT_TIMEOUT);
-                LogMessage(Format('WaitForSingleObject returned: %d', [WaitForOutput]));
-              end
-              else
-                LogMessage('GenerateConsoleCtrlEvent failed.');
-            end
-            else
-              LogMessage('SetConsoleCtrlHandler failed.');
-
-            LogMessage('FreeConsole called.');
-            FreeConsole;
-          end
-          else
-            LogMessage('Unable to AttachConsole...');
-
-          LogMessage('Closing handle.');
-          CloseHandle(ProcessHandle);
-        end;
-{$ENDIF}
         fPipeOpened := False;
-        LogMessage(Format('Calling Terminate with exit code: %d', [AExitCode]));
-        fProcess.Terminate(AExitCode);
-        LogMessage('Terminate ended.');
+
+        // Kill the child/real process!
+        if TargetProcessId <> 0 then
+        begin
+          ProcessIdToKill := TargetProcessId; // Save the PID, as TargetProcessId returns value only if PID is active
+          LogMessage(Format('TRunCommand.KillRunningProcess::ProcessId to kill: %d ["%s"]', [ProcessIdToKill, GetTargetCommandLine]));
+          if KillProcessByProcessId(TargetProcessId, KILL_PROCESS_TIMEOUT) then
+            LogMessage(Format('TRunCommand.KillRunningProcess::Process %d successfully terminated', [ProcessIdToKill]))
+          else
+            LogMessage(Format('TRunCommand.KillRunningProcess::Failed to terminate process %d', [ProcessIdToKill]));
+
+          // Terminate now the process properly, for the next processes...
+          LogMessage(Format('TRunCommand.KillRunningProcess::Calling Terminate with exit code: %d', [AExitCode]));
+          fProcess.Terminate(AExitCode);
+          LogMessage('TRunCommand.KillRunningProcess::Terminate process ended.');
+        end
+        else
+          LogMessage('TRunCommand.KillRunningProcess::Process has been already killed');
       end;
 
     except

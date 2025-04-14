@@ -118,6 +118,10 @@ function IsProcessRunning(const ProcessId: LongWord): Boolean;
 (* Kill a running process by image file name *)
 function KillProcessByName(const FileName: TFileName): Boolean;
 
+(* Kill a running process by process ID (PID) *)
+function KillProcessByProcessId(ProcessId: LongWord;
+  GracePeriodMs: LongWord = 2000): Boolean;
+
 (* Log a message to the user. This can be used for a Debug log statement but
    for the end-user and not for the programmers of DreamSDK. *)
 procedure LogMessage(const Args: array of const);
@@ -844,6 +848,89 @@ begin
 {$ELSE}
   raise EAbstractError.Create('IsProcessRunning: Not Implemented');
 {$ENDIF}
+end;
+
+function KillProcessByProcessId(ProcessId: LongWord;
+  GracePeriodMs: LongWord = 2000): Boolean;
+const
+  PROCESS_TERMINATE = $0001;
+  SYNCHRONIZE = $00100000;
+
+var
+  ProcessHandle: THandle;
+  WaitResult: DWORD;
+  ControlHandlerSet: Boolean;
+  ExitCode: DWORD;
+
+begin
+  Result := False;
+
+  // Check if the process exists
+  ProcessHandle := OpenProcess(SYNCHRONIZE or PROCESS_TERMINATE, False, ProcessId);
+  if (ProcessHandle = 0) or (ProcessHandle = INVALID_HANDLE_VALUE) then
+  begin
+    // Process doesn't exist or no access rights
+    Exit;
+  end;
+
+  try
+    // Check if the process is already terminated
+    if GetExitCodeProcess(ProcessHandle, ExitCode) and (ExitCode <> STILL_ACTIVE) then
+    begin
+      Result := True; // Process is already terminated
+      Exit;
+    end;
+
+    // First attempt: clean termination with CTRL_BREAK_EVENT
+    ControlHandlerSet := False;
+
+    // Try to attach to the process console
+    if AttachConsole(ProcessId) then
+    begin
+      try
+        // Temporarily disable the control handler to prevent our own process from being affected
+        // See: https://docs.microsoft.com/en-us/windows/console/ctrl-c-and-ctrl-break-signals
+        ControlHandlerSet := SetConsoleCtrlHandler(nil, True);
+
+        // Send CTRL+BREAK signal
+        if GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, ProcessId) then
+        begin
+          // Wait for the process to terminate for GracePeriodMs
+          WaitResult := WaitForSingleObject(ProcessHandle, GracePeriodMs);
+
+          if WaitResult = WAIT_OBJECT_0 then
+          begin
+            Result := True; // Process terminated cleanly
+          end;
+        end;
+      finally
+        // Restore the control handler and free the console
+        if ControlHandlerSet then
+          SetConsoleCtrlHandler(nil, False);
+        FreeConsole;
+      end;
+    end;
+
+    // Check again if the process is still active
+    if GetExitCodeProcess(ProcessHandle, ExitCode) and (ExitCode = STILL_ACTIVE) then
+    begin
+      // Second attempt: forced termination with TerminateProcess
+      if TerminateProcess(ProcessHandle, 1) then
+      begin
+        // Wait for confirmation that the process is terminated
+        WaitResult := WaitForSingleObject(ProcessHandle, GracePeriodMs);
+        Result := (WaitResult = WAIT_OBJECT_0);
+      end;
+    end
+    else
+    begin
+      Result := True; // Process terminated in the meantime
+    end;
+
+  finally
+    // Always close the handle
+    CloseHandle(ProcessHandle);
+  end;
 end;
 
 function GetFileLocationsInSystemPath(const FileName: TFileName;
