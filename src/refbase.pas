@@ -91,6 +91,10 @@ function GetUserBinariesBaseDirectory: TFileName;
    Note: The trailing path delimiter is already included. *)
 function GetWindowsToolchainBaseDirectory: TFileName;
 
+(* Indicate if the home directory path has been overloaded by using the
+   --home-dir command-line switch. *)
+function IsBaseInstallationHomeDirectoryOverloaded: Boolean;
+
 (* Indicate if DREAMSDK_HOME (or DREAMSDK_HOME_DEBUG) is not empty. *)
 function IsDefinedInstallationBaseDirectoryVariable: Boolean;
 
@@ -115,6 +119,7 @@ uses
   FSTools;
 
 const
+  DIR_SWITCH = 'home-dir';
   MSYS2_FLAVOUR = 'mingw64';
   MSYS_BASE_DIRECTORY = 'msys\1.0\';
   SETTINGS_DIRECTORY = 'etc\dreamsdk\';
@@ -325,7 +330,8 @@ begin
 {$IFDEF GUI}
       if not ErrorMessageDisplayed then
       begin
-        MsgBoxDlg(0, sError, MsysExceptionMessage, mtError, [mbOK]);
+        MsgBoxDlg(0, PChar(Format('%s (%s)', [sError, ApplicationName])),
+          MsysExceptionMessage, mtError, [mbOK]);
 {$IFDEF RELEASE}
         Halt(255);
 {$ENDIF}
@@ -399,22 +405,39 @@ begin
   Result := UserBinariesBaseDirectory;
 end;
 
+function IsBaseInstallationHomeDirectoryOverloaded: Boolean;
+begin
+  Result := not IsEmpty(CommandLineInstallationDirectory);
+end;
+
 {$IFNDEF DISABLE_REFBASE_HOME_DIR_AUTO_OVERRIDE}
 
 procedure ParseParameters;
-const
-  DIR_SWITCH = '--home-dir';
-
 var
+  LogContext: TLogMessageContext;
   i: Integer;
   Param: string;
 
 begin
-  for i := 1 to ParamCount do
-  begin
-    Param := LowerCase(ParamStr(i));
-    if IsInString(DIR_SWITCH, Param) then
-      CommandLineInstallationDirectory := ParamStr(i + 1);
+  LogContext := LogMessageEnter({$I %FILE%}, {$I %CURRENTROUTINE%});
+  try
+
+    for i := 1 to ParamCount do
+    begin
+      Param := LowerCase(ParamStr(i));
+      LogMessage(LogContext, Format('Parsing parameter: "%s"', [Param]));
+      if IsInString(DIR_SWITCH, Param) then
+      begin
+        CommandLineInstallationDirectory := ParamStr(i + 1);
+        LogMessage(LogContext, Format('Parameter "%s" parsed successfully. Value: "%s"', [
+          Param,
+          CommandLineInstallationDirectory
+        ]));
+      end;
+    end;
+
+  finally
+    LogMessageExit(LogContext);
   end;
 end;
 

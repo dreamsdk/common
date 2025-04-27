@@ -434,6 +434,7 @@ function ExtractModuleVersion(const FileName: TFileName;
 var
   ModuleProcessId: Integer;
   ModuleVersion: TModuleVersion;
+  ModuleParameters: string;
 
 begin
   ModuleVersion.BuildDateTime := EmptyStr;
@@ -443,7 +444,11 @@ begin
   if FileExists(FileName) then
   begin
     ModuleProcessId := 0;
-    Run(FileName, GET_MODULE_VERSION_SWITCH, ModuleProcessId);
+    ModuleParameters := GET_MODULE_VERSION_SWITCH;
+    if IsBaseInstallationHomeDirectoryOverloaded then
+      ModuleParameters := ModuleParameters
+        + Format(' --home-dir "%s"', [GetBaseInstallationHomeDirectory]);
+    Run(FileName, ModuleParameters, ModuleProcessId);
     ModuleVersion := LoadModuleVersion(FileName, ModuleProcessId);
   end;
   Result := ProcessModuleVersion(ModuleVersion, UnknownValueIfEmpty);
