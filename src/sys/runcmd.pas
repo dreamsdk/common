@@ -75,23 +75,20 @@ uses
 
 procedure TRunCommand.InitializeProcess;
 var
+  LogContext: TLogMessageContext;
   i: Integer;
 
 begin
-  LogMessageEnter('TRunCommand.InitializeProcess');
+  LogContext := LogMessageEnter({$I %FILE%}, {$I %CURRENTROUTINE%}, ClassName);
   try
-    try
 
-      fAbortRequested := False;
-      fProcess := {$IFDEF WINDOWS}TProcess{$ELSE}TProcessUTF8{$ENDIF}.Create(nil);
-      for i := 1 to GetEnvironmentVariableCount do
-        fProcess.Environment.Add(GetEnvironmentString(i));
+    fAbortRequested := False;
+    fProcess := {$IFDEF WINDOWS}TProcess{$ELSE}TProcessUTF8{$ENDIF}.Create(nil);
+    for i := 1 to GetEnvironmentVariableCount do
+      fProcess.Environment.Add(GetEnvironmentString(i));
 
-    except
-      raise;
-    end;
   finally
-    LogMessageExit('TRunCommand.InitializeProcess');
+    LogMessageExit(LogContext);
   end;
 end;
 
@@ -159,6 +156,7 @@ const
   BUF_SIZE = 2048;
 
 var
+  LogContext: TLogMessageContext;
   Buffer: array[0..BUF_SIZE - 1] of AnsiChar;
   BytesRead: Integer;
   NewLine: string;
@@ -168,91 +166,88 @@ var
 {$ENDIF}
 
 begin
-  LogMessageEnter('TRunCommand.Execute');
+  LogContext := LogMessageEnter({$I %FILE%}, {$I %CURRENTROUTINE%}, ClassName);
   try
-    try
-      fAbortRequested := False;
-      Buffer[0] := #0;
+
+    fAbortRequested := False;
+    Buffer[0] := #0;
 
 {$IFDEF DEBUG}
-      DebugLog('### RunCommand Invoke ###');
-      DebugLog('  Executable: ' + Executable);
-      TempBufferString := StringListToString(Parameters, WhiteSpaceStr);
-      DebugLog('  Parameters: ' + TempBufferString);
+    DebugLog('### RunCommand Invoke ###');
+    DebugLog('  Executable: ' + Executable);
+    TempBufferString := StringListToString(Parameters, WhiteSpaceStr);
+    DebugLog('  Parameters: ' + TempBufferString);
 {$ENDIF}
 
-      fProcess.Executable := Executable;
-      fProcess.Parameters.AddStrings(Parameters);
-      HandleLogonServerVariable(fEnvironment);
-      fProcess.Environment.AddStrings(fEnvironment);
+    fProcess.Executable := Executable;
+    fProcess.Parameters.AddStrings(Parameters);
+    HandleLogonServerVariable(fEnvironment);
+    fProcess.Environment.AddStrings(fEnvironment);
 
 {$IF DEFINED(DEBUG) AND DEFINED(DUMP_ALL_ENVIRONMENT)}
-      DebugLog('  Environment:');
-      for i := 0 to fEnvironment.Count - 1 do
-        DebugLog('    ' + fEnvironment[i]);
+    DebugLog('  Environment:');
+    for i := 0 to fEnvironment.Count - 1 do
+      DebugLog('    ' + fEnvironment[i]);
 {$ENDIF}
 
-      // NoConsole / NewProcessGroup are used for handling CTRL+BREAK signals without exiting our app
-      // UsePipes / StdErrToOutput for getting stream in real time
-      fProcess.Options := [
-        poNoConsole,
-        poNewProcessGroup,
-        poUsePipes,
-        poStdErrToOutput
-      ];
+    // NoConsole / NewProcessGroup are used for handling CTRL+BREAK signals without exiting our app
+    // UsePipes / StdErrToOutput for getting stream in real time
+    fProcess.Options := [
+      poNoConsole,
+      poNewProcessGroup,
+      poUsePipes,
+      poStdErrToOutput
+    ];
 
 {$IFDEF RELEASE}
-      fProcess.ShowWindow := swoHide;
+    fProcess.ShowWindow := swoHide;
 {$ELSE}
-      fProcess.ShowWindow := swoShowDefault;
+    fProcess.ShowWindow := swoShowDefault;
 {$ENDIF}
 
-      fProcess.CurrentDirectory := WorkingDirectory;
+    fProcess.CurrentDirectory := WorkingDirectory;
 
 {$IFDEF DEBUG}
-      DebugLog('  WorkingDirectory: ' + WorkingDirectory);
+    DebugLog('  WorkingDirectory: ' + WorkingDirectory);
 {$ENDIF}
 
-      fPipeOpened := True;
-      fProcess.Execute;
+    fPipeOpened := True;
+    fProcess.Execute;
 
-      LogMessage(Format('TRunCommand.Execute::ThreadId: %d, ExecProcessId: %d, ExecCommandLine: "%s", Environment: [%s]', [
-        ThreadID,
-        fProcess.ProcessID,
-        GetTargetCommandLine,
-        StringListToString(fEnvironment, '|')
-      ]));
+    LogMessage(LogContext, Format('ThreadId: %d, ExecProcessId: %d, ExecCommandLine: "%s", Environment: [%s]', [
+      ThreadID,
+      fProcess.ProcessID,
+      GetTargetCommandLine,
+      StringListToString(fEnvironment, '|')
+    ]));
 
- {$IFDEF DEBUG}
-      DebugLog('  Process ID: ' + IntToStr(fProcess.ProcessID));
- {$IFDEF DUMP_PROCESS_PIPE}
-      i := 0;
- {$ENDIF}
- {$ENDIF}
+{$IFDEF DEBUG}
+    DebugLog('  Process ID: ' + IntToStr(fProcess.ProcessID));
+{$IFDEF DUMP_PROCESS_PIPE}
+    i := 0;
+{$ENDIF}
+{$ENDIF}
 
-      repeat
-        FillByte(Buffer, BUF_SIZE, $00);
-        BytesRead := fProcess.Output.Read(Buffer, BUF_SIZE);
- {$IF DEFINED(DEBUG) AND DEFINED(DUMP_PROCESS_PIPE)}
-        if BytesRead > 0 then
-        begin
-          DumpCharArrayToFile(Buffer, Format('dump_%d_%d.bin', [fProcess.ProcessID, i]));
-          Inc(i);
-        end;
- {$ENDIF}
-        SetString(NewLine, PChar(@Buffer[0]), BytesRead);
-        if IsValidNewLine(NewLine) then
-          SendNewLine(NewLine, False);
-      until (BytesRead = 0);
+    repeat
+      FillByte(Buffer, BUF_SIZE, $00);
+      BytesRead := fProcess.Output.Read(Buffer, BUF_SIZE);
+{$IF DEFINED(DEBUG) AND DEFINED(DUMP_PROCESS_PIPE)}
+      if BytesRead > 0 then
+      begin
+        DumpCharArrayToFile(Buffer, Format('dump_%d_%d.bin', [fProcess.ProcessID, i]));
+        Inc(i);
+      end;
+{$ENDIF}
+      SetString(NewLine, PChar(@Buffer[0]), BytesRead);
+      if IsValidNewLine(NewLine) then
+        SendNewLine(NewLine, False);
+    until (BytesRead = 0);
 
-      if IsValidNewLine(fPartialLine) then
-        SendNewLine(fPartialLine, True);
+    if IsValidNewLine(fPartialLine) then
+      SendNewLine(fPartialLine, True);
 
-    except
-      raise;
-    end;
   finally
-    LogMessageExit('TRunCommand.Execute');
+    LogMessageExit(LogContext);
   end;
 end;
 
@@ -278,64 +273,61 @@ const
   KILL_PROCESS_TIMEOUT = 2000;
 
 var
+  LogContext: TLogMessageContext;
   AExitCode: Integer;
   ProcessIdToKill: LongWord;
 
 begin
-  LogMessageEnter('TRunCommand.KillRunningProcess');
+  LogContext := LogMessageEnter({$I %FILE%}, {$I %CURRENTROUTINE%}, ClassName);
   try
-    try
 
-      AExitCode := -1;
-      if Assigned(fProcess) and (fProcess.Running) then
+    AExitCode := -1;
+    if Assigned(fProcess) and (fProcess.Running) then
+    begin
+      fPipeOpened := False;
+
+      // Kill the child/real process!
+      if TargetProcessId <> 0 then
       begin
-        fPipeOpened := False;
-
-        // Kill the child/real process!
-        if TargetProcessId <> 0 then
-        begin
-          ProcessIdToKill := TargetProcessId; // Save the PID, as TargetProcessId returns value only if PID is active
-          LogMessage(Format('TRunCommand.KillRunningProcess::ProcessId to kill: %d ["%s"]', [ProcessIdToKill, GetTargetCommandLine]));
-          if KillProcessByProcessId(TargetProcessId, KILL_PROCESS_TIMEOUT) then
-            LogMessage(Format('TRunCommand.KillRunningProcess::Process %d successfully terminated', [ProcessIdToKill]))
-          else
-            LogMessage(Format('TRunCommand.KillRunningProcess::Failed to terminate process %d', [ProcessIdToKill]));
-
-          // Terminate now the process properly, for the next processes...
-          LogMessage(Format('TRunCommand.KillRunningProcess::Calling Terminate with exit code: %d', [AExitCode]));
-          fProcess.Terminate(AExitCode);
-          LogMessage('TRunCommand.KillRunningProcess::Terminate process ended.');
-        end
+        ProcessIdToKill := TargetProcessId; // Save the PID, as TargetProcessId returns value only if PID is active
+        LogMessage(LogContext, Format('ProcessId to kill: %d ["%s"]', [ProcessIdToKill, GetTargetCommandLine]));
+        if KillProcessByProcessId(TargetProcessId, KILL_PROCESS_TIMEOUT) then
+          LogMessage(LogContext, Format('Process %d successfully terminated', [ProcessIdToKill]))
         else
-          LogMessage('TRunCommand.KillRunningProcess::Process has been already killed');
-      end;
+          LogMessage(LogContext, Format('Failed to terminate process %d', [ProcessIdToKill]));
 
-    except
-      raise;
+        // Terminate now the process properly, for the next processes...
+        LogMessage(LogContext, Format('Calling Terminate with exit code: %d', [AExitCode]));
+        fProcess.Terminate(AExitCode);
+        LogMessage(LogContext, 'Terminate process ended.');
+      end
+      else
+        LogMessage(LogContext, 'Process has been already killed');
     end;
+
   finally
-    LogMessageExit('TRunCommand.KillRunningProcess');
+    LogMessageExit(LogContext);
   end;
 end;
 
 constructor TRunCommand.Create(CreateSuspended: Boolean);
+var
+  LogContext: TLogMessageContext;
+
 begin
   inherited Create(CreateSuspended);
-  LogMessageEnter('TRunCommand.Create');
+
+  LogContext := LogMessageEnter({$I %FILE%}, {$I %CURRENTROUTINE%}, ClassName);
   try
-    try
 
-      LogMessage(Format('TRunCommand.ThreadId: %d', [ThreadID]));
-      fBufferOutput := TStringList.Create;
-      fParameters := TStringList.Create;
-      fEnvironment := TStringList.Create;
-      InitializeProcess;
+    LogMessage(LogContext, Format('ThreadId: %d', [ThreadID]));
+    fBufferOutput := TStringList.Create;
+    fParameters := TStringList.Create;
+    fEnvironment := TStringList.Create;
+    InitializeProcess;
 
-    except
-      raise;
-    end;
   finally
-    LogMessageExit('TRunCommand.Create');
+    LogMessageExit(LogContext);
   end;
 end;
 

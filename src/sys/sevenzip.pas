@@ -336,34 +336,30 @@ begin
 end;
 
 procedure TSevenZipCommander.Abort;
+var
+  LogContext: TLogMessageContext;
+
 begin
-  LogMessageEnter('SevenZipCommander.Abort');
+  LogContext := LogMessageEnter({$I %FILE%}, {$I %CURRENTROUTINE%}, ClassName);
   try
-    try
 
-      fCurrentTaskIndex := -1;
-      fOperationSuccess := False;
-      if Assigned(fSevenZipProcess) then
-      begin
-        LogMessage('Aborting SevenZipProcess...');
-        fSevenZipProcess.Abort;
-{$IFDEF DEBUG}
-        DebugLog('SevenZipProcess::WaitFor::Start');
-{$ENDIF}
-        LogMessage('SevenZipProcess::WaitFor::Start...');
-        fSevenZipProcess.WaitFor;
-        LogMessage('SevenZipProcess::WaitFor::Exit...');
-{$IFDEF DEBUG}
-        DebugLog('SevenZipProcess::WaitFor::End');
-{$ENDIF}
-        FreeAndNil(fSevenZipProcess);
-      end;
+    fCurrentTaskIndex := -1;
+    fOperationSuccess := False;
+    if Assigned(fSevenZipProcess) then
+    begin
+      LogMessage(LogContext, 'Aborting SevenZipProcess...');
+      fSevenZipProcess.Abort;
 
-    except
-      raise;
+      LogMessage(LogContext, 'WaitFor::Start...');
+
+      fSevenZipProcess.WaitFor;
+
+      LogMessage(LogContext, 'WaitFor::Exit...');
+      FreeAndNil(fSevenZipProcess);
     end;
+
   finally
-    LogMessageExit('SevenZipCommander.Abort');
+    LogMessageExit(LogContext);
   end;
 end;
 

@@ -78,6 +78,13 @@ type
   end;
   TWindowsUserAccountInformationArray = array of TWindowsUserAccountInformation;
 
+  (* Used for LogMessage functions, helpers for debugging / using DbgView *)
+  TLogMessageContext = record
+    FileName: string;
+    ClassName: string;
+    MethodName: string;
+  end;
+
 (* Extract a embedded file from the current executed program *)
 function ExtractEmbeddedResourceToFile(const ResourceName: string;
   const FileName: TFileName): Boolean;
@@ -122,25 +129,20 @@ function KillProcessByName(const FileName: TFileName): Boolean;
 function KillProcessByProcessId(ProcessId: LongWord;
   GracePeriodMs: LongWord = 2000): Boolean;
 
+(* Log a message while entering a procedure/function. *)
+function LogMessageEnter(const SourceFileName: TFileName;
+  const RoutineName: string; const ClassName: string = ''): TLogMessageContext;
+
 (* Log a message to the user. This can be used for a Debug log statement but
    for the end-user and not for the programmers of DreamSDK. *)
-procedure LogMessage(const Args: array of const);
+procedure LogMessage(Context: TLogMessageContext; const Args: array of const);
 
 (* Log a message to the user. This can be used for a Debug log statement but
    for the end-user and not for the programmers of DreamSDK. *)
-procedure LogMessage(const Message: string);
-
-(* Log a message while entering a procedure/function. *)
-procedure LogMessageEnter(const Args: array of const);
-
-(* Log a message while entering a procedure/function. *)
-procedure LogMessageEnter(const Message: string);
+procedure LogMessage(Context: TLogMessageContext; const Message: string);
 
 (* Log a message while exiting a procedure/function. *)
-procedure LogMessageExit(const Args: array of const);
-
-(* Log a message while exiting a procedure/function. *)
-procedure LogMessageExit(const Message: string);
+procedure LogMessageExit(Context: TLogMessageContext);
 
 (* Waits for the ends of execution of a specific PID *)
 procedure WaitForProcessId(const ProcessId: LongWord);
@@ -171,7 +173,7 @@ procedure DebugLog(const Message: string);
 (* Dump an array of Char to a file. *)
 procedure DumpCharArrayToFile(A: array of Char; const FileName: TFileName);
 
-(* Give a name to a thread. This is useful in Debug View > Thread in the IDE. *)
+(* Give a name to a thread. This is useful in "Debug View > Thread" in the IDE. *)
 procedure SetThreadName(const ThreadName: string; ThreadHandle: THandle = 0);
 
 {$ENDIF}
@@ -411,100 +413,6 @@ begin
 
   Result := Length(UsersList) > 0;
 end;
-
-(*
-function GetUserFromAppDataDirectory(const AppDataDirectory: TFileName;
-  out UserAccount: TWindowsUserAccountInformation): Boolean;
-var
-  AppDataTemplate,
-  LocalPath: TFileName;
-  TempLeft,
-  TempRight: string;
-  UsersList: TWindowsUserAccountInformationArray;
-  i: Integer;
-
-begin
-  Result := False;
-  UserAccount := Default(TWindowsUserAccountInformation);
-
-  if GetUserList(UsersList) then
-  begin
-    AppDataTemplate := GetAppDataTemplate(adkRoaming);
-    TempLeft := Left('%s', AppDataTemplate);
-    TempRight := Right('%s', AppDataTemplate);
-    LocalPath := Right(TempLeft, AppDataDirectory); // ExtractStr(TempLeft, TempRight, AppDataDirectory);
-
-    raise Exception.create ('TODO');
-    i := 0;
-    while i < Count(UsersList) - 1 do
-    begin
-      if UsersList[i].LocalPath
-    end;
-  end;
-end;
-*)
-
-// {$DEFINE DEBUG_USER_APP_DATA_LIST}
-(*function GetAppDataListFromUsers(out UserAppDataList: TStringArray;
-  const AppDataKind: TAppDataKind = adkRoaming): Boolean;
-var
-  AppDataTemplate: TFileName;
-  i: Integer;
-  UsersList: TWindowsUserAccountInformationArray;
-
-begin
-{$IFDEF DEBUG_USER_APP_DATA_LIST}
-{$IFDEF DEBUG}
-    DebugLog('UserAppDataList:');
-{$ENDIF}
-{$ENDIF}
-
-  Result := False;
-  UserAppDataList := Default(TStringArray);
-
-  if GetUserList(UsersList) then
-  begin
-    SetLength(UserAppDataList, Length(UsersList));
-    AppDataTemplate := GetAppDataTemplate(AppDataKind);
-    for i := 0 to Length(UsersList) - 1 do
-    begin
-      UserAppDataList[i] := Format(AppDataTemplate, [
-        UsersList[i].LocalPath
-      ]);
-
-{$IFDEF DEBUG_USER_APP_DATA_LIST}
-{$IFDEF DEBUG}
-      DebugLog('  ' + UserAppDataList[i]);
-{$ENDIF}
-{$ENDIF}
-    end;
-  end;
-end;
-
-function GetUserFullNameFromUserName(const UserName: string): string;
-var
-  UserAccount: TWindowsManagementInstrumentationQueryResult;
-  UserAccountFullName: string;
-
-begin
-  Result := EmptyStr;
-  UserAccount := QueryWindowsManagementInstrumentation(
-    'Win32_UserAccount', ['FullName'], Format('Name = ''%s''', [UserName]));
-  if GetWindowsManagementInstrumentationSingleValueByPropertyName(UserAccount, 'FullName', 0, UserAccountFullName) then
-    Result := Trim(UserAccountFullName);
-end;
-
-function GetFriendlyUserName(const UserName: string): string;
-var
-  CurrentUserFullName: string;
-
-begin
-  Result := UserName;
-  CurrentUserFullName := GetUserFullNameFromUserName(UserName);
-  if not IsEmpty(CurrentUserFullName) then
-    Result := Format('%s (%s)', [CurrentUserFullName, UserName]);
-end;
-*)
 
 function KillProcessByName(const FileName: TFileName): Boolean;
 begin
@@ -1008,99 +916,110 @@ end;
 // Debug Utilities
 // =============================================================================
 
-procedure LogMessageEnter(const Message: string);
+function GenerateLogMessage(const Args: array of const): string;
+var
+  i: Integer;
+  Builder: TStringBuilder;
+
 begin
-  LogMessage(Concat(Message, '::Entering'));
+  Result := Default(string);
+
+  Builder := TStringBuilder.Create;
+  try
+    for i := Low(Args) to High(Args) do
+    begin
+      {if i > Low(Args) then
+        Builder.Append(' ');}
+
+      case Args[i].VType of
+        vtInteger:
+          Builder.Append(Args[i].VInteger);
+        vtBoolean:
+          Builder.Append(BoolToStr(Args[i].VBoolean, True));
+        vtChar:
+          Builder.Append(Args[i].VChar);
+{$IFNDEF FPUNONE}
+        vtExtended:
+          Builder.Append(FloatToStr(Args[i].VExtended^));
+{$ENDIF}
+        vtString:
+          Builder.Append(string(Args[i].VString));
+        vtPointer:
+          Builder.Append(Format('%p', [Args[i].VPointer]));
+        vtPChar:
+          Builder.Append(string(Args[i].VPChar));
+        vtObject:
+          Builder.Append('[Object: "' + TObject(Args[i].VObject).ClassName + '"]');
+        vtClass:
+          Builder.Append('[ClassName: "' + Args[i].VClass.ClassName + '"]');
+        vtWideChar:
+          Builder.Append(string(Args[i].VWideChar));
+        vtPWideChar:
+          Builder.Append(string(Args[i].VPWideChar));
+        vtAnsiString:
+          Builder.Append(string(Args[i].VAnsiString));
+        vtCurrency:
+          Builder.Append(Format('%m', [Args[i].VCurrency]));
+        vtVariant:
+          Builder.Append(VarToStr(Args[i].VVariant^));
+        vtInterface:
+          Builder.Append(Format('[Interface: %p]', [Args[i].VInterface]));
+        vtWideString:
+          Builder.Append(string(Args[i].VWideString));
+        vtInt64:
+          Builder.Append(IntToStr(Args[i].VInt64^));
+        vtQWord:
+          Builder.Append(UIntToStr(Args[i].VQWord^));
+        vtUnicodeString:
+          Builder.Append(string(Args[i].VUnicodeString));
+      else
+        Builder.Append('[UnknownType: ' + IntToStr(Args[i].VType) + ']');
+      end;
+    end;
+
+    Result := Builder.ToString();
+
+  finally
+    Builder.Free;
+  end;
 end;
 
-procedure LogMessageEnter(const Args: array of const);
+function GetLogMessageContext(Context: TLogMessageContext): string;
 begin
-  LogMessage(Args);
+  Result := Context.MethodName;
+  if not IsEmpty(Context.ClassName) then
+    Result := Concat(Context.ClassName, '.', Context.MethodName);
 end;
 
-procedure LogMessageExit(const Message: string);
-begin
-  LogMessage(Concat(Message, '::Exiting'));
-end;
-
-procedure LogMessageExit(const Args: array of const);
-begin
-  LogMessage(Args);
-end;
-
-procedure LogMessage(const Message: string);
+procedure DoLogMessage(const Message: string);
 begin
 {$IFDEF WINDOWS}
   OutputDebugString(PChar(Message));
 {$ENDIF}
 end;
 
-procedure LogMessage(const Args: array of const);
-var
-  i: Integer;
-  TempList: TStringList;
-  Message: string;
-
+function LogMessageEnter(const SourceFileName: TFileName;
+  const RoutineName: string; const ClassName: string = ''): TLogMessageContext;
 begin
-  TempList := TStringList.Create;
-  try
-    for i := Low(Args) to High(Args) do
-    begin
-      case Args[i].VType of
-        vtInteger:
-          TempList.Add(Format('%d', [Args[i].VInteger]));
-        vtBoolean:
-          TempList.Add(BoolToStr(Args[i].VBoolean, True));
-        vtChar:
-          TempList.Add(Args[i].VChar);
-{$IFNDEF FPUNONE}
-        vtExtended:
-          TempList.Add(FloatToStr(Args[i].VExtended^));
-{$ENDIF}
-        vtString:
-          TempList.Add(Format('%s', [Args[i].VString]));
-        vtPointer:
-          TempList.Add(Format('%p', [Args[i].VPointer]));
-        vtPChar:
-          TempList.Add(Format('%s', [Args[i].VPChar]));
-        vtObject:
-          TempList.Add(Format('[Object: "%s"]', [TObject(Args[i].VObject).ClassName]));
-        vtClass:
-          TempList.Add(Format('[ClassName: "%s"]', [Args[i].VClass.ClassName]));
-        vtWideChar:
-          TempList.Add(string(Args[i].VWideChar));
-        vtPWideChar:
-          TempList.Add(string(Args[i].VPWideChar));
-        vtAnsiString:
-          TempList.Add(string(Args[i].VAnsiString));
-        vtCurrency:
-          TempList.Add(Format('%m', [Args[i].VCurrency]));
-        vtVariant:
-          TempList.Add(Format('%s', [VarToStr(Args[i].VVariant^)]));
-        vtInterface:
-          TempList.Add(Format('[Interface: %p]', [Args[i].VInterface]));
-        vtWideString:
-          TempList.Add(Format('%s', [Args[i].VWideString]));
-        vtInt64:
-          TempList.Add(Format('%d', [Args[i].VInt64]));
-        vtQWord:
-          TempList.Add(Format('%u', [Args[i].VQWord]));
-        vtUnicodeString:
-          TempList.Add(Format('%s', [Args[i].VUnicodeString]));
-        else
-          // Handle unexpected types
-          TempList.Add(Format('<unknown type: %d>', [Args[i].VType]));
-      end;
-    end;
-    Message := StringListToString(TempList, ' ', False);
+  Result.FileName := SourceFileName;
+  Result.ClassName := ClassName;
+  Result.MethodName := RoutineName;
+  DoLogMessage(Concat(GetLogMessageContext(Result), '::Entering'));
+end;
 
-{$IFDEF WINDOWS}
-    OutputDebugString(PChar(Message));
-{$ENDIF}
+procedure LogMessage(Context: TLogMessageContext; const Args: array of const);
+begin
+  LogMessage(Context, GenerateLogMessage(Args));
+end;
 
-  finally
-    TempList.Free;
-  end;
+procedure LogMessage(Context: TLogMessageContext; const Message: string);
+begin
+  DoLogMessage(Concat(GetLogMessageContext(Context), ': ', Message));
+end;
+
+procedure LogMessageExit(Context: TLogMessageContext);
+begin
+  DoLogMessage(Concat(GetLogMessageContext(Context), '::Exiting'));
 end;
 
 {$IFDEF DEBUG}
