@@ -2,7 +2,7 @@ unit Runner;
 
 {$mode objfpc}{$H+}
 
-{$DEFINE RUNNER_DETAILED_DEBUG}
+// {$DEFINE RUNNER_DETAILED_DEBUG}
 
 interface
 
@@ -21,6 +21,7 @@ type
   TDreamcastSoftwareDevelopmentKitRunner = class(TObject)
   private
     fCurrentCommandLine: string;
+    fDebugEnabled: Boolean;
     fEmbeddedMode: Boolean;
     fShellCommandOutputBuffer: TStringList;
     fInteractiveShell: Boolean;
@@ -59,8 +60,15 @@ type
     property Healthy: Boolean
       read GetHealthy;
 
+    (* Activate this flag to debug the command executed in the Shell. *)
+    property DebugEnabled: Boolean
+      read fDebugEnabled write fDebugEnabled;
+
+    (* Use this to launch an interactive/user-friendly Shell. *)
     property InteractiveShell: Boolean
       read fInteractiveShell write fInteractiveShell;
+
+    (* Defines the working/current directory for the executed command. *)
     property WorkingDirectory: TFileName
       read fWorkingDirectory write SetWorkingDirectory;
   end;
@@ -167,6 +175,7 @@ begin
   fEmbeddedMode := EmbeddedMode;
   fShellCommandOutputBuffer := TStringList.Create;
   fShellProcessID := 0;
+  fDebugEnabled := False;
   fInteractiveShell := False;
   fEnvironmentVariables := TStringList.Create;
   fSettings := TDreamcastSoftwareDevelopmentSettings.Create;
@@ -274,6 +283,8 @@ begin
 
   fShellCommand.Executable := fExecutableShell;
   fShellCommand.Parameters.Add('--login');
+  if DebugEnabled then
+    fShellCommand.Parameters.Add('-x');
   fShellCommand.WorkingDirectory := Self.WorkingDirectory;
 
   fCurrentCommandLine := CommandLine;

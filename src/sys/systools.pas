@@ -129,19 +129,28 @@ function KillProcessByName(const FileName: TFileName): Boolean;
 function KillProcessByProcessId(ProcessId: LongWord;
   GracePeriodMs: LongWord = 2000): Boolean;
 
-(* Log a message while entering a procedure/function. *)
+(* Log a message while entering a procedure/function. Typically, you may use the
+   following statement:
+
+   LogContext := LogMessageEnter({$I %FILE%}, {$I %CURRENTROUTINE%}, ClassName);
+
+   Of course, remove the 'ClassName' parameter if you are not in a class.
+*)
 function LogMessageEnter(const SourceFileName: TFileName;
   const RoutineName: string; const ClassName: string = ''): TLogMessageContext;
 
 (* Log a message to the user. This can be used for a Debug log statement but
-   for the end-user and not for the programmers of DreamSDK. *)
+   for the end-user and not for the programmers of DreamSDK. You will need
+   a LogContext (TLogMessageContext) object to use this function. *)
 procedure LogMessage(Context: TLogMessageContext; const Args: array of const);
 
 (* Log a message to the user. This can be used for a Debug log statement but
-   for the end-user and not for the programmers of DreamSDK. *)
+   for the end-user and not for the programmers of DreamSDK. You will need a
+   LogContext (TLogMessageContext) object to use this function. *)
 procedure LogMessage(Context: TLogMessageContext; const Message: string);
 
-(* Log a message while exiting a procedure/function. *)
+(* Log a message while exiting a procedure/function. You will need a LogContext
+   (TLogMessageContext) object to use this function. *)
 procedure LogMessageExit(Context: TLogMessageContext);
 
 (* Waits for the ends of execution of a specific PID *)
@@ -1087,7 +1096,9 @@ var
 {$ENDIF}
 begin
 {$IFDEF CONSOLE}
+{$IFNDEF DEBUG_DISABLE_CONSOLE_PRINT}
   WriteLn(Message);
+{$ENDIF}
 {$ELSE}
   MsgHandle := 0;
 {$IFDEF GUI}
