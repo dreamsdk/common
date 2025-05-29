@@ -26,9 +26,6 @@ function GetCodeBlocksVersion(InstallationDirectory: TFileName;
 
 function CodeBlocksVersionToString(const CodeBlocksVersion: TCodeBlocksVersion): string;
 
-(*procedure ConvertCodeBlocksConfigurationFileNamesToUsers(
-  ConfigurationFileNames: TFileList; AvailableUsers: TStringList);*)
-
 function GetCodeBlocksAvailableConfigurationFileNames(
   out AvailableUsers: TWindowsUserAccountInformationArray;
   ConfigurationFileNames: TFileList): Boolean;
@@ -238,49 +235,6 @@ begin
   SetLength(NotConfiguredUsers, NotConfiguredUsersMaxCount);
 end;
 
-(*
-procedure ConvertCodeBlocksConfigurationFileNamesToUsers(
-  ConfigurationFileNames: TFileList; AvailableUsers: TStringList);
-var
-  i: Integer;
-  UsersDirectory: TFileName;
-  CurrentUserName,
-  FriendlyUserName: string;
-
-begin
-{$IFDEF DEBUG}
-  DebugLog('ConvertCodeBlocksConfigurationFileNamesToUsers');
-{$ENDIF}
-
-  if Assigned(ConfigurationFileNames) and Assigned(AvailableUsers) then
-  begin
-{$IFDEF DEBUG}
-    DebugLog(Format('  Configuration File Names Count: %d', [ConfigurationFileNames.Count]));
-{$ENDIF}
-
-    AvailableUsers.Clear;
-    UsersDirectory := GetUsersRootDirectory;
-    for i := 0 to ConfigurationFileNames.Count - 1 do
-    begin
-      CurrentUserName := ExtractStr(UsersDirectory, DirectorySeparator,
-        ConfigurationFileNames[i]);
-{$IFDEF DEBUG}
-      DebugLog(Format('    [%d/%d] CurrentUserName: %s', [i,
-        ConfigurationFileNames.Count, CurrentUserName]));
-{$ENDIF}
-
-      FriendlyUserName := GetFriendlyUserName(CurrentUserName);
-{$IFDEF DEBUG}
-      DebugLog(Format('    [%d/%d] FriendlyUserName: %s', [i,
-        ConfigurationFileNames.Count, FriendlyUserName]));
-{$ENDIF}
-
-      AvailableUsers.Add(FriendlyUserName);
-    end;
-  end;
-end;
-*)
-
 function GetCodeBlocksAvailableUsers(
   out AvailableUsers: TWindowsUserAccountInformationArray): Boolean;
 var
@@ -295,7 +249,6 @@ begin
   try
     Result := GetCodeBlocksAvailableConfigurationFileNames(
       AvailableUsers, ConfigurationFileNames);
-    // ConvertCodeBlocksConfigurationFileNamesToUsers(Buffer, AvailableUsers);
   finally
     ConfigurationFileNames.Free;
   end;

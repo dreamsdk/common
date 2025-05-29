@@ -334,7 +334,6 @@ const
   CONFIG_IDE_SECTION_CODEBLOCKS_KEY_INSTALLATION_PATH = 'InstallationPath';
   CONFIG_IDE_SECTION_CODEBLOCKS_KEY_BACKUP_PATH = 'BackupPath';
   CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_INSTALLED = 'InstalledUsers';
-  CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_AVAILABLE = 'AvailableUsers';
 
   // Handling default repositories (mainly used while installing DreamSDK)
   REPOSITORIES_DEFAULT_FILE_NAME = 'repositories-default.conf';
@@ -872,6 +871,8 @@ end;
 function TDreamcastSoftwareDevelopmentSettingsCodeBlocks
   .LoadConfiguration: Boolean;
 var
+  i: Integer;
+  BufferAvailableUsers: TWindowsUserAccountInformationArray;
   IniFile: TIniFile; // ide.conf
   Temp: string;
   RecomputeDynamicDirectories: Boolean;
@@ -941,12 +942,6 @@ begin
           CONFIG_IDE_SECTION_CODEBLOCKS_KEY_BACKUP_PATH, BackupDirectory);
       CheckIfRecomputeDynamicDirectories(BackupDirectory);
 
-      // Users Available
-      Temp := IniFile.ReadString(CONFIG_IDE_SECTION_CODEBLOCKS,
-        CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_AVAILABLE, EmptyStr);
-      if not IsEmpty(Temp) then
-       StringToStringList(Temp, ArraySeparator, AvailableUsers);
-
       // Users Installed
       Temp := IniFile.ReadString(CONFIG_IDE_SECTION_CODEBLOCKS,
         CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_INSTALLED, EmptyStr);
@@ -958,6 +953,12 @@ begin
         CONFIG_IDE_SECTION_CODEBLOCKS_KEY_CONFIGURATION_FILENAMES, EmptyStr);
       if not IsEmpty(Temp) then
         ConfigurationFileNames.SetItems(Temp, ArraySeparator);
+
+      // Available Users
+      AvailableUsers.Clear;
+      GetCodeBlocksAvailableUsers(BufferAvailableUsers);
+      for i := Low(BufferAvailableUsers) to High(BufferAvailableUsers) do
+        AvailableUsers.Add(BufferAvailableUsers[i].FriendlyName);
 
       // Recompute directories if empty or not exists
       if RecomputeDynamicDirectories then
@@ -1012,10 +1013,6 @@ begin
     WriteString(CONFIG_IDE_SECTION_CODEBLOCKS,
       CONFIG_IDE_SECTION_CODEBLOCKS_KEY_CONFIGURATION_FILENAMES,
         ConfigurationFileNames.GetItems(ArraySeparator));
-
-    WriteString(CONFIG_IDE_SECTION_CODEBLOCKS,
-      CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_AVAILABLE,
-        StringListToString(AvailableUsers, ArraySeparator));
 
     WriteString(CONFIG_IDE_SECTION_CODEBLOCKS,
       CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_INSTALLED,
