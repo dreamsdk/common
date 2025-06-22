@@ -1,17 +1,18 @@
+(*
+  Elevate Helper for Free Pascal/Lazarus
+  Thanks Alex [https://stackoverflow.com/users/92713/alex]
+  See: https://stackoverflow.com/a/19986365/3726096
+*)
 unit Elevate;
 
 {$WARN SYMBOL_PLATFORM OFF}
 {$R+}
 
-// Elevate Helper for Free Pascal/Lazarus
-
-// Thanks Alex
-// https://stackoverflow.com/a/19986365/3726096
-
 interface
 
 uses
-  Windows, Classes;
+  Windows,
+  Classes;
 
 type
   TElevatedProc = function(const ATaskName: string; AParameters: TStringList;
@@ -58,24 +59,42 @@ uses
 const
   RunElevatedTaskSwitch = '0C3B68CC5F5B900B64D50CB7DF000FFC'; // some unique value, just a GUID with removed '[', ']', and '-'
 
-procedure DecodeParameters(EncodedParameters: string;
-  DecodedParameters: TStringList);
-begin
-  if Assigned(DecodedParameters) then
-    StringToStringList(EncodedParameters, ArraySeparator, DecodedParameters);
-end;
-
-function EncodeParameters(DecodedParameters: TStringList): string;
-begin
-  Result := EmptyStr;
-  if Assigned(DecodedParameters) then
-    Result := StringListToString(DecodedParameters, ArraySeparator);
-end;
-
 function CheckTokenMembership(
   TokenHandle: THandle;
   SidToCheck: Pointer;
   var IsMember: Boolean): Boolean; stdcall; external advapi32 name 'CheckTokenMembership';
+
+procedure DecodeParameters(EncodedParameters: string;
+  DecodedParameters: TStringList);
+var
+  LogContext: TLogMessageContext;
+
+begin
+  LogContext := LogMessageEnter({$I %FILE%}, {$I %CURRENTROUTINE%});
+  try
+    if Assigned(DecodedParameters) then
+      StringToStringList(EncodedParameters, ArraySeparator, DecodedParameters);
+    LogMessage(LogContext, Format('Decoded parameters: "%s"', [DecodedParameters.Text]));
+  finally
+    LogMessageExit(LogContext);
+  end;
+end;
+
+function EncodeParameters(DecodedParameters: TStringList): string;
+var
+  LogContext: TLogMessageContext;
+
+begin
+  Result := EmptyStr;
+  LogContext := LogMessageEnter({$I %FILE%}, {$I %CURRENTROUTINE%});
+  try
+    if Assigned(DecodedParameters) then
+      Result := StringListToString(DecodedParameters, ArraySeparator);
+    LogMessage(LogContext, Format('Result of encoded parameters: "%s"', [Result]));
+  finally
+    LogMessageExit(LogContext);
+  end;
+end;
 
 function IsElevatedTaskRequested: Boolean;
 begin
@@ -83,8 +102,21 @@ begin
 end;
 
 function IsRealOSError(ALastOSError: Cardinal): Boolean;
+var
+  LogContext: TLogMessageContext;
+
 begin
-  Result := (ALastOSError <> ERROR_SUCCESS) and (ALastOSError <> ERROR_CANCELLED);
+  Result := False;
+  LogContext := LogMessageEnter({$I %FILE%}, {$I %CURRENTROUTINE%});
+  try
+    Result := (ALastOSError <> ERROR_SUCCESS)
+      and (ALastOSError <> ERROR_CANCELLED);
+    LogMessage(LogContext, Format('IsRealOSError result: "%s"', [
+      BoolToStr(Result, True)
+    ]));
+  finally
+    LogMessageExit(LogContext);
+  end;
 end;
 
 function RunElevated(
@@ -93,10 +125,10 @@ function RunElevated(
   const AProcessMessages: TProcessMessagesMethod = nil): Cardinal; overload;
 
 var
+  LogContext: TLogMessageContext;
   LocalLastOSError: Integer;
   SEI: TShellExecuteInfo;
-  Host: String;
-  Args: String;
+  Host, Args: string;
   DecodedParameters: TStringList;
 
   function LocalShellExecuteEx: Boolean;
@@ -114,90 +146,119 @@ var
   end;
 
 begin
+  Result := ERROR_NOT_READY;
   Assert(Assigned(OnElevateProc), 'OnElevateProc must be assigned before calling RunElevated');
 
-{$IFDEF FPC}
-  SEI := Default(TShellExecuteInfo);
-{$ENDIF}
-
-  if IsElevated then
-  begin
-    if Assigned(OnElevateProc) then
-    begin
-      DecodedParameters := TStringList.Create;
-      try
-        DecodeParameters(AParameters, DecodedParameters);
-        Result := OnElevateProc(ATaskName, DecodedParameters, ASourceWindowHandle)
-      finally
-        DecodedParameters.Free;
-      end;
-    end
-    else
-      Result := ERROR_PROC_NOT_FOUND;
-    Exit;
-  end;
-
-  Host := ParamStr(0);
-  Args := Format('/%s %s %d %s', [
-    RunElevatedTaskSwitch,
-    ATaskName,
-    ASourceWindowHandle,
-    AParameters
-  ]);
-
-  FillChar(SEI, SizeOf(SEI), 0);
-  SEI.cbSize := SizeOf(SEI);
-  SEI.fMask := SEE_MASK_NOCLOSEPROCESS;
-{$IFDEF UNICODE}
-  SEI.fMask := SEI.fMask or SEE_MASK_UNICODE;
-{$ENDIF}
-  SEI.Wnd := ASourceWindowHandle;
-  SEI.lpVerb := 'runas';
-  SEI.lpFile := PChar(Host);
-  SEI.lpParameters := PChar(Args);
-  SEI.nShow := SW_NORMAL;
-
-  if not LocalShellExecuteEx then
-  begin
-    LocalLastOSError := GetLastOSError;
-{$IFDEF DEBUG}
-    WriteLn('LocalLastOSError: ', LocalLastOSError);
-{$ENDIF}
-    if IsRealOSError(LocalLastOSError) then
-    begin
-{$IFDEF DEBUG}
-      WriteLn('RaiseLastOSError needed!');
-{$ENDIF}
-      RaiseLastOSError(LocalLastOSError)
-    end
-    else
-    begin
-{$IFDEF DEBUG}
-      WriteLn('Elevated operation cancelled!');
-{$ENDIF}
-      Result := ERROR_CANCELLED;
-      Exit; // user cancelled the operation
-    end;
-  end;
-
+  LogContext := LogMessageEnter({$I %FILE%}, {$I %CURRENTROUTINE%});
   try
-    Result := ERROR_GEN_FAILURE;
-    if Assigned(AProcessMessages) then
+{$IFDEF FPC}
+    SEI := Default(TShellExecuteInfo);
+{$ENDIF}
+
+    LogMessage(LogContext, Format('IsElevated: %s', [
+      BoolToStr(IsElevated, True)]));
+
+    if IsElevated then
     begin
-      repeat
-        if not GetExitCodeProcess(SEI.hProcess, Result) then
-          Result := ERROR_GEN_FAILURE;
-        AProcessMessages;
-      until Result <> STILL_ACTIVE;
-    end
+      if Assigned(OnElevateProc) then
+      begin
+        DecodedParameters := TStringList.Create;
+        try
+          DecodeParameters(AParameters, DecodedParameters);
+          LogMessage(LogContext, Format('Calling OnElevateProc as we are already elevated; ATaskName: "%s", DecodedParameters: "%s", ASourceWindowHandle: "%d"', [
+            ATaskName,
+            DecodedParameters.Text,
+            ASourceWindowHandle
+          ]));
+          Result := OnElevateProc(ATaskName, DecodedParameters, ASourceWindowHandle);
+          LogMessage(LogContext, Format('Result of OnElevateProc: %d', [
+            Result
+          ]));
+        finally
+          DecodedParameters.Free;
+        end;
+      end
+      else
+      begin
+        Result := ERROR_PROC_NOT_FOUND;
+        LogMessage(LogContext, 'Unable to call OnElevateProc (impossible case)');
+      end;
+      LogMessage(LogContext, 'Exiting block IsElevated...');
+      Exit;
+    end;
+
+    Host := ParamStr(0);
+    Args := Format('/%s %s %d %s', [
+      RunElevatedTaskSwitch,
+      ATaskName,
+      ASourceWindowHandle,
+      AParameters
+    ]);
+
+    LogMessage(LogContext, Format('Host: "%s", Args: "%s"', [
+      Host,
+      Args
+    ]));
+
+    FillChar(SEI, SizeOf(SEI), 0);
+    SEI.cbSize := SizeOf(SEI);
+    SEI.fMask := SEE_MASK_NOCLOSEPROCESS;
+{$IFDEF UNICODE}
+    SEI.fMask := SEI.fMask or SEE_MASK_UNICODE;
+{$ENDIF}
+    SEI.Wnd := ASourceWindowHandle;
+    SEI.lpVerb := 'runas';
+    SEI.lpFile := PChar(Host);
+    SEI.lpParameters := PChar(Args);
+    SEI.nShow := SW_NORMAL;
+
+    if LocalShellExecuteEx then
+      LogMessage(LogContext, 'ShellExecuteEx successful run!')
     else
     begin
-      if WaitForSingleObject(SEI.hProcess, INFINITE) <> WAIT_OBJECT_0 then
-        if not GetExitCodeProcess(SEI.hProcess, Result) then
-          Result := ERROR_GEN_FAILURE;
+      LocalLastOSError := GetLastOSError;
+      LogMessage(LogContext, Format('ShellExecuteEx failed, LocalLastOSError: %d', [
+        LocalLastOSError
+      ]));
+
+      if IsRealOSError(LocalLastOSError) then
+      begin
+        LogMessage(LogContext, 'Real error, RaiseLastOSError needed!');
+        RaiseLastOSError(LocalLastOSError)
+      end
+      else
+      begin
+        LogMessage(LogContext, 'Elevated operation cancelled by the user!');
+        Result := ERROR_CANCELLED;
+        Exit; // user cancelled the operation
+      end;
     end;
+
+    try
+      LogMessage(LogContext, 'Entering the block to wait the child process to finish');
+      Result := ERROR_GEN_FAILURE;
+      if Assigned(AProcessMessages) then
+      begin
+        LogMessage(LogContext, 'Wait with UI');
+        repeat
+          if not GetExitCodeProcess(SEI.hProcess, Result) then
+            Result := ERROR_GEN_FAILURE;
+          AProcessMessages;
+        until Result <> STILL_ACTIVE;
+      end
+      else
+      begin
+        LogMessage(LogContext, 'Wait without UI');
+        if WaitForSingleObject(SEI.hProcess, INFINITE) <> WAIT_OBJECT_0 then
+          if not GetExitCodeProcess(SEI.hProcess, Result) then
+            Result := ERROR_GEN_FAILURE;
+      end;
+    finally
+      CloseHandle(SEI.hProcess);
+    end;
+
   finally
-    CloseHandle(SEI.hProcess);
+    LogMessageExit(LogContext);
   end;
 end;
 
@@ -217,12 +278,12 @@ begin
   B := False;
   psidAdmin := nil;
   try
-    // Создаём SID группы админов для проверки
+    // Create SID of admin group for verification
     Win32Check(AllocateAndInitializeSid(SECURITY_NT_AUTHORITY, 2,
       SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0,
       psidAdmin));
 
-    // Проверяем, входим ли мы в группу админов (с учётов всех проверок на disabled SID)
+    // We check whether we are in the admin group (taking into account all checks for disabled SID)
     if CheckTokenMembership(0, psidAdmin, B) then
       Result := B;
   finally
@@ -378,6 +439,8 @@ end;
 procedure CheckForElevatedTask;
 var
   DecodedParameters: TStringList;
+  LogContext: TLogMessageContext;
+  ExitCode: Cardinal;
 
   function GetTaskName: string;
   begin
@@ -414,48 +477,72 @@ var
     Result := Trim(Result);
   end;
 
-var
-  ExitCode: Cardinal;
-
 begin
-  if not IsElevatedTaskRequested then
-    Exit;
-
-  ExitCode := ERROR_GEN_FAILURE;
+  LogContext := LogMessageEnter({$I %FILE%}, {$I %CURRENTROUTINE%});
   try
-    if not IsElevated then
-      ExitCode := ERROR_ACCESS_DENIED
-    else
-    if Assigned(OnElevateProc) then
-    begin
-      DecodedParameters := TStringList.Create;
-      try
-        DecodeParameters(GetArgsForElevatedTask, DecodedParameters);
-        ExitCode := OnElevateProc(GetTaskName, DecodedParameters, GetSourceHandle);
-      finally
-        DecodedParameters.Free;
-      end;
-    end
-    else
-      ExitCode := ERROR_PROC_NOT_FOUND;
-  except
-    on E: Exception do
-    begin
-      if E is EAbort then
-        ExitCode := ERROR_CANCELLED
-      else
-      if E is EOleSysError then
-        ExitCode := Cardinal(EOleSysError(E).ErrorCode)
-      else
-      if E is EOSError then
-      else
-        ExitCode := ERROR_GEN_FAILURE;
-    end;
-  end;
+    LogMessage(LogContext, Format('IsElevatedTaskRequested: "%s"', [
+      BoolToStr(IsElevatedTaskRequested, True)
+    ]));
 
-  if ExitCode = STILL_ACTIVE then
+    if not IsElevatedTaskRequested then
+      Exit;
+
     ExitCode := ERROR_GEN_FAILURE;
-  TerminateProcess(GetCurrentProcess, ExitCode);
+    try
+      if not IsElevated then
+        ExitCode := ERROR_ACCESS_DENIED
+      else if Assigned(OnElevateProc) then
+      begin
+        DecodedParameters := TStringList.Create;
+        try
+          DecodeParameters(GetArgsForElevatedTask, DecodedParameters);
+          LogMessage(LogContext, Format('Calling OnElevateProc as we are already elevated; ATaskName: "%s", DecodedParameters: "%s", ASourceWindowHandle: "%d"', [
+            GetTaskName,
+            DecodedParameters.Text,
+            GetSourceHandle
+          ]));
+          ExitCode := OnElevateProc(GetTaskName, DecodedParameters, GetSourceHandle);
+          LogMessage(LogContext, Format('Result of OnElevateProc: %d', [
+            ExitCode
+          ]));
+        finally
+          DecodedParameters.Free;
+        end;
+      end
+      else
+        ExitCode := ERROR_PROC_NOT_FOUND;
+    except
+      on E: Exception do
+      begin
+        if E is EAbort then
+          ExitCode := ERROR_CANCELLED
+        else
+        if E is EOleSysError then
+          ExitCode := Cardinal(EOleSysError(E).ErrorCode)
+        else
+        if E is EOSError then
+        else
+          ExitCode := ERROR_GEN_FAILURE;
+      end;
+    end;
+
+    if ExitCode = STILL_ACTIVE then
+      ExitCode := ERROR_GEN_FAILURE;
+
+    LogMessage(LogContext, Format('ExitCode: "%d"', [
+      ExitCode
+    ]));
+
+{$IFDEF DEBUG}
+    DebugLog('*** STRIKE <ENTER> TO EXIT ***');
+    ReadLn;
+{$ENDIF}
+
+    TerminateProcess(GetCurrentProcess, ExitCode);
+
+  finally
+    LogMessageExit(LogContext);
+  end;
 end;
 
 end.

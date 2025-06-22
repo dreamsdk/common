@@ -30,6 +30,9 @@ unit SysTools;
 (* Use this if you want to debug the LogonServerVariable addition. *)
 // {$DEFINE SYSTOOLS_DETAILED_DEBUG_HANDLELOGONSERVERVARIABLE}
 
+(* Use this if you want to add entries to the DebugView window AND in the console. *)
+// {$DEFINE SYSTOOLS_DETAILED_DEBUG_DEBUGLOG}
+
 interface
 
 uses
@@ -101,6 +104,10 @@ function GetEveryoneName: string;
 function GetFileLocationsInSystemPath(const FileName: TFileName;
   Output: TStringList): Boolean;
 
+(* Return the "--debug" switch, whatever the switch is setup, in order to pass
+this as an argument while running elevated tasks in the caller. *)
+function GetLogMessageCommandLineSwitch: string;
+
 (* Get parent PID from another PID - reverse of GetProcessIdFromParentProcessId *)
 function GetParentProcessIdFromProcessId(const ProcessId: LongWord): LongWord;
 
@@ -115,6 +122,9 @@ function GetUsersRootDirectory: TFileName;
 
 (* Add a mandatory variable in TProcess environment when used with Bash. *)
 procedure HandleLogonServerVariable(EnvironmentVariables: TStringList);
+
+(* Indicates if the user enabled the LogMessage feature from the Command-Line *)
+function IsLogMessageEnabled: Boolean;
 
 (* Checks if a process is running using image file name *)
 function IsProcessRunning(FileName: TFileName): Boolean;
@@ -196,6 +206,7 @@ uses
   LConvEncoding,
 {$IFDEF WINDOWS}
   ActiveX,
+  ComObj,
 {$ENDIF}
 {$IFDEF GUI}
   Interfaces,
@@ -211,6 +222,14 @@ uses
   StrTools,
   UtilWMI,
   Version;
+
+const
+  LOG_MESSAGE_SWITCH = 'debug';
+
+var
+  LogModeEnabled: Boolean;
+  ComInitializationResult: HRESULT;
+  ComInitialized: Boolean;
 
 // See: https://wiki.freepascal.org/Lazarus_Resources
 function ExtractEmbeddedResourceToFile(const ResourceName: string;
@@ -289,21 +308,16 @@ begin
   DebugLog('GetUsersDirectory');
 {$ENDIF}
 
-  CoInitialize(nil);
-  try
-    UserPath := Default(WideString);
-    if TrySHGetKnownFolderPath(UserPath) then
-      Result := string(UserPath)
-    else
-    begin
-      GetWindowsDirectory(WinDir, MAX_PATH);
-      Result := ExtractFileDrive(WinDir) + DirectorySeparator
-        + WINXP_USERS_DIRECTORY;
-    end;
-    Result := IncludeTrailingPathDelimiter(Result);
-  finally
-    CoUninitialize;
+  UserPath := Default(WideString);
+  if TrySHGetKnownFolderPath(UserPath) then
+    Result := string(UserPath)
+  else
+  begin
+    GetWindowsDirectory(WinDir, MAX_PATH);
+    Result := ExtractFileDrive(WinDir) + DirectorySeparator
+      + WINXP_USERS_DIRECTORY;
   end;
+  Result := IncludeTrailingPathDelimiter(Result);
 
 {$IFDEF DEBUG}
   DebugLog(Format('  GetUsersDirectory::Result = "%s"', [Result]));
@@ -1003,7 +1017,8 @@ end;
 procedure DoLogMessage(const Message: string);
 begin
 {$IFDEF WINDOWS}
-  OutputDebugString(PChar(Message));
+  if LogModeEnabled then
+    OutputDebugString(PChar(Message));
 {$ENDIF}
 end;
 
@@ -1029,6 +1044,16 @@ end;
 procedure LogMessageExit(Context: TLogMessageContext);
 begin
   DoLogMessage(Concat(GetLogMessageContext(Context), '::Exiting'));
+end;
+
+function IsLogMessageEnabled: Boolean;
+begin
+  Result := LogModeEnabled;
+end;
+
+function GetLogMessageCommandLineSwitch: string;
+begin
+  Result := '--' + LOG_MESSAGE_SWITCH;
 end;
 
 {$IFDEF DEBUG}
@@ -1108,7 +1133,8 @@ begin
     MessageBox(MsgHandle, PChar(Trim(Message)), sDebugLogTitle,
       MB_ICONINFORMATION + MB_OK);
 {$ENDIF}
-{$IFDEF WINDOWS}
+{$IF DEFINED(WINDOWS) AND DEFINED(SYSTOOLS_DETAILED_DEBUG_DEBUGLOG)}
+  // This is used also with WriteLn
   OutputDebugString(PChar(Message));
 {$ENDIF}
 end;
@@ -1132,7 +1158,30 @@ end;
 {$ENDIF}
 
 initialization
+begin
+  // Initialize the random engine
   Randomize;
+
+  // Enable Debug mode
+  LogModeEnabled := FindCmdLineSwitch(LOG_MESSAGE_SWITCH, ['-', '/'], True)
+    or IsInString(LowerCase(GetLogMessageCommandLineSwitch), LowerCase(CmdLine));
+{$IFDEF DEBUG}
+    DebugLog(Format('SysTools LogModeEnabled: "%s", CmdLine: "%s"', [
+      DebugBoolToStr(LogModeEnabled),
+      CmdLine
+    ]));
+{$ENDIF}
+
+  // Initialize COM
+  ComInitializationResult := CoInitialize(nil);
+  ComInitialized := (ComInitializationResult = S_OK);
+end;
+
+finalization
+begin
+  if ComInitialized then
+    CoUninitialize;
+end;
 
 end.
 

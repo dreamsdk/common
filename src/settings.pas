@@ -158,7 +158,8 @@ type
     constructor Create;
     destructor Destroy; override;
 
-    function LoadConfiguration: Boolean;
+    procedure ClearCachedAvailableUsers;
+    function LoadConfiguration(const ForceRefresh: Boolean): Boolean;
     procedure SaveConfiguration;
 
     // Code::Blocks Available Users on this system (i.e. users that can use C::B)
@@ -299,7 +300,6 @@ uses
 {$IFDEF GUI}
   Interfaces,
   Dialogs,
-  MsgDlg,
 {$ENDIF}
   RefBase,
   StrTools,
@@ -334,6 +334,7 @@ const
   CONFIG_IDE_SECTION_CODEBLOCKS_KEY_INSTALLATION_PATH = 'InstallationPath';
   CONFIG_IDE_SECTION_CODEBLOCKS_KEY_BACKUP_PATH = 'BackupPath';
   CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_INSTALLED = 'InstalledUsers';
+  CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_AVAILABLE_CACHE = 'CacheAvailableUsers';
 
   // Handling default repositories (mainly used while installing DreamSDK)
   REPOSITORIES_DEFAULT_FILE_NAME = 'repositories-default.conf';
@@ -682,7 +683,7 @@ begin
   HandleDynamicDirectories;
 
   if AutoLoad then
-    LoadConfiguration;
+    LoadConfiguration(False);
 end;
 
 constructor TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher.Create;
@@ -749,11 +750,11 @@ end;
 
 function TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher.Refresh: Boolean;
 begin
-  LoadConfiguration;
+  LoadConfiguration(True);
   if not Installed then
     InitializeCodeBlocksInstallationDirectory;
   WriteRegistry;
-  Result := LoadConfiguration;
+  Result := LoadConfiguration(True);
 end;
 
 procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher.WriteRegistry;
@@ -868,8 +869,22 @@ begin
   inherited Destroy;
 end;
 
+procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocks.ClearCachedAvailableUsers;
+var
+  IniFile: TIniFile; // ide.conf
+
+begin
+  IniFile := TIniFile.Create(RegistryFileName);
+  try
+    IniFile.DeleteKey(CONFIG_IDE_SECTION_CODEBLOCKS,
+      CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_AVAILABLE_CACHE);
+  finally
+    IniFile.Free;
+  end;
+end;
+
 function TDreamcastSoftwareDevelopmentSettingsCodeBlocks
-  .LoadConfiguration: Boolean;
+  .LoadConfiguration(const ForceRefresh: Boolean): Boolean;
 var
   i: Integer;
   BufferAvailableUsers: TWindowsUserAccountInformationArray;
@@ -954,11 +969,40 @@ begin
       if not IsEmpty(Temp) then
         ConfigurationFileNames.SetItems(Temp, ArraySeparator);
 
-      // Available Users
+      (* Available Users
+         This is stored in the "conf" file as this requires elevated process to
+         be able to retrieve this system-wide. But we have the possibility to
+         overload this. *)
+{$IFDEF DEBUG}
+      DebugLog('*** C::B LoadConfiguration Available Users ***');
+{$ENDIF}
       AvailableUsers.Clear;
-      GetCodeBlocksAvailableUsers(BufferAvailableUsers);
-      for i := Low(BufferAvailableUsers) to High(BufferAvailableUsers) do
-        AvailableUsers.Add(BufferAvailableUsers[i].FriendlyName);
+      if not ForceRefresh then
+      begin
+{$IFDEF DEBUG}
+        DebugLog(Format('  Read From: "%s"', [
+          CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_AVAILABLE_CACHE
+        ]));
+{$ENDIF}
+        Temp := IniFile.ReadString(CONFIG_IDE_SECTION_CODEBLOCKS,
+          CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_AVAILABLE_CACHE, EmptyStr);
+        if not IsEmpty(Temp) then
+          StringToStringList(Temp, ArraySeparator, AvailableUsers);
+      end;
+      if (AvailableUsers.Count = 0) then
+      begin
+{$IFDEF DEBUG}
+        DebugLog('  Calling GetCodeBlocksAvailableUsers...');
+{$ENDIF}
+        GetCodeBlocksAvailableUsers(BufferAvailableUsers);
+        for i := Low(BufferAvailableUsers) to High(BufferAvailableUsers) do
+          AvailableUsers.Add(BufferAvailableUsers[i].FriendlyName);
+{$IFDEF DEBUG}
+        DebugLog(Format('  Number of profiles: %d', [
+          Length(BufferAvailableUsers)
+        ]));
+{$ENDIF}
+      end;
 
       // Recompute directories if empty or not exists
       if RecomputeDynamicDirectories then
@@ -1017,6 +1061,16 @@ begin
     WriteString(CONFIG_IDE_SECTION_CODEBLOCKS,
       CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_INSTALLED,
         StringListToString(InstalledUsers, ArraySeparator));
+
+    // Available Users: Write in cache to avoid UAC issues
+{$IFDEF DEBUG}
+    DebugLog(Format('SaveConfiguration: AvailableUsers profiles count: %d', [
+      AvailableUsers.Count
+    ]));
+{$ENDIF}
+    WriteString(CONFIG_IDE_SECTION_CODEBLOCKS,
+      CONFIG_IDE_SECTION_CODEBLOCKS_KEY_USERS_AVAILABLE_CACHE,
+        StringListToString(AvailableUsers, ArraySeparator));
   finally
     IniFile.Free;
   end;

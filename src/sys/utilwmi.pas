@@ -50,6 +50,8 @@ critical fix into GetWindowsManagementInstrumentationMultipleValuesByPropertyNam
 in case of the requested property isn't available
 thanks to Nnnn: https://x.com/nnnn2cat
 
+Ver. 0.6 [ June 2026 ]  SiZiOUS:
+adding CoInitialize/CoUninitialize calls in the initialization section.
 *)
 
 {$MODE OBJFPC}{$H+}{$HINTS ON}
@@ -118,6 +120,10 @@ uses
   Variants,
   ActiveX,
   ComObj;
+
+var
+  ComInitializationResult: HRESULT;
+  ComInitialized: Boolean;
 
 function VarArrayToStringArray(Value: Variant): TStringArray;
 var
@@ -345,6 +351,18 @@ begin
   end;
 end;
 {$ENDIF}
+
+initialization
+begin
+  ComInitializationResult := CoInitialize(nil);
+  ComInitialized := (ComInitializationResult = S_OK);
+end;
+
+finalization
+begin
+  if ComInitialized then
+    CoUninitialize;
+end;
 
 end.
 
