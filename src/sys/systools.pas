@@ -33,6 +33,9 @@ unit SysTools;
 (* Use this if you want to add entries to the DebugView window AND in the console. *)
 // {$DEFINE SYSTOOLS_DETAILED_DEBUG_DEBUGLOG}
 
+(* Use this if you want to force LogMessage activation. *)
+// {$DEFINE SYSTOOLS_DETAILED_DEBUG_LOG_MESSAGE_FORCED}
+
 interface
 
 uses
@@ -227,9 +230,9 @@ const
   LOG_MESSAGE_SWITCH = 'debug';
 
 var
-  LogModeEnabled: Boolean;
-  ComInitializationResult: HRESULT;
-  ComInitialized: Boolean;
+  LogModeEnabled: Boolean = False;
+  ComInitializationResult: HRESULT = 0;
+  ComInitialized: Boolean = False;
 
 // See: https://wiki.freepascal.org/Lazarus_Resources
 function ExtractEmbeddedResourceToFile(const ResourceName: string;
@@ -304,6 +307,8 @@ var
   WinDir: array[0..MAX_PATH - 1] of Char;
 
 begin
+  WinDir := EmptyStr;
+
 {$IFDEF DEBUG}
   DebugLog('GetUsersDirectory');
 {$ENDIF}
@@ -794,6 +799,7 @@ var
   ExitCode: DWORD;
 
 begin
+  ExitCode := NO_ERROR;
   Result := False;
 
   // Check if the process exists
@@ -1165,6 +1171,9 @@ begin
   // Enable Debug mode
   LogModeEnabled := FindCmdLineSwitch(LOG_MESSAGE_SWITCH, ['-', '/'], True)
     or IsInString(LowerCase(GetLogMessageCommandLineSwitch), LowerCase(CmdLine));
+{$IF DEFINED(DEBUG) AND DEFINED(SYSTOOLS_DETAILED_DEBUG_LOG_MESSAGE_FORCED)}
+  LogModeEnabled := True;
+{$ENDIF}
 {$IFDEF DEBUG}
     DebugLog(Format('SysTools LogModeEnabled: "%s", CmdLine: "%s"', [
       DebugBoolToStr(LogModeEnabled),
