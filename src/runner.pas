@@ -23,6 +23,7 @@ type
     fCurrentCommandLine: string;
     fDebugEnabled: Boolean;
     fEmbeddedMode: Boolean;
+    fRootSystemPath: string;
     fShellCommandOutputBuffer: TStringList;
     fInteractiveShell: Boolean;
     fShellRunnerClientExitCodeTempFileName: TFileName;
@@ -40,6 +41,7 @@ type
     procedure Initialize(const EmbeddedMode: Boolean);
     procedure InitializeEnvironment;
     procedure RetrieveEnvironmentVariables;
+    procedure SetInjectDirectory(AValue: string);
     procedure SetWorkingDirectory(AValue: TFileName);
   protected
     function GetClientExitCode: Integer;
@@ -67,6 +69,10 @@ type
     (* Use this to launch an interactive/user-friendly Shell. *)
     property InteractiveShell: Boolean
       read fInteractiveShell write fInteractiveShell;
+
+    (* Use this if you are using DreamSDK Runner with a configuration file. *)
+    property RootSystemPath: string
+      read fRootSystemPath write SetInjectDirectory;
 
     (* Defines the working/current directory for the executed command. *)
     property WorkingDirectory: TFileName
@@ -295,6 +301,8 @@ begin
     Add('_EXITCODE=' + ClientExitCodeUnixFileName);
   end;
 
+  fShellCommand.RootSystemPath := RootSystemPath;
+
   fShellCommand.OnNewLine := @HandleNewLine;
   fShellCommand.OnTerminate := @HandleTerminate;
 
@@ -404,6 +412,14 @@ var
 begin
   for i := 1 to GetEnvironmentVariableCount do
     fEnvironmentVariables.Add(GetEnvironmentString(i));
+end;
+
+procedure TDreamcastSoftwareDevelopmentKitRunner.SetInjectDirectory(
+  AValue: string);
+begin
+  if fRootSystemPath = AValue then
+    Exit;
+  fRootSystemPath := DreamSdkPathToSystem(AValue);
 end;
 
 constructor TDreamcastSoftwareDevelopmentKitRunner.Create;

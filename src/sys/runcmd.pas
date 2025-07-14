@@ -19,6 +19,7 @@ type
   TRunCommand = class(TThread)
   private
     fAbortRequested: Boolean;
+    fRootSystemPath: string;
     fPipeOpened: Boolean;
     fProcessEnd: Boolean;
     fPartialLine: string;
@@ -53,6 +54,8 @@ type
     property Parameters: TStringList read fParameters;
     property TargetProcessId: LongWord read GetTargetProcessId;
     property TargetCommandLine: string read GetTargetCommandLine;
+    property RootSystemPath: string
+      read fRootSystemPath write fRootSystemPath;
     property WorkingDirectory: TFileName read fWorkingDirectory
       write fWorkingDirectory;
     property OnNewLine: TNewLineEvent read fNewLine write fNewLine;
@@ -159,7 +162,8 @@ var
   LogContext: TLogMessageContext;
   Buffer: array[0..BUF_SIZE - 1] of AnsiChar;
   BytesRead: Integer;
-  NewLine: string;
+  NewLine,
+  OriginalProcessPath: string;
 {$IFDEF DEBUG}
   i: Integer;
   TempBufferString: string;
@@ -183,6 +187,18 @@ begin
     fProcess.Parameters.AddStrings(Parameters);
     HandleLogonServerVariable(fEnvironment);
     fProcess.Environment.AddStrings(fEnvironment);
+
+    // Handle RootSystemPath, for DreamSDK Runner
+    // Injecting the path to avoid circular loop of execution!
+    if not IsEmpty(RootSystemPath) then
+    begin
+      OriginalProcessPath := fProcess.Environment.Values['PATH'];
+      fProcess.Environment.Values['PATH'] := RootSystemPath
+        + ';' + OriginalProcessPath;
+      LogMessage(LogContext, Format('InjectDirectory: [%s]', [
+        fProcess.Environment.Values['PATH']
+      ]));
+    end;
 
 {$IF DEFINED(DEBUG) AND DEFINED(DUMP_ALL_ENVIRONMENT)}
     DebugLog('  Environment:');
@@ -214,11 +230,12 @@ begin
     fPipeOpened := True;
     fProcess.Execute;
 
-    LogMessage(LogContext, Format('ThreadId: %d, ExecProcessId: %d, ExecCommandLine: "%s", Environment: [%s]', [
+    LogMessage(LogContext, Format('ThreadId: %d, ExecProcessId: %d, ExecCommandLine: "%s", Environment: [%s], ThreadEnvironmentPath: [%s]', [
       ThreadID,
       fProcess.ProcessID,
       GetTargetCommandLine,
-      StringListToString(fEnvironment, '|')
+      StringListToString(fEnvironment, ArraySeparator),
+      StringReplace(fProcess.Environment.Values['PATH'], sLineBreak, ArraySeparator, [rfReplaceAll])
     ]));
 
 {$IFDEF DEBUG}

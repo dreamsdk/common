@@ -23,7 +23,8 @@ type
 implementation
 
 uses
-  RefBase;
+  RefBase,
+  SysTools;
 
 { TRunCommandEx }
 
@@ -39,11 +40,22 @@ begin
 end;
 
 procedure TRunCommandEx.HandleWorkingDirectoryVariable;
+var
+  LogContext: TLogMessageContext;
+  WorkingDirectoryUnix: string;
+
 begin
-  if (WorkingDirectory <> EmptyStr) then
-  begin
-    Environment.Add('_WORKING_DIRECTORY='
-      + SystemToDreamSdkPath(WorkingDirectory));
+  LogContext := LogMessageEnter({$I %FILE%}, {$I %CURRENTROUTINE%}, ClassName);
+  try
+    LogMessage(LogContext, Format('WorkingDirectory: "%s"', [WorkingDirectory]));
+    if (WorkingDirectory <> EmptyStr) then
+    begin
+      WorkingDirectoryUnix := SystemToDreamSdkPath(WorkingDirectory);
+      LogMessage(LogContext, Format('WorkingDirectoryUnix: "%s"', [WorkingDirectoryUnix]));
+      Environment.Add('_WORKING_DIRECTORY=' + WorkingDirectoryUnix);
+    end;
+  finally
+    LogMessageExit(LogContext);
   end;
 end;
 
