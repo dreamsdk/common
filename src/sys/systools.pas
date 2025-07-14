@@ -1170,7 +1170,9 @@ begin
 
   // Enable Debug mode
   LogModeEnabled := FindCmdLineSwitch(LOG_MESSAGE_SWITCH, ['-', '/'], True)
-    or IsInString(LowerCase(GetLogMessageCommandLineSwitch), LowerCase(CmdLine));
+    or IsInString(LowerCase(GetLogMessageCommandLineSwitch), LowerCase(CmdLine))
+    or FileExists(ChangeFileExt(ParamStr(0), '.dbg'));
+
 {$IF DEFINED(DEBUG) AND DEFINED(SYSTOOLS_DETAILED_DEBUG_LOG_MESSAGE_FORCED)}
   LogModeEnabled := True;
 {$ENDIF}
