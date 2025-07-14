@@ -43,6 +43,8 @@ function GetCodeBlocksDefaultInstallationDirectory: TFileName;
 
 procedure InitializeCodeBlocksProfiles;
 
+function IsCodeBlocksFilesPatched(InstallationDirectory: TFileName): Boolean;
+
 {$IFDEF ENABLE_CBTOOLS_SAVE_CB_VERSION}
 procedure DeleteCodeBlocksVersionFileFromInstallationDirectory(
   InstallationDirectory: TFileName);
@@ -63,7 +65,6 @@ type
   end;
 
 const
-  CODEBLOCKS_VERSION_FILE = 'dreamsdk.bin';
   CODEBLOCKS_ORIGINAL_CHECKER_FILE = 'codeblocks.dll';
   CODEBLOCKS_SUPPORTED_HASHES: array [0..2] of TCodeBlocksSupportedVersion = (
     (
@@ -254,6 +255,24 @@ begin
   end;
 end;
 
+function GetCodeBlocksPatchedVersionFileName(InstallationDirectory: TFileName): TFileName;
+const
+  CODEBLOCKS_VERSION_FILE = 'dreamsdk.bin';
+
+begin
+  Result := IncludeTrailingPathDelimiter(InstallationDirectory)
+    + CODEBLOCKS_VERSION_FILE;
+end;
+
+function IsCodeBlocksFilesPatched(InstallationDirectory: TFileName): Boolean;
+var
+  PatchedVersionFileName: TFileName;
+
+begin
+  PatchedVersionFileName := GetCodeBlocksPatchedVersionFileName(InstallationDirectory);
+  Result := FileExists(PatchedVersionFileName);
+end;
+
 function GetCodeBlocksVersion(InstallationDirectory: TFileName;
   const ExpandInstallationDirectory: Boolean = True): TCodeBlocksVersion;
 var
@@ -271,8 +290,7 @@ begin
     InstallationDirectory := ParseInputFileSystemObject(InstallationDirectory);
 
   // Check if this C::B install has already been patched
-  PatchedVersionFileName := IncludeTrailingPathDelimiter(InstallationDirectory)
-    + CODEBLOCKS_VERSION_FILE;
+  PatchedVersionFileName := GetCodeBlocksPatchedVersionFileName(InstallationDirectory);
   if FileExists(PatchedVersionFileName) then
   begin
     Buffer := LoadFileToString(PatchedVersionFileName);
@@ -358,8 +376,7 @@ var
   PatchedVersionFileName: TFileName;
 
 begin
-  PatchedVersionFileName := IncludeTrailingPathDelimiter(InstallationDirectory)
-    + CODEBLOCKS_VERSION_FILE;
+  PatchedVersionFileName := GetCodeBlocksPatchedVersionFileName(InstallationDirectory);
   SaveStringToFile(IntToStr(Integer(CodeBlocksVersion)), PatchedVersionFileName);
 end;
 
@@ -369,8 +386,7 @@ var
   PatchedVersionFileName: TFileName;
 
 begin
-  PatchedVersionFileName := IncludeTrailingPathDelimiter(InstallationDirectory)
-    + CODEBLOCKS_VERSION_FILE;
+  PatchedVersionFileName := GetCodeBlocksPatchedVersionFileName(InstallationDirectory);
   KillFile(PatchedVersionFileName);
 end;
 

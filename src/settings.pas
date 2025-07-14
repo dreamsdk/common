@@ -132,6 +132,7 @@ type
   { TDreamcastSoftwareDevelopmentSettingsCodeBlocks }
   TDreamcastSoftwareDevelopmentSettingsCodeBlocks = class(TObject)
   private
+    fMSysDirectory: TFileName;
     fAvailableUsers: TStringList;
     fConfiguredUsers: TWindowsUserAccountInformationArray;
     fExportLibraryInformation: Boolean;
@@ -141,7 +142,6 @@ type
     fConfigurationFileNames: TFileList;
     fAvailableConfigurationFileNames: TFileList;
     fInstallationDirectory: TFileName;
-    function GetHomeDirectory: TFileName;
     function GetInstalled: Boolean;
     function GetRegistryFileName: TFileName;
     procedure SetBackupDirectory(AValue: TFileName);
@@ -199,10 +199,13 @@ type
 
     // DreamSDK Home
     property HomeDirectory: TFileName
-      read GetHomeDirectory
+      read fHomeDirectory
 {$IFDEF DISABLE_REFBASE_HOME_DIR_AUTO_OVERRIDE}
       write SetHomeDirectory
 {$ENDIF};
+
+    property MSysDirectory: TFileName
+      read fMSysDirectory;
 
     (* This is equals to True if the patch for C::B has been installed.
        This property is overriden to False if the installation is now invalid.
@@ -710,6 +713,7 @@ begin
   fExportLibraryInformationPath := ASource.ExportLibraryInformationPath;
   fHomeDirectory := ASource.HomeDirectory;
   fInstallationDirectory := ASource.InstallationDirectory;
+  HandleDynamicDirectories;
 end;
 
 procedure TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher.Save(
@@ -777,14 +781,6 @@ begin
 {$ENDIF}
 end;
 
-function TDreamcastSoftwareDevelopmentSettingsCodeBlocks.GetHomeDirectory: TFileName;
-begin
-  Result := fHomeDirectory;
-{$IFDEF DEBUG}
-//  DebugLog('GetHomeDirectory: ' + Result);
-{$ENDIF}
-end;
-
 function TDreamcastSoftwareDevelopmentSettingsCodeBlocks.GetInstalled: Boolean;
 begin
   Result := fInstalled and DirectoryExists(InstallationDirectory)
@@ -844,6 +840,9 @@ begin
   BackupDirectory := Format(DEFAULT_CODEBLOCKS_BACKUP_DIR, [HomeDirectory]);
   fExportLibraryInformationPath := Format(EXPORT_LIBRARY_INFORMATION_DIR, [
     ExcludeTrailingPathDelimiter(GetConfigurationDirectory)]);
+  fHomeDirectory := ExcludeTrailingPathDelimiter(fHomeDirectory);
+  fMSysDirectory := ExcludeTrailingPathDelimiter(GetMSysBaseDirectory(fHomeDirectory));
+
 {$IFDEF DEBUG}
   DebugLog('Settings Code::Blocks HandleDynamicDirectories: "'
     + fExportLibraryInformationPath + '"');

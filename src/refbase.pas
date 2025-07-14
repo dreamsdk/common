@@ -46,6 +46,9 @@ type
     efkMinGW64MSYS2
   );
 
+(* Convert an Unix DreamSDK path to a Windows path, e.g.:
+   "/opt/toolchains/dc" to "C:\DreamSDK\msys\1.0\opt\toolchains\dc" on MinGW or
+   "C:\DreamSDK\opt\toolchains\dc" on MinGW-w64. *)
 function DreamSdkPathToSystem(const UnixPathName: TFileName): TFileName;
 
 (* Indicates if this DreamSDK installation is running under MinGW/MSYS or
@@ -76,9 +79,15 @@ function GetBaseInstallationHomeDirectory: TFileName;
 
 (* Returns the full path to the MSYS root directory.
    Usually "C:\DreamSDK\msys\1.0\" on MinGW/MSYS and "C:\DreamSDK\" on
-   MinGW-w64/MSYS2.
+   MinGW-w64/MSYS2. This version uses the calculated HomeDirectory.
    Note: The trailing path delimiter is already included. *)
-function GetMSysBaseDirectory: TFileName;
+function GetMSysBaseDirectory: TFileName; overload;
+
+(* Returns the full path to the MSYS root directory.
+   Usually "C:\DreamSDK\msys\1.0\" on MinGW/MSYS and "C:\DreamSDK\" on
+   MinGW-w64/MSYS2. This version uses the passed HomeDirectory parameter.
+   Note: The trailing path delimiter is already included. *)
+function GetMSysBaseDirectory(HomeDirectory: TFileName): TFileName; overload;
 
 (* Returns the full path of the user binaries, typically on MinGW/MSYS:
    "C:\DreamSDK\msys\1.0\bin\", on MinGW-w64/MSYS2: "C:\DreamSDK\usr\bin\".
@@ -103,6 +112,9 @@ function IsDefinedInstallationBaseDirectoryVariable: Boolean;
 procedure SetBaseInstallationHomeDirectory(const HomeDirectory: TFileName);
 {$ENDIF}
 
+(* Convert a Windows path to an Unix DreamSDK path, e.g.:
+   "C:\DreamSDK\msys\1.0\opt\toolchains\dc" to "/opt/toolchains/dc" on MinGW or
+   "C:\DreamSDK\opt\toolchains\dc" to "/opt/toolchains/dc" on MinGW-w64. *)
 function SystemToDreamSdkPath(const SystemPathName: TFileName): TFileName;
 
 implementation
@@ -186,15 +198,22 @@ begin
   Result := not IsEmpty(GetRawInstallationBaseDirectory);
 end;
 
-procedure DetectFoundationKind;
+function DetectFoundationKind(HomeDirectory: TFileName = ''): TEnvironmentFoundationKind;
 begin
-  FoundationKind := efkUndefined;
-  if DirectoryExists(InstallationBaseDirectory) then
+  Result := efkUndefined;
+
+  if IsEmpty(HomeDirectory) then
+    HomeDirectory := InstallationBaseDirectory
+  else
+    HomeDirectory := ParseInputFileSystemObject(HomeDirectory,
+      pifsobIncludeTrailingPathDelimiter);
+
+  if DirectoryExists(HomeDirectory) then
   begin
-    if FileExists(InstallationBaseDirectory + 'usr\bin\pacman.exe') then
-      FoundationKind := efkMinGW64MSYS2
-    else if DirectoryExists(InstallationBaseDirectory + MSYS_BASE_DIRECTORY) then
-      FoundationKind := efkMinGWMSYS;
+    if FileExists(HomeDirectory + 'usr\bin\pacman.exe') then
+      Result := efkMinGW64MSYS2
+    else if DirectoryExists(HomeDirectory + MSYS_BASE_DIRECTORY) then
+      Result := efkMinGWMSYS;
   end;
 end;
 
@@ -258,7 +277,7 @@ begin
     if DirectoryExists(InstallationBaseDirectory) then
     begin
       // Detect the foundation kind: if we are under MinGW/MSYS or MinGW-w64/MSYS2
-      DetectFoundationKind;
+      FoundationKind := DetectFoundationKind;
 
 {$IFDEF DEBUG}
       DebugLog(Format('  Environment: %s', [
@@ -267,12 +286,7 @@ begin
 {$ENDIF}
 
       // Compute MSYS Base directory (i.e. '/' in MSYS)
-      case FoundationKind of
-        efkMinGWMSYS:
-          MsysBaseDirectory := InstallationBaseDirectory + MSYS_BASE_DIRECTORY;
-        efkMinGW64MSYS2:
-          MsysBaseDirectory := InstallationBaseDirectory;
-      end;
+      MsysBaseDirectory := GetMSysBaseDirectory(InstallationBaseDirectory);
 
 {$IFDEF DEBUG}
       DebugLog('  MsysBaseDirectory: ' + MsysBaseDirectory);
@@ -361,6 +375,19 @@ begin
   Result := MsysBaseDirectory;
 end;
 
+function GetMSysBaseDirectory(HomeDirectory: TFileName): TFileName;
+begin
+  Result := EmptyStr;
+  HomeDirectory := ParseInputFileSystemObject(HomeDirectory,
+    pifsobIncludeTrailingPathDelimiter);
+  case DetectFoundationKind(HomeDirectory) of
+    efkMinGWMSYS:
+      Result := HomeDirectory + MSYS_BASE_DIRECTORY;
+    efkMinGW64MSYS2:
+      Result := HomeDirectory;
+  end;
+end;
+
 function GetConfigurationDirectory: TFileName;
 begin
   RetrieveBaseDirectories;
@@ -369,7 +396,13 @@ end;
 
 function SystemToDreamSdkPath(const SystemPathName: TFileName): TFileName;
 begin
-  Result := StringReplace(SystemPathName, GetMSysBaseDirectory, EmptyStr, []);
+  // Convert the "C:\DreamSDK\msys\1.0\..." path to "/".
+  Result := StringReplace(SystemPathName, GetMSysBaseDirectory, '/', []);
+
+  // Fallback... this should not happen I think
+  Result := StringReplace(SystemPathName, GetBaseInstallationHomeDirectory, '/', []);
+
+  // Convert the rest of the path.
   Result := SystemToUnixPath(Result);
 end;
 
