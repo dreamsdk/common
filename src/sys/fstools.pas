@@ -428,13 +428,69 @@ begin
 end;
 
 function SystemToUnixPath(const SystemPathName: TFileName): TFileName;
+var
+  WorkingPath: string;
+  IsAbsolutePath: Boolean;
+  PrefixPart: string;
+  PathPart: string;
+  i: Integer;
+
 begin
   Result := SystemPathName;
-  if IsInString(DirectorySeparator, SystemPathName) then
+
+  // Check if there are any directory separators to process
+  if not IsInString(DirectorySeparator, SystemPathName) then
+    Exit;
+
+  WorkingPath := SystemPathName;
+  PrefixPart := '';
+  PathPart := WorkingPath;
+
+  // Check for argument prefixes (like -T, -I, -L, etc.)
+  if (Length(WorkingPath) > 1) and (WorkingPath[1] = '-') then
   begin
-    Result := StringReplace(SystemPathName, DirectorySeparator, '/', [rfReplaceAll]);
-    Result := '/' + StringReplace(Result, ':', EmptyStr, [rfReplaceAll]);
+    // Find where the path starts (look for drive letter pattern)
+    for i := 2 to Length(WorkingPath) - 1 do
+    begin
+      if (WorkingPath[i] in ['A'..'Z', 'a'..'z']) and
+         (i < Length(WorkingPath)) and (WorkingPath[i + 1] = ':') then
+      begin
+        PrefixPart := Copy(WorkingPath, 1, i - 1);
+        PathPart := Copy(WorkingPath, i, Length(WorkingPath));
+        Break;
+      end;
+    end;
   end;
+
+  // Determine if the path part is an absolute path
+  // Absolute paths on Windows start with drive letter followed by colon
+  // or UNC paths starting with \\
+  IsAbsolutePath := (Length(PathPart) >= 2) and
+                   (((PathPart[1] in ['A'..'Z', 'a'..'z']) and (PathPart[2] = ':')) or
+                    (LeftStr(PathPart, 2) = '\\'));
+
+  // Replace all directory separators with forward slashes in the path part
+  PathPart := StringReplace(PathPart, DirectorySeparator, '/', [rfReplaceAll]);
+
+  // Handle absolute paths
+  if IsAbsolutePath then
+  begin
+    // For drive letter paths (C:\path), convert to /c/path format
+    if (Length(PathPart) >= 2) and (PathPart[2] = ':') then
+    begin
+      PathPart := '/' + LowerCase(PathPart[1]) + Copy(PathPart, 3, Length(PathPart));
+    end
+    // For UNC paths (\\server\share), convert to //server/share
+    else if LeftStr(PathPart, 2) = '//' then
+    begin
+      // UNC paths are already in correct format after separator replacement
+      // Just ensure it starts with // (which it should)
+    end;
+  end;
+  // Relative paths remain unchanged (no leading slash added)
+
+  // Combine prefix and converted path
+  Result := PrefixPart + PathPart;
 end;
 
 function GetWorkingPath: TFileName;
@@ -499,6 +555,10 @@ begin
 {$IFDEF DEBUG}
   WriteLn('SetDirectoryRights: Not implemented');
 {$ENDIF}
+{$ENDIF}
+
+{$IFDEF DEBUG}
+  DebugLog('SetDirectoryRights: Result = ' + BoolToStr(Result, True));
 {$ENDIF}
 end;
 
