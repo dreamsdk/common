@@ -683,6 +683,7 @@ var
   Count: Integer;
 
   SourcePath,
+  CleanTargetPath,
   OldObjectName,
   NewObjectName: TFileName;
 
@@ -693,14 +694,22 @@ var
 begin
   Result := False;
 
-  IsTargetFile := FileExists(TargetFileOrDirectory);
-  IsTargetDirectory := DirectoryExists(TargetFileOrDirectory);
+  // Cleanup input param by removing trailing slashes
+  CleanTargetPath := ExcludeTrailingPathDelimiter(TargetFileOrDirectory);
+
+  // If we have an empty string or just a drive reference we stop
+  if (CleanTargetPath = '') or (Length(CleanTargetPath) <= 3) then
+    Exit;
+
+  IsTargetFile := FileExists(CleanTargetPath);
+  IsTargetDirectory := DirectoryExists(CleanTargetPath);
 
 {$IFDEF DEBUG}
-  DebugLog(Format('RenameFileOrDirectoryAsBackup [IsFile: %s, IsDir: %s]: "%s"', [
+  DebugLog(Format('RenameFileOrDirectoryAsBackup [IsFile: %s, IsDir: %s]: "%s" (cleaned: "%s")', [
     BoolToStr(IsTargetFile, True),
     BoolToStr(IsTargetDirectory, True),
-    TargetFileOrDirectory
+    TargetFileOrDirectory,
+    CleanTargetPath
   ]));
 {$ENDIF}
 
@@ -708,8 +717,18 @@ begin
     Exit;
 
   Count := 0;
-  OldObjectName := ExtractFileName(TargetFileOrDirectory);
-  SourcePath := IncludeTrailingPathDelimiter(ExtractFilePath(TargetFileOrDirectory));
+  OldObjectName := ExtractFileName(CleanTargetPath);
+
+  // Additional check: if ExtractFileName returns an empty string, we have an issue
+  if OldObjectName = '' then
+  begin
+{$IFDEF DEBUG}
+    DebugLog(Format('ExtractFileName returned empty string for: "%s"', [CleanTargetPath]));
+{$ENDIF}
+    Exit;
+  end;
+
+  SourcePath := IncludeTrailingPathDelimiter(ExtractFilePath(CleanTargetPath));
 
   // Find the new name
   repeat
@@ -733,7 +752,7 @@ begin
     // Fail-safe
     if (Count > MAX_TRIES) then
       raise ERenameFileOrDirectoryAsBackupException.CreateFmt('Unable to rename the object: "%s"', [
-        TargetFileOrDirectory]);
+        CleanTargetPath]);
 
     // Next try (if needed)
     Inc(Count);
@@ -742,7 +761,7 @@ begin
 {$IFDEF DEBUG}
     DebugLog('  RenameFileOrDirectoryAsBackup defined the new name:');
     DebugLog(Format('    Old: "%s"', [
-      TargetFileOrDirectory
+      CleanTargetPath
     ]));
     DebugLog(Format('    New: "%s"', [
       NewTargetPath
@@ -750,7 +769,7 @@ begin
 {$ENDIF}
 
   // The new name has been found, in NewObjectName (full path in NewTargetPath)
-  Result := RenameFile(TargetFileOrDirectory, NewTargetPath);
+  Result := RenameFile(CleanTargetPath, NewTargetPath);
 end;
 
 { TFileListItem }
