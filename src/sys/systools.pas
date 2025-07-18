@@ -86,6 +86,7 @@ type
 
   (* Used for LogMessage functions, helpers for debugging / using DbgView *)
   TLogMessageContext = record
+    Hash: string;
     FileName: string;
     ClassName: string;
     MethodName: string;
@@ -1018,6 +1019,7 @@ begin
   Result := Context.MethodName;
   if not IsEmpty(Context.ClassName) then
     Result := Concat(Context.ClassName, '.', Context.MethodName);
+  Result := Concat('[', Context.Hash, '] ', Result);
 end;
 
 procedure DoLogMessage(const Message: string);
@@ -1031,6 +1033,7 @@ end;
 function LogMessageEnter(const SourceFileName: TFileName;
   const RoutineName: string; const ClassName: string = ''): TLogMessageContext;
 begin
+  Result.Hash := LowerCase(IntToHex(Random($FFFFFFFF), 8));
   Result.FileName := SourceFileName;
   Result.ClassName := ClassName;
   Result.MethodName := RoutineName;
