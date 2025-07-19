@@ -246,18 +246,22 @@ begin
 {$ENDIF}
 
     repeat
+      BytesRead := 0;
       FillByte(Buffer, BUF_SIZE, $00);
-      BytesRead := fProcess.Output.Read(Buffer, BUF_SIZE);
-{$IF DEFINED(DEBUG) AND DEFINED(DUMP_PROCESS_PIPE)}
-      if BytesRead > 0 then
+      if Assigned(fProcess.Output) then
       begin
-        DumpCharArrayToFile(Buffer, Format('dump_%d_%d.bin', [fProcess.ProcessID, i]));
-        Inc(i);
-      end;
+        BytesRead := fProcess.Output.Read(Buffer, BUF_SIZE);
+{$IF DEFINED(DEBUG) AND DEFINED(DUMP_PROCESS_PIPE)}
+        if BytesRead > 0 then
+        begin
+          DumpCharArrayToFile(Buffer, Format('dump_%d_%d.bin', [fProcess.ProcessID, i]));
+          Inc(i);
+        end;
 {$ENDIF}
-      SetString(NewLine, PChar(@Buffer[0]), BytesRead);
-      if IsValidNewLine(NewLine) then
-        SendNewLine(NewLine, False);
+        SetString(NewLine, PChar(@Buffer[0]), BytesRead);
+        if IsValidNewLine(NewLine) then
+          SendNewLine(NewLine, False);
+      end;
     until (BytesRead = 0);
 
     if IsValidNewLine(fPartialLine) then
