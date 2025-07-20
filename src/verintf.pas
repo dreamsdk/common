@@ -81,8 +81,9 @@ begin
 {$IFDEF DEBUG}
   WriteLn('SetRegisteredVersion: ', FileName, ': ', Version);
 {$ENDIF}
-  VersionInformationRegistry.WriteString('Versions',
-    GetFileHash(FileName), Version);
+  if IsVersionValid(Version) then
+    VersionInformationRegistry.WriteString('Versions',
+      GetFileHash(FileName), Version);
 end;
 
 function IsGetModuleVersionCommand: Boolean;
