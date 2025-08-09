@@ -16,6 +16,9 @@ type
     ProductVersion: string;
   end;
 
+  TRetrieveVersionFlag = (rvfRegister, rvfUseShellRunner);
+  TRetrieveVersionFlags = set of TRetrieveVersionFlag;
+
 const
   INVALID_VERSION = '(##INVALID##)';
 
@@ -28,12 +31,11 @@ function IsVersionValid(const Version: string): Boolean;
 function LoadModuleVersion(const FileName: TFileName; const ProcessId: Integer): TModuleVersion;
 procedure SaveModuleVersion; overload;
 procedure SaveModuleVersion(const FileName: TFileName; const ProcessId: Integer); overload;
-function RetrieveVersion(Executable, CommandLine: string; EnableRegister: Boolean): string; overload;
+function RetrieveVersion(Executable, CommandLine: string;
+  Flags: TRetrieveVersionFlags): string; overload;
 function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string): string; overload;
 function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string;
-  EnableRegister: Boolean): string; overload;
-function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string;
-  EnableRegister, UseShellRunner: Boolean): string; overload;
+  Flags: TRetrieveVersionFlags): string; overload;
 function RetrieveVersionKallisti(const KallistiLibraryFileName: TFileName;
   EnableRegister: Boolean): string;
 function RetrieveVersionWithFind(FindTargetFileName: TFileName;
@@ -182,31 +184,22 @@ begin
   Result := not IsEmpty(Version) and not IsInString(INVALID_VERSION, Version);
 end;
 
-function RetrieveVersion(Executable, CommandLine, StartTag,
-  EndTag: string): string;
+function RetrieveVersion(Executable, CommandLine: string;
+  Flags: TRetrieveVersionFlags): string;
 begin
-  Result := RetrieveVersion(Executable, CommandLine, StartTag, EndTag,
-    True, True);
+  Result := RetrieveVersion(Executable, CommandLine, EmptyStr, EmptyStr, Flags);
+end;
+
+function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string): string;
+begin
+  Result := RetrieveVersion(Executable, CommandLine, StartTag, EndTag, []);
 end;
 
 function RetrieveVersion(Executable, CommandLine, StartTag, EndTag: string;
-  EnableRegister: Boolean): string; overload;
-begin
-  Result := RetrieveVersion(Executable, CommandLine, StartTag, EndTag,
-    EnableRegister, True);
-end;
-
-function RetrieveVersion(Executable, CommandLine: string;
-  EnableRegister: Boolean): string; overload;
-begin
-  Result := RetrieveVersion(Executable, CommandLine, EmptyStr, EmptyStr,
-    EnableRegister, True);
-end;
-
-function RetrieveVersion(Executable, CommandLine, StartTag,
-  EndTag: string; EnableRegister, UseShellRunner: Boolean): string;
+  Flags: TRetrieveVersionFlags): string;
 var
-  Buffer: string;
+  Buffer,
+  UnixPathExecutable: string;
   UseRegister: Boolean;
   ExecutableFileName: TFileName;
   FileLocations: TStringList;
@@ -216,7 +209,7 @@ begin
   Buffer := EmptyStr;
   UseRegister := False;
 
-  if EnableRegister then
+  if rvfRegister in Flags then
   begin
     // By default, executable is a physical filename
     ExecutableFileName := Executable;
@@ -244,11 +237,16 @@ begin
   if IsEmpty(Result) then
   begin
     try
-      if UseShellRunner and ShellRunner.Healthy then
+      if (rvfUseShellRunner in Flags) and ShellRunner.Healthy then
       begin
         // Execute the command from the Shell (bash)
+        UnixPathExecutable := SystemToUnixPath(Executable);
         ShellRunner.StartShellCommand(
-          Format('%s %s', [SystemToUnixPath(Executable), CommandLine]),
+          Format('which %s > /dev/null 2>&1 && %s %s', [
+            UnixPathExecutable,
+            UnixPathExecutable,
+            CommandLine
+          ]),
           Buffer
         );
       end
@@ -391,13 +389,13 @@ begin
       // Windows XP
       CommandLine := Format('/c type "%s" | "%s" --text "%s" ', [FindTargetFileName,
         GrepFileName, StartTag]);
-      Result := RetrieveVersion(ComSpecFileName, CommandLine, StartTag, EndTag, False, False);
+      Result := RetrieveVersion(ComSpecFileName, CommandLine, StartTag, EndTag);
     end
     else
     begin
       // Windows Vista+
       CommandLine := Format('"%s" %s', [StartTag, FindTargetFileName]);
-      Result := RetrieveVersion('find', CommandLine, StartTag, EndTag, False, False);
+      Result := RetrieveVersion('find', CommandLine, StartTag, EndTag);
     end;
 
     if EnableRegister and (not IsEmpty(Result)) then
