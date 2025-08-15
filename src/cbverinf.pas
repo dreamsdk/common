@@ -18,6 +18,9 @@ type
     cbv2503x64      // C::B 25.03 (x64)
   );
 
+const
+  CODEBLOCKS_MAX_SUPPORTED_VERSION = 5;
+
 function GetCodeBlocksVersion(InstallationDirectory: TFileName;
   const ExpandInstallationDirectory: Boolean = True): TCodeBlocksVersion;
 
@@ -47,7 +50,7 @@ type
 
 const
   CODEBLOCKS_ORIGINAL_CHECKER_FILE = 'codeblocks.dll';
-  CODEBLOCKS_SUPPORTED_HASHES: array [0..4] of TCodeBlocksSupportedVersion = (
+  CODEBLOCKS_SUPPORTED_HASHES: array [0..CODEBLOCKS_MAX_SUPPORTED_VERSION - 1] of TCodeBlocksSupportedVersion = (
     (
       MD5HashString: '1575beba73a3ea34465fad9f55fd098a';
       Version: cbv1712
