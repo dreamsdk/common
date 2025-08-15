@@ -307,6 +307,7 @@ uses
   RefBase,
   StrTools,
   Version,
+  CBVerInf,
   CBTools,
   RunTools;
 
