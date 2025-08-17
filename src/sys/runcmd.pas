@@ -102,7 +102,9 @@ end;
 
 function TRunCommand.GetExitCode: Integer;
 begin
-  Result := fProcess.ExitCode;
+  Result := -1;
+  if Assigned(fProcess) then
+    Result := fProcess.ExitCode;
 end;
 
 function TRunCommand.GetTargetProcessId: LongWord;
