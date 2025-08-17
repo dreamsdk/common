@@ -397,10 +397,8 @@ end;
 function SystemToDreamSdkPath(const SystemPathName: TFileName): TFileName;
 begin
   // Convert the "C:\DreamSDK\msys\1.0\..." path to "/".
-  Result := StringReplace(SystemPathName, GetMSysBaseDirectory, '/', []);
-
-  // Fallback... this should not happen I think
-  Result := StringReplace(SystemPathName, GetBaseInstallationHomeDirectory, '/', []);
+  Result := StringReplace(SystemPathName, GetMSysBaseDirectory,
+    DirectorySeparator, []);
 
   // Convert the rest of the path.
   Result := SystemToUnixPath(Result);
