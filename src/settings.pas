@@ -254,6 +254,8 @@ type
   { TDreamcastSoftwareDevelopmentSettings }
   TDreamcastSoftwareDevelopmentSettings = class(TObject)
   private
+    fAutoCheckForUpdates: Boolean;
+    fAutoCheckForUpdatesLastCheckDate: TDateTime;
     fConfigurationFileName: TFileName;
     fInstallPath: TFileName;
     fProgressWindowAutoClose: Boolean;
@@ -272,6 +274,10 @@ type
     function LoadConfiguration: Boolean;
     procedure SaveConfiguration;
 
+    property AutoCheckForUpdates: Boolean read fAutoCheckForUpdates
+      write fAutoCheckForUpdates;
+    property AutoCheckForUpdatesLastCheckDate: TDateTime read
+      fAutoCheckForUpdatesLastCheckDate write fAutoCheckForUpdatesLastCheckDate;
     property DreamcastTool: TDreamcastSoftwareDevelopmentSettingsDreamcastTool read
       fDreamcastTool;
     property FileName: TFileName read GetConfigurationFileName;
@@ -1295,6 +1301,17 @@ begin
       fInstallPath := GetBaseInstallationHomeDirectory;
     end;
 
+    fAutoCheckForUpdates := IniFile.ReadBool(
+      CONFIG_DREAMSDK_SECTION_SETTINGS,
+      'AutoCheckForUpdates',
+      True
+    );
+    fAutoCheckForUpdatesLastCheckDate := IniFile.ReadDateTime(
+      CONFIG_DREAMSDK_SECTION_SETTINGS,
+      'AutoCheckForUpdatesLastCheckDate',
+      MinDateTime
+    );
+
     fUseMintty := IniFile.ReadBool(
       CONFIG_DREAMSDK_SECTION_SETTINGS,
       'UseMinTTY',
@@ -1342,6 +1359,16 @@ begin
       CONFIG_DREAMSDK_SECTION_SETTINGS,
       'InstallPath',
       fInstallPath
+    );
+    IniFile.WriteBool(
+      CONFIG_DREAMSDK_SECTION_SETTINGS,
+      'AutoCheckForUpdates',
+      fAutoCheckForUpdates
+    );
+    IniFile.WriteDateTime(
+      CONFIG_DREAMSDK_SECTION_SETTINGS,
+      'AutoCheckForUpdatesLastCheckDate',
+      fAutoCheckForUpdatesLastCheckDate
     );
     IniFile.WriteBool(
       CONFIG_DREAMSDK_SECTION_SETTINGS,
