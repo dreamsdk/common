@@ -109,12 +109,10 @@ type
     fKallistiURL: string;
     fDreamcastToolSerialURL: string;
     fDreamcastToolInternetProtocolURL: string;
-    fRubyURL: string;
     function GetDreamcastToolInternetProtocolURL: string;
     function GetDreamcastToolSerialURL: string;
     function GetKallistiPortsURL: string;
     function GetKallistiURL: string;
-    function GetRubyURL: string;
   protected
     function GetURL(const FieldValue, DefaultFieldValue: string): string;
   public
@@ -126,7 +124,6 @@ type
       read GetDreamcastToolSerialURL write fDreamcastToolSerialURL;
     property DreamcastToolInternetProtocolURL: string
       read GetDreamcastToolInternetProtocolURL write fDreamcastToolInternetProtocolURL;
-    property RubyURL: string read GetRubyURL write fRubyURL;
   end;
 
   { TDreamcastSoftwareDevelopmentSettingsCodeBlocks }
@@ -602,11 +599,6 @@ end;
 function TDreamcastSoftwareDevelopmentSettingsRepositories.GetKallistiURL: string;
 begin
   Result := GetURL(fKallistiURL, GetDefaultUrlKallisti);
-end;
-
-function TDreamcastSoftwareDevelopmentSettingsRepositories.GetRubyURL: string;
-begin
-  Result := GetURL(fRubyURL, GetDefaultUrlRuby);
 end;
 
 function TDreamcastSoftwareDevelopmentSettingsRepositories.GetURL(
