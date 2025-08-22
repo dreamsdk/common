@@ -344,7 +344,7 @@ end;
 
 function IsWindowsVistaOrGreater: Boolean;
 begin
-  Result := Win32MajorVersion >= 6;
+  Result := (Win32Platform = VER_PLATFORM_WIN32_NT) and (Win32MajorVersion >= 6);
 end;
 
 // See: https://wiki.freepascal.org/Detect_Windows_x32-x64_example

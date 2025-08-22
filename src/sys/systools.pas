@@ -41,7 +41,6 @@ interface
 uses
 {$IFDEF WINDOWS}
   Windows,
-  JwaTlHelp32,
 {$ENDIF}
   Classes,
   SysUtils,
@@ -211,6 +210,8 @@ uses
 {$IFDEF WINDOWS}
   ActiveX,
   ComObj,
+  Registry,
+  JwaWindows,
 {$ENDIF}
 {$IFDEF GUI}
   Interfaces,
@@ -261,6 +262,62 @@ begin
   end;
 
   Result := FileExists(FileName);
+end;
+
+// =============================================================================
+// System Paths functions
+// =============================================================================
+
+function GetFileLocationsInSystemPath(const FileName: TFileName;
+  Output: TStringList): Boolean;
+const
+  PATHEXT_ENV_VAR = 'PATHEXT';
+  PATH_ENV_VAR = 'PATH';
+  PATH_SEPARATOR = ';';
+
+var
+  FullFileName,
+  FullFileNameWithExtension: TFileName;
+  Buffer,
+  Extensions: TStringList;
+  i, j: Integer;
+
+begin
+  Result := False;
+  if Assigned(Output) then
+  begin
+    Buffer := TStringList.Create;
+    Extensions := TStringList.Create;
+    try
+      StringToStringList(SysUtils.GetEnvironmentVariable(PATH_ENV_VAR),
+        PATH_SEPARATOR, Buffer);
+      StringToStringList(SysUtils.GetEnvironmentVariable(PATHEXT_ENV_VAR),
+        PATH_SEPARATOR, Extensions);
+
+      for i := 0 to Buffer.Count - 1 do
+      begin
+        FullFileName := IncludeTrailingPathDelimiter(Buffer[i]) + FileName;
+
+        if FileExists(FullFileName) then
+          Output.Add(FullFileName)
+        else
+          for j := 0 to Extensions.Count - 1 do
+          begin
+            FullFileNameWithExtension := FullFileName + LowerCase(Extensions[j]);
+            if FileExists(FullFileNameWithExtension) then
+            begin
+              Output.Add(FullFileNameWithExtension);
+              Break;
+            end;
+          end;
+      end;
+
+      Result := (Output.Count > 0);
+    finally
+      Extensions.Free;
+      Buffer.Free;
+    end;
+  end;
 end;
 
 function GetUsersRootDirectory: TFileName;
@@ -334,123 +391,9 @@ begin
       .CreateFmt('GetUsersDirectory returned an invalid directory: "%s"', [Result]);
 end;
 
-function GetUserList(out UsersList: TWindowsUserAccountInformationArray): Boolean;
-type
-  TAppDataKind = (
-    adkRoaming,
-    adkLocal
-  );
-
-var
-  i: Integer;
-  UserAccounts,
-  UserProfileInfo: TWindowsManagementInstrumentationQueryResult;
-  Buffer,
-  LocalAppDataTemplate,
-  RoamingAppDataTemplate: string;
-  CurrentUser: TWindowsUserAccountInformation;
-
-  function GetAppDataTemplate(const AppDataKind: TAppDataKind): TFileName;
-  var
-    AppDataTemplate,
-    CurrentUserProfilePath: TFileName;
-    AppDataVariable: string;
-
-  begin
-    AppDataVariable := '%AppData%';
-    if AppDataKind = adkLocal then
-      AppDataVariable := '%LocalAppData%';
-
-    AppDataTemplate := IncludeTrailingPathDelimiter(
-      ParseInputFileSystemObject(AppDataVariable));
-    CurrentUserProfilePath := IncludeTrailingPathDelimiter(
-      SysUtils.GetEnvironmentVariable('USERPROFILE'));
-
-    // Returns something like: "%sAppData\Roaming" if adkRoaming is asked
-    // This is not hardcoded as we want to get this from %AppData% variables
-    // %s will be replaced by LocalPath for the user. The "\" is included in "%s".
-    Result := '%s' + Right(CurrentUserProfilePath, AppDataTemplate);
-  end;
-
-begin
-  Result := False;
-  UsersList := Default(TWindowsUserAccountInformationArray);
-
-  LocalAppDataTemplate := GetAppDataTemplate(adkLocal);
-  RoamingAppDataTemplate := GetAppDataTemplate(adkRoaming);
-
-  UserAccounts := QueryWindowsManagementInstrumentation('Win32_UserAccount',
-    ['SID', 'Name', 'FullName'], 'LocalAccount = TRUE and Disabled = FALSE and SIDType = 1 and not Name like ''%$''');
-
-  SetLength(UsersList, Length(UserAccounts));
-
-  for i := Low(UserAccounts) to High(UserAccounts) do
-  begin
-    CurrentUser := Default(TWindowsUserAccountInformation);
-
-    // Grab SID
-    if GetWindowsManagementInstrumentationSingleValueByPropertyName(UserAccounts, 'SID', i, Buffer) then
-    begin
-      CurrentUser.SID := Buffer;
-
-      // Grab the folder name of the current profile
-      UserProfileInfo := QueryWindowsManagementInstrumentation('Win32_UserProfile', ['LocalPath'],
-        Format('SID = ''%s''', [Buffer]));
-      if GetWindowsManagementInstrumentationSingleValueByPropertyName(UserProfileInfo, 'LocalPath', 0, Buffer) then
-        CurrentUser.ProfilePath := IncludeTrailingPathDelimiter(Buffer);
-    end;
-
-    // Grab UserName
-    if GetWindowsManagementInstrumentationSingleValueByPropertyName(UserAccounts, 'Name', i, Buffer) then
-      CurrentUser.UserName := Buffer;
-
-    // Grab FullName
-    if GetWindowsManagementInstrumentationSingleValueByPropertyName(UserAccounts, 'FullName', i, Buffer) then
-      CurrentUser.FullName := Buffer;
-
-    // Grab Local App Data
-    CurrentUser.LocalAppDataPath := IncludeTrailingPathDelimiter(
-      Format(LocalAppDataTemplate, [CurrentUser.ProfilePath]));
-
-    // Grab Roaming App Data
-    CurrentUser.RoamingAppDataPath := IncludeTrailingPathDelimiter(
-      Format(RoamingAppDataTemplate, [CurrentUser.ProfilePath]));
-
-    CurrentUser.FriendlyName := CurrentUser.UserName;
-    if not IsEmpty(CurrentUser.FullName) then
-      CurrentUser.FriendlyName := Format('%s (%s)', [CurrentUser.FullName, CurrentUser.UserName]);
-
-    // Adding item to the array
-    UsersList[i] := CurrentUser;
-  end;
-
-{$IFDEF DEBUG}
-  DebugLog('GetUserList:');
-  for i := Low(UsersList) to High(UsersList) do
-  begin
-    DebugLog(Format('  User #%d:', [i]));
-    DebugLog(
-      Format('   SID: "%s"', [UsersList[i].SID]) + sLineBreak +
-      Format('   UserName: "%s"', [UsersList[i].UserName]) + sLineBreak +
-      Format('   FullName: "%s"', [UsersList[i].FullName]) + sLineBreak +
-      Format('   ProfilePath: "%s"', [UsersList[i].ProfilePath]) + sLineBreak +
-      Format('   LocalAppDataPath: "%s"', [UsersList[i].LocalAppDataPath]) + sLineBreak +
-      Format('   RoamingAppDataPath: "%s"', [UsersList[i].RoamingAppDataPath])
-    );
-  end;
-{$ENDIF}
-
-  Result := Length(UsersList) > 0;
-end;
-
-function KillProcessByName(const FileName: TFileName): Boolean;
-begin
-  Result := False;
-  if FileExists(FileName) then
-    Result := RunSingleCommand(Format('taskkill /im "%s" /f', [
-      ExtractFileName(FileName)
-    ]));
-end;
+// =============================================================================
+// SID functions
+// =============================================================================
 
 {$IFDEF Windows}
 
@@ -458,7 +401,7 @@ end;
 // See: https://www.developpez.net/forums/d1736505/environnements-developpement/delphi/api-com-sdks/probleme-getnamedsecurityinfo-sous-tokyo-10-2-a/
 function ConvertSidToString(RequestSID : PSID): string;
 
-  function ConvertSidToStringSid(RequestSID: PSID): string;
+  function _ConvertSidToStringSid(RequestSID: PSID): string;
   type
     TAdvApiConvertSidToStringSidA = function (Sid: PSID; var StringSid: LPSTR): BOOL; stdcall;
 
@@ -484,14 +427,14 @@ function ConvertSidToString(RequestSID : PSID): string;
         SidStringResult := Default(PAnsiChar);
         if AdvApiConvertStringSidToSid(RequestSID, SidStringResult) then
           Result := Format('[%s]', [SidStringResult]);
-        FreeSID(RequestSID);
+        FreeSid(RequestSID);
       end;
     finally
       FreeLibrary(LibraryHandle);
     end;
   end;
 
-  function LegacyConvertSidToStringSid(RequestSID: PSID): string;
+  function _ConvertSidToStringSidLegacy(RequestSID: PSID): string;
   const
     SID_REVISION  = 1;
 
@@ -521,9 +464,39 @@ begin
   if IsValidSid(RequestSID) then
   begin
     if (Win32Platform = VER_PLATFORM_WIN32_NT) and (Win32MajorVersion >= 5) then
-      Result := ConvertSidToStringSid(RequestSID) // XP and newer
+      Result := _ConvertSidToStringSid(RequestSID) // XP and newer
     else
-      Result := LegacyConvertSidToStringSid(RequestSID); // older Windows
+      Result := _ConvertSidToStringSidLegacy(RequestSID); // older Windows
+  end;
+end;
+
+function GetSidFromUser(const UserName: string; out Sid: PSID): Boolean;
+var
+  SidSize, DomainSize: DWORD;
+  Domain: array[0..255] of Char;
+  Use: SID_NAME_USE;
+
+begin
+  Result := False;
+  Sid := nil;
+  Use := Default(SID_NAME_USE);
+  SidSize := 0;
+  DomainSize := SizeOf(Domain);
+
+  if LookupAccountName(nil, PChar(UserName), nil, SidSize, Domain, DomainSize,
+    Use) and (SidSize > 0) then
+  begin
+    GetMem(Sid, SidSize);
+    DomainSize := SizeOf(Domain);
+
+    Result := LookupAccountName(nil, PChar(UserName), Sid, SidSize, Domain,
+      DomainSize, Use);
+
+    if not Result then
+    begin
+      FreeMem(Sid);
+      Sid := nil;
+    end;
   end;
 end;
 
@@ -558,12 +531,12 @@ end;
 
 function CreateEveryoneSid: PSID;
 const
-  SECURITY_WORLD_SID_AUTHORITY: SID_IDENTIFIER_AUTHORITY = (
+  SECURITY_WORLD_SID_AUTHORITY: Windows.SID_IDENTIFIER_AUTHORITY = (
     Value: (0, 0, 0, 0, 0, 1)
   );
 
 var
-  IdentifierAuthority: SID_IDENTIFIER_AUTHORITY;
+  IdentifierAuthority: Windows.SID_IDENTIFIER_AUTHORITY;
   EveryoneSID: PSID;
   fSuccess: Boolean;
 
@@ -573,7 +546,7 @@ begin
   IdentifierAuthority := SECURITY_WORLD_SID_AUTHORITY;
 
   EveryoneSID := nil;
-  fSuccess := AllocateAndInitializeSid(IdentifierAuthority, 1,
+  fSuccess := Windows.AllocateAndInitializeSid(IdentifierAuthority, 1,
     SECURITY_WORLD_RID, 0, 0, 0, 0, 0, 0, 0, EveryoneSID);
 
   if fSuccess then
@@ -604,34 +577,326 @@ begin
 {$ENDIF}
 end;
 
-function IsProcessRunning(FileName: TFileName): Boolean;
-{$IFDEF Windows}
+// =============================================================================
+// Get User List on Windows
+// =============================================================================
+
+function GetUserList(out UsersList: TWindowsUserAccountInformationArray): Boolean;
+type
+  TAppDataKind = (
+    adkRoaming,
+    adkLocal
+  );
+
 var
-  ContinueLoop: Boolean;
-  FSnapshotHandle: THandle;
-  FProcessEntry32: TProcessEntry32;
+  LocalAppDataTemplate,
+  RoamingAppDataTemplate: string;
+{$IFDEF DEBUG}
+  i: Integer;
+{$ENDIF}
+
+  function _GetAppDataTemplate(const AppDataKind: TAppDataKind): TFileName;
+  var
+    AppDataTemplate,
+    CurrentUserProfilePath: TFileName;
+    AppDataVariable: string;
+
+  begin
+    AppDataVariable := '%AppData%';
+    if IsWindowsVistaOrGreater and (AppDataKind = adkLocal) then
+      AppDataVariable := '%LocalAppData%';
+
+    AppDataTemplate := IncludeTrailingPathDelimiter(
+      ParseInputFileSystemObject(AppDataVariable));
+    CurrentUserProfilePath := IncludeTrailingPathDelimiter(
+      SysUtils.GetEnvironmentVariable('USERPROFILE'));
+
+    // Returns something like: "%sAppData\Roaming" if adkRoaming is asked
+    // This is not hardcoded as we want to get this from %AppData% variables
+    // %s will be replaced by LocalPath for the user. The "\" is included in "%s".
+    Result := '%s' + Right(CurrentUserProfilePath, AppDataTemplate);
+  end;
+
+  function _GetAppDataDirectory(AppDataTemplate: string; ProfilePath: TFileName): TFileName;
+  begin
+    ProfilePath := IncludeTrailingPathDelimiter(ProfilePath);
+    Result := IncludeTrailingPathDelimiter(Format(AppDataTemplate, [
+      ProfilePath
+    ]));
+  end;
+
+  function _UserGenerateFriendlyName(UserName, FullName: string): string;
+  begin
+    Result := UserName;
+    if not IsEmpty(FullName) then
+      Result := Format('%s (%s)', [FullName, UserName]);
+  end;
+
+  function _GetUserListModern(LocalAppDataTemplate, RoamingAppDataTemplate: string;
+    out UsersList: TWindowsUserAccountInformationArray): Boolean;
+  var
+    i: Integer;
+    UserAccounts,
+    UserProfileInfo: TWindowsManagementInstrumentationQueryResult;
+    Buffer: string;
+    CurrentUser: TWindowsUserAccountInformation;
+
+  begin
+    Result := False;
+    UsersList := Default(TWindowsUserAccountInformationArray);
+
+    UserAccounts := QueryWindowsManagementInstrumentation('Win32_UserAccount',
+      ['SID', 'Name', 'FullName'], 'LocalAccount = TRUE and Disabled = FALSE and SIDType = 1 and not Name like ''%$''');
+
+    SetLength(UsersList, Length(UserAccounts));
+
+    for i := Low(UserAccounts) to High(UserAccounts) do
+    begin
+      CurrentUser := Default(TWindowsUserAccountInformation);
+
+      // Grab SID
+      if GetWindowsManagementInstrumentationSingleValueByPropertyName(UserAccounts, 'SID', i, Buffer) then
+      begin
+        CurrentUser.SID := Buffer;
+
+        // Grab the folder name of the current profile
+        UserProfileInfo := QueryWindowsManagementInstrumentation('Win32_UserProfile', ['LocalPath'],
+          Format('SID = ''%s''', [Buffer]));
+        if GetWindowsManagementInstrumentationSingleValueByPropertyName(UserProfileInfo, 'LocalPath', 0, Buffer) then
+          CurrentUser.ProfilePath := IncludeTrailingPathDelimiter(Buffer);
+      end;
+
+      // Grab UserName
+      if GetWindowsManagementInstrumentationSingleValueByPropertyName(UserAccounts, 'Name', i, Buffer) then
+        CurrentUser.UserName := Buffer;
+
+      // Grab FullName
+      if GetWindowsManagementInstrumentationSingleValueByPropertyName(UserAccounts, 'FullName', i, Buffer) then
+        CurrentUser.FullName := Buffer;
+
+      // Grab Local App Data
+      CurrentUser.LocalAppDataPath := _GetAppDataDirectory(
+        LocalAppDataTemplate, CurrentUser.ProfilePath);
+
+      // Grab Roaming App Data
+      CurrentUser.RoamingAppDataPath := _GetAppDataDirectory(
+        RoamingAppDataTemplate, CurrentUser.ProfilePath);
+
+      // Friendly Name
+      CurrentUser.FriendlyName := _UserGenerateFriendlyName(
+        CurrentUser.UserName,
+        CurrentUser.FullName
+      );
+
+      // Adding item to the array
+      UsersList[i] := CurrentUser;
+    end;
+
+    Result := Length(UsersList) > 0;
+  end;
+
+  function _GetUserListLegacy(LocalAppDataTemplate, RoamingAppDataTemplate: string;
+    out UsersList: TWindowsUserAccountInformationArray): Boolean;
+  var
+    i,
+    UserCount: Integer;
+    UserInfo: PByte;
+    pUI3: PUserInfo3;
+    EntriesRead,
+    TotalEntries: LongWord;
+    pEntriesRead,
+    pTotalEntries: LPDWORD;
+    SidString,
+    UserName: string;
+    CurrentUser: TWindowsUserAccountInformation;
+    UserSID: PSID;
+
+    function __GetUserProfilePathFromRegistry(const UserName: string): TFileName;
+    var
+      Registry: TRegistry;
+      ProfileList: TStringList;
+      i: Integer;
+      SidKey: string;
+      UserSID: PSID;
+
+    begin
+      Result := EmptyStr;
+
+      Registry := TRegistry.Create(KEY_READ);
+      ProfileList := TStringList.Create;
+      try
+        Registry.RootKey := HKEY_LOCAL_MACHINE;
+        if Registry.OpenKey('SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList', False) then
+        begin
+          Registry.GetKeyNames(ProfileList);
+
+          // Get the user SID
+          if GetSidFromUser(UserName, UserSID) then
+          begin
+            SidKey := ConvertSidToString(UserSID);
+            if not IsEmpty(SidKey) then
+            begin
+              // Search for the key matching the SID
+              for i := 0 to ProfileList.Count - 1 do
+                if (ProfileList[i] = SidKey) and Registry.OpenKey(
+                  'SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\' + SidKey, False) then
+                begin
+                  if Registry.ValueExists('ProfileImagePath') then
+                    Result := IncludeTrailingPathDelimiter(Registry.ReadString('ProfileImagePath'));
+                  Break;
+                end;
+            end;
+            FreeMem(UserSID);
+          end;
+        end;
+      finally
+        ProfileList.Free;
+        Registry.Free;
+      end;
+    end;
+
+    function __GetUserProfilePath(const UserName: string): TFileName;
+    begin
+      Result := EmptyStr;
+
+      // Method 1: Use registry (more reliable)
+      Result := __GetUserProfilePathFromRegistry(UserName);
+
+      // Method 2: Fallback to standard Windows XP path if registry fails
+      if not DirectoryExists(Result) then
+      begin
+        Result := ConcatPaths([GetUsersRootDirectory, UserName]);
+        if not DirectoryExists(Result) then
+          Result := EmptyStr;
+      end;
+    end;
+
+  begin
+    Result := False;
+    UsersList := Default(TWindowsUserAccountInformationArray);
+    UserInfo := Default(PByte);
+    UserCount := 0;
+
+    // Initialize pointers
+    pEntriesRead := @EntriesRead;
+    pTotalEntries := @TotalEntries;
+
+    // Use NetUserEnum instead of WMI for Windows XP compatibility
+    if NetUserEnum(nil, 3, FILTER_NORMAL_ACCOUNT, UserInfo, MAX_PREFERRED_LENGTH,
+      pEntriesRead, pTotalEntries, nil) = NERR_Success then
+    begin
+      // Cast LPBYTE to PUserInfo3
+      PUI3 := PUserInfo3(UserInfo);
+
+      // Allocate array with maximum possible size
+      SetLength(UsersList, EntriesRead);
+
+      for i := 0 to EntriesRead - 1 do
+      begin
+        UserName := string(PUI3[i].usri3_name);
+
+        // Filter system accounts (ending with $) and disabled accounts
+        // Equivalent to WMI condition: LocalAccount = TRUE and Disabled = FALSE and SIDType = 1 and not Name like '%$'
+        if not (UserName[Length(UserName)] = '$') and
+           ((PUI3[i].usri3_flags and UF_ACCOUNTDISABLE) = 0) then
+        begin
+          CurrentUser := Default(TWindowsUserAccountInformation);
+
+          // Username
+          CurrentUser.UserName := UserName;
+
+          // Full name (comment in NetAPI)
+          CurrentUser.FullName := string(PUI3[i].usri3_full_name);
+
+          // Get SID
+          if GetSidFromUser(CurrentUser.UserName, UserSID) then
+          begin
+            SidString := ConvertSidToString(UserSID);
+            if (not IsEmpty(SidString)) then
+              CurrentUser.SID := SidString;
+            FreeMem(UserSID);
+          end;
+
+          // Get profile path (without WMI, via registry)
+          CurrentUser.ProfilePath := __GetUserProfilePath(CurrentUser.UserName);
+
+          // Calculate AppData paths
+          if CurrentUser.ProfilePath <> EmptyStr then
+          begin
+            // Grab Local App Data
+            CurrentUser.LocalAppDataPath := _GetAppDataDirectory(
+              LocalAppDataTemplate, CurrentUser.ProfilePath);
+
+            // Grab Roaming App Data
+            CurrentUser.RoamingAppDataPath := _GetAppDataDirectory(
+              RoamingAppDataTemplate, CurrentUser.ProfilePath);
+          end;
+
+          // Friendly name
+          CurrentUser.FriendlyName := _UserGenerateFriendlyName(
+            CurrentUser.UserName,
+            CurrentUser.FullName
+          );
+
+          // Add user to list
+          UsersList[UserCount] := CurrentUser;
+          Inc(UserCount);
+        end;
+      end;
+
+      // Adjust array size to actual number of users
+      SetLength(UsersList, UserCount);
+
+      NetApiBufferFree(UserInfo);
+      Result := UserCount > 0;
+    end;
+  end;
 
 begin
-  FSnapshotHandle := CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-  FProcessEntry32.dwSize := SizeOf(FProcessEntry32);
-  ContinueLoop := Process32First(FSnapshotHandle, FProcessEntry32);
   Result := False;
-  while ContinueLoop do
+
+{$IFDEF DEBUG}
+  DebugLog('GetUserList');
+{$ENDIF}
+
+  LocalAppDataTemplate := _GetAppDataTemplate(adkLocal);
+  RoamingAppDataTemplate := _GetAppDataTemplate(adkRoaming);
+{$IFDEF DEBUG}
+  DebugLog(Format('AppData Templates:' + sLineBreak +
+    '  LocalAppDataTemplate: "%s"' + sLineBreak +
+    '  RoamingAppDataTemplate: "%s"' + sLineBreak
+  , [
+    LocalAppDataTemplate,
+    RoamingAppDataTemplate
+  ]));
+{$ENDIF}
+
+  if IsWindowsVistaOrGreater then
+    Result := _GetUserListModern(LocalAppDataTemplate, RoamingAppDataTemplate, UsersList)
+  else
+    Result := _GetUserListLegacy(LocalAppDataTemplate, RoamingAppDataTemplate, UsersList);
+
+{$IFDEF DEBUG}
+  DebugLog('GetUserList:');
+  for i := Low(UsersList) to High(UsersList) do
   begin
-    if ((UpperCase(ExtractFileName(FProcessEntry32.szExeFile)) =
-      UpperCase(FileName)) or (UpperCase(FProcessEntry32.szExeFile) =
-      UpperCase(FileName))) then
-    begin
-      Result := True;
-    end;
-    ContinueLoop := Process32Next(FSnapshotHandle, FProcessEntry32);
+    DebugLog(Format('  User #%d:', [i]));
+    DebugLog(
+      Format('   SID: "%s"', [UsersList[i].SID]) + sLineBreak +
+      Format('   UserName: "%s"', [UsersList[i].UserName]) + sLineBreak +
+      Format('   FullName: "%s"', [UsersList[i].FullName]) + sLineBreak +
+      Format('   FriendlyName: "%s"', [UsersList[i].FriendlyName]) + sLineBreak +
+      Format('   ProfilePath: "%s"', [UsersList[i].ProfilePath]) + sLineBreak +
+      Format('   LocalAppDataPath: "%s"', [UsersList[i].LocalAppDataPath]) + sLineBreak +
+      Format('   RoamingAppDataPath: "%s"', [UsersList[i].RoamingAppDataPath])
+    );
   end;
-  CloseHandle(FSnapshotHandle);
-{$ELSE}
-begin
-  raise EAbstractError.Create('IsProcessRunning is not implemented for this OS');
 {$ENDIF}
 end;
+
+// =============================================================================
+// Environment variables
+// =============================================================================
 
 procedure HandleLogonServerVariable(EnvironmentVariables: TStringList);
 const
@@ -697,6 +962,47 @@ begin
 {$ENDIF}
 end;
 
+// =============================================================================
+// Process functions
+// =============================================================================
+
+function KillProcessByName(const FileName: TFileName): Boolean;
+begin
+  Result := False;
+  if FileExists(FileName) then
+    Result := RunSingleCommand(Format('taskkill /im "%s" /f', [
+      ExtractFileName(FileName)
+    ]));
+end;
+
+function IsProcessRunning(FileName: TFileName): Boolean;
+{$IFDEF Windows}
+var
+  ContinueLoop: Boolean;
+  FSnapshotHandle: THandle;
+  FProcessEntry32: TProcessEntry32;
+
+begin
+  FSnapshotHandle := CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  FProcessEntry32.dwSize := SizeOf(FProcessEntry32);
+  ContinueLoop := Process32First(FSnapshotHandle, FProcessEntry32);
+  Result := False;
+  while ContinueLoop do
+  begin
+    if ((UpperCase(ExtractFileName(FProcessEntry32.szExeFile)) =
+      UpperCase(FileName)) or (UpperCase(FProcessEntry32.szExeFile) =
+      UpperCase(FileName))) then
+    begin
+      Result := True;
+    end;
+    ContinueLoop := Process32Next(FSnapshotHandle, FProcessEntry32);
+  end;
+  CloseHandle(FSnapshotHandle);
+{$ELSE}
+begin
+  raise EAbstractError.Create('IsProcessRunning is not implemented for this OS');
+{$ENDIF}
+end;
 
 function GetParentProcessIdFromProcessId(const ProcessId: LongWord): LongWord;
 var
@@ -778,7 +1084,7 @@ begin
   ProcessHandle := OpenProcess(DesiredAccess, False, ProcessId);
   if ProcessHandle <> INVALID_HANDLE_VALUE then
   begin
-    Result := GetExitCodeProcess(ProcessHandle, @ProcessExitCode)
+    Result := Windows.GetExitCodeProcess(ProcessHandle, @ProcessExitCode)
       and (ProcessExitCode = STILL_ACTIVE);
     CloseHandle(ProcessHandle);
   end;
@@ -868,58 +1174,6 @@ begin
   finally
     // Always close the handle
     CloseHandle(ProcessHandle);
-  end;
-end;
-
-function GetFileLocationsInSystemPath(const FileName: TFileName;
-  Output: TStringList): Boolean;
-const
-  PATHEXT_ENV_VAR = 'PATHEXT';
-  PATH_ENV_VAR = 'PATH';
-  PATH_SEPARATOR = ';';
-
-var
-  FullFileName,
-  FullFileNameWithExtension: TFileName;
-  Buffer,
-  Extensions: TStringList;
-  i, j: Integer;
-
-begin
-  Result := False;
-  if Assigned(Output) then
-  begin
-    Buffer := TStringList.Create;
-    Extensions := TStringList.Create;
-    try
-      StringToStringList(SysUtils.GetEnvironmentVariable(PATH_ENV_VAR),
-        PATH_SEPARATOR, Buffer);
-      StringToStringList(SysUtils.GetEnvironmentVariable(PATHEXT_ENV_VAR),
-        PATH_SEPARATOR, Extensions);
-
-      for i := 0 to Buffer.Count - 1 do
-      begin
-        FullFileName := IncludeTrailingPathDelimiter(Buffer[i]) + FileName;
-
-        if FileExists(FullFileName) then
-          Output.Add(FullFileName)
-        else
-          for j := 0 to Extensions.Count - 1 do
-          begin
-            FullFileNameWithExtension := FullFileName + LowerCase(Extensions[j]);
-            if FileExists(FullFileNameWithExtension) then
-            begin
-              Output.Add(FullFileNameWithExtension);
-              Break;
-            end;
-          end;
-      end;
-
-      Result := (Output.Count > 0);
-    finally
-      Extensions.Free;
-      Buffer.Free;
-    end;
   end;
 end;
 
