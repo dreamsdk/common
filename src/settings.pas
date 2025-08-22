@@ -237,20 +237,6 @@ type
     function Refresh: Boolean;
   end;
 
-  { TDreamcastSoftwareDevelopmentSettingsRuby }
-  TDreamcastSoftwareDevelopmentSettingsRuby = class(TObject)
-  private
-    fOwner: TDreamcastSoftwareDevelopmentSettings;
-    fEnabled: Boolean;
-    procedure SetEnabled(AValue: Boolean);
-  protected
-    procedure LoadConfiguration(IniFile: TIniFile);
-    procedure SaveConfiguration(IniFile: TIniFile);
-  public
-    constructor Create(AOwner: TDreamcastSoftwareDevelopmentSettings);
-    property Enabled: Boolean read fEnabled write SetEnabled;
-  end;
-
   { TDreamcastSoftwareDevelopmentSettings }
   TDreamcastSoftwareDevelopmentSettings = class(TObject)
   private
@@ -260,7 +246,6 @@ type
     fInstallPath: TFileName;
     fProgressWindowAutoClose: Boolean;
     fRepositories: TDreamcastSoftwareDevelopmentSettingsRepositories;
-    fRuby: TDreamcastSoftwareDevelopmentSettingsRuby;
     fUseMinTTY: Boolean;
     fDreamcastTool: TDreamcastSoftwareDevelopmentSettingsDreamcastTool;
     fWindowsTerminalProfileGuid: string;
@@ -287,7 +272,6 @@ type
       write fProgressWindowAutoClose;
     property Repositories: TDreamcastSoftwareDevelopmentSettingsRepositories
       read fRepositories;
-    property Ruby: TDreamcastSoftwareDevelopmentSettingsRuby read fRuby;
     property WindowsTerminalProfileGuid: string
       read fWindowsTerminalProfileGuid;
   end;
@@ -327,10 +311,6 @@ const
   // dreamsdk.conf: sections
   CONFIG_DREAMSDK_SECTION_SETTINGS = 'Settings';
   CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL = 'DreamcastTool';
-
-  // dreamsdk.conf: section Ruby
-  CONFIG_DREAMSDK_SECTION_RUBY = 'Ruby';
-  CONFIG_DREAMSDK_SECTION_RUBY_KEY_ENABLED = 'Enabled';
 
   // ide.conf: section Global
   CONFIG_IDE_SECTION_GLOBAL = 'Global';
@@ -600,37 +580,6 @@ end;
 function TDefaultRepository.Load: Boolean;
 begin
   Result := Load(GetConfigurationDirectory + REPOSITORIES_DEFAULT_FILE_NAME);
-end;
-
-{ TDreamcastSoftwareDevelopmentSettingsRuby }
-
-procedure TDreamcastSoftwareDevelopmentSettingsRuby.SetEnabled(AValue: Boolean);
-begin
-  if fEnabled <> AValue then
-  begin
-    fEnabled := AValue;
-    fOwner.SaveConfiguration;
-  end;
-end;
-
-procedure TDreamcastSoftwareDevelopmentSettingsRuby.LoadConfiguration(
-  IniFile: TIniFile);
-begin
-  fEnabled := IniFile.ReadBool(CONFIG_DREAMSDK_SECTION_RUBY,
-    CONFIG_DREAMSDK_SECTION_RUBY_KEY_ENABLED, fEnabled);
-end;
-
-procedure TDreamcastSoftwareDevelopmentSettingsRuby.SaveConfiguration(
-  IniFile: TIniFile);
-begin
-  IniFile.WriteBool(CONFIG_DREAMSDK_SECTION_RUBY,
-    CONFIG_DREAMSDK_SECTION_RUBY_KEY_ENABLED, fEnabled);
-end;
-
-constructor TDreamcastSoftwareDevelopmentSettingsRuby.Create(
-  AOwner: TDreamcastSoftwareDevelopmentSettings);
-begin
-  fOwner := AOwner;
 end;
 
 { TDreamcastSoftwareDevelopmentSettingsRepositories }
@@ -1256,7 +1205,6 @@ end;
 
 constructor TDreamcastSoftwareDevelopmentSettings.Create;
 begin
-  fRuby := TDreamcastSoftwareDevelopmentSettingsRuby.Create(Self);
   fRepositories := TDreamcastSoftwareDevelopmentSettingsRepositories.Create;
   fDreamcastTool := TDreamcastSoftwareDevelopmentSettingsDreamcastTool.Create;
 end;
@@ -1267,7 +1215,6 @@ begin
    SaveConfiguration;
   fRepositories.Free;
   fDreamcastTool.Free;
-  fRuby.Free;
   inherited Destroy;
 end;
 
@@ -1339,8 +1286,6 @@ begin
 
     DreamcastTool.LoadConfiguration(IniFile);
 
-    Ruby.LoadConfiguration(IniFile);
-
     Result := True;
   finally
     IniFile.Free;
@@ -1387,8 +1332,6 @@ begin
     );
 
     DreamcastTool.SaveConfiguration(IniFile);
-
-    Ruby.SaveConfiguration(IniFile);
   finally
     IniFile.Free;
   end;

@@ -101,11 +101,6 @@ uses
   Interfaces,
   Forms,
 {$ENDIF}
-{$IFDEF DEBUG}
-{$IFDEF GUI}
-  DbgLog,
-{$ENDIF}
-{$ENDIF}
   SysTools,
   Version;
 

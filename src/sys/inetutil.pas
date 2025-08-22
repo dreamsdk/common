@@ -258,6 +258,8 @@ var
 
             // Checking if this IP address wasn't already assigned... (avoid dupes)
             IpAddressHashKey := Concat(IntToStr(ANetworkCardAdapterItemIndex), CurrentIpAddress);
+{$PUSH}
+{$NOTES OFF}
             if (IpAddressesHashMap.IndexOf(IpAddressHashKey) = -1) then
             begin
               // Add a item to the array
@@ -271,6 +273,7 @@ var
               // Pushing the IP to the Map, to avoid duplicates
               IpAddressesHashMap.Add(IpAddressHashKey, IpEntryIndex);
             end;
+{$POP}
           end;
 
           // At least one address should be parsed
