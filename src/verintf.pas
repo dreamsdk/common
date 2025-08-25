@@ -220,7 +220,7 @@ begin
       FileLocations := TStringList.Create;
       try
         if GetFileLocationsInSystemPath(ExecutableFileName, FileLocations) then
-          ExecutableFileName := FileLocations[0];
+          ExecutableFileName := FileLocations[0]; // First entry
       finally
         FileLocations.Free;
       end;
@@ -264,6 +264,11 @@ begin
       if Pointer(Result) = nil then
         raise Exception.CreateFmt('Unable to retrieve version ("%s"; "%s")',
           [Executable, CommandLine]);
+
+      // If Result contains ERROR or FATAL, consider it invalid...
+      if IsInString('error', LowerCase(Result)) or IsInString('fatal', LowerCase(Result)) then
+        raise Exception.CreateFmt('Version is invalid: "%s" ("%s"; "%s")',
+          [Buffer, Executable, CommandLine]);
 
       // Save version if we can
       if UseRegister and (not IsEmpty(Result)) then
