@@ -534,7 +534,13 @@ begin
     ]));
 
 {$IFDEF DEBUG}
-    DebugLog('*** STRIKE <ENTER> TO EXIT ***');
+    DebugLog(
+        sLineBreak
+      + '=============================================================================' + sLineBreak
+      + '*** STRIKE <ENTER> TO EXIT ***' + sLineBreak
+      + '=============================================================================' + sLineBreak
+      + sLineBreak
+    );
     ReadLn;
 {$ENDIF}
 

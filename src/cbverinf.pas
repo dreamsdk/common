@@ -24,6 +24,8 @@ const
 function GetCodeBlocksVersion(InstallationDirectory: TFileName;
   const ExpandInstallationDirectory: Boolean = True): TCodeBlocksVersion;
 
+function GetCodeBlocksSupportedVersions: TStringArray;
+
 function CodeBlocksVersionToString(const CodeBlocksVersion: TCodeBlocksVersion): string;
 
 function IsCodeBlocksFilesPatched(InstallationDirectory: TFileName): Boolean;
@@ -92,6 +94,15 @@ begin
     cbv2503x64:
       Result := '25.03 (x64)';
   end;
+end;
+
+function GetCodeBlocksSupportedVersions: TStringArray;
+begin
+  Result := Default(TStringArray);
+  SetLength(Result, 3);
+  Result[0] := '17.12';
+  Result[1] := '20.03';
+  Result[2] := '25.03';
 end;
 
 function GetCodeBlocksPatchedVersionFileName(InstallationDirectory: TFileName): TFileName;
