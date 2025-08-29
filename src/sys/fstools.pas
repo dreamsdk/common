@@ -672,7 +672,7 @@ end;
 
 (* This function rename the object (file or directory) passed parameter with the
  * ".old" suffix in order to keep a backup, instead of just deleting the object.
- * This is used in the "RenDir" Setup Helper, for the DreamSDK Setup.
+ * This is used in the DreamSDK Setup and DreamSDK Manager.
  *)
 function RenameFileOrDirectoryAsBackup(const TargetFileOrDirectory: TFileName;
   var NewTargetPath: TFileName): Boolean;
@@ -698,7 +698,7 @@ begin
   CleanTargetPath := ExcludeTrailingPathDelimiter(TargetFileOrDirectory);
 
   // If we have an empty string or just a drive reference we stop
-  if (CleanTargetPath = '') or (Length(CleanTargetPath) <= 3) then
+  if (CleanTargetPath = EmptyStr) or (Length(CleanTargetPath) <= 3) then
     Exit;
 
   IsTargetFile := FileExists(CleanTargetPath);
@@ -720,7 +720,7 @@ begin
   OldObjectName := ExtractFileName(CleanTargetPath);
 
   // Additional check: if ExtractFileName returns an empty string, we have an issue
-  if OldObjectName = '' then
+  if OldObjectName = EmptyStr then
   begin
 {$IFDEF DEBUG}
     DebugLog(Format('ExtractFileName returned empty string for: "%s"', [CleanTargetPath]));
@@ -759,17 +759,27 @@ begin
   until (not ShouldContinue);
 
 {$IFDEF DEBUG}
-    DebugLog('  RenameFileOrDirectoryAsBackup defined the new name:');
-    DebugLog(Format('    Old: "%s"', [
-      CleanTargetPath
-    ]));
-    DebugLog(Format('    New: "%s"', [
-      NewTargetPath
-    ]));
+  DebugLog('  RenameFileOrDirectoryAsBackup defined the new name:');
+  DebugLog(Format('    Old: "%s"', [
+    CleanTargetPath
+  ]));
+  DebugLog(Format('    New: "%s"', [
+    NewTargetPath
+  ]));
 {$ENDIF}
 
   // The new name has been found, in NewObjectName (full path in NewTargetPath)
   Result := RenameFile(CleanTargetPath, NewTargetPath);
+
+{$IFDEF DEBUG}
+  DebugLog(Format('  RenameFileOrDirectoryAsBackup Result: "%s"', [
+    BoolToStr(Result, True)
+  ]));
+  DebugLog(Format('Error #%d: %s', [
+    GetLastOSError,
+    SysErrorMessage(GetLastOSError)
+  ]));
+{$ENDIF}
 end;
 
 { TFileListItem }
