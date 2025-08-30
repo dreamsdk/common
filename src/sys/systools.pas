@@ -481,6 +481,7 @@ begin
   Sid := nil;
   Use := Default(SID_NAME_USE);
   SidSize := 0;
+  Domain := Default(LPTSTR);
   DomainSize := SizeOf(Domain);
 
   if LookupAccountName(nil, PChar(UserName), nil, SidSize, Domain, DomainSize,

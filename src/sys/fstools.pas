@@ -740,10 +740,16 @@ var
   end;
 
   function TryRenameWithShell(const OldName, NewName: TFileName): Boolean;
+  type
+    TPathBuffer = array[0..MAX_PATH] of Char;
+
   var
     ShOp: TSHFileOpStruct;
-    FromBuf, ToBuf: array[0..MAX_PATH] of Char;
+    FromBuf, ToBuf: TPathBuffer;
+
   begin
+    FromBuf := Default(TPathBuffer);
+    ToBuf := Default(TPathBuffer);
     ZeroMemory(@ShOp, SizeOf(ShOp));
 
     StrPCopy(FromBuf, OldName + #0#0);
