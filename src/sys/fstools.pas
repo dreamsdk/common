@@ -11,12 +11,12 @@ uses
 type
   // Result of the backup rename operation
   TRenameFileOrDirectoryAsBackupResult = (
-    brrSuccess,           // Operation successful
-    brrFileNotFound,      // Source file/directory does not exist
-    brrInvalidPath,       // Invalid path provided
-    brrTooManyBackups,    // Too many backup files already exist
-    brrAccessDenied,      // Insufficient permissions
-    brrUnknownError       // Unknown error occurred
+    rfdbSuccess,           // Operation successful
+    rfdbFileNotFound,      // Source file/directory does not exist
+    rfdbInvalidPath,       // Invalid path provided
+    rfdbTooManyBackups,    // Too many backup files already exist
+    rfdbAccessDenied,      // Insufficient permissions
+    rfdbUnknownError       // Unknown error occurred
   );
   
   EFileSystemTools = class(Exception);
@@ -787,7 +787,7 @@ begin
 {$IFDEF DEBUG}
     DebugLog(Format('Invalid path: "%s"', [TargetFileOrDirectory]));
 {$ENDIF}
-    Exit(brrInvalidPath);
+    Exit(rfdbInvalidPath);
   end;
 
   // Check existence only once
@@ -799,7 +799,7 @@ begin
 {$IFDEF DEBUG}
     DebugLog(Format('File/directory does not exist: "%s"', [CleanTargetPath]));
 {$ENDIF}
-    Exit(brrFileNotFound);
+    Exit(rfdbFileNotFound);
   end;
 
   // Extract path components
@@ -811,7 +811,7 @@ begin
 {$IFDEF DEBUG}
     DebugLog(Format('Cannot extract filename from: "%s"', [CleanTargetPath]));
 {$ENDIF}
-    Exit(brrInvalidPath);
+    Exit(rfdbInvalidPath);
   end;
 
 {$IFDEF DEBUG}
@@ -838,7 +838,7 @@ begin
 {$IFDEF DEBUG}
       DebugLog(Format('Too many backup files exist (max: %d)', [MAX_BACKUP_COUNT]));
 {$ENDIF}
-      Exit(brrTooManyBackups);
+      Exit(rfdbTooManyBackups);
     end;
 
     NewBackupName := Format('%s%s.%.3d', [OriginalName, BACKUP_SUFFIX, BackupIndex]);
@@ -861,7 +861,7 @@ begin
 {$IFDEF DEBUG}
     DebugLog('  Rename successful');
 {$ENDIF}
-    Result := brrSuccess;
+    Result := rfdbSuccess;
   end
   else
   begin
@@ -879,9 +879,9 @@ begin
       ERROR_ACCESS_DENIED,
       ERROR_SHARING_VIOLATION,
       ERROR_WRITE_PROTECT:
-        Result := brrAccessDenied;
+        Result := rfdbAccessDenied;
       else
-        Result := brrUnknownError;
+        Result := rfdbUnknownError;
     end;
   end;
 end;
