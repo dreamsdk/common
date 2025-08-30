@@ -94,6 +94,8 @@ function UnixPathToSystem(const UnixPathName: TFileName): TFileName;
 implementation
 
 uses
+  Windows,
+  ShellApi,
   StrUtils,
   RegExpr,
   LazUTF8,
@@ -691,6 +693,31 @@ var
   IsTargetDirectory,
   ShouldContinue: Boolean;
 
+  function _RenameWithMoveFileEx(const OldName, NewName: TFileName): Boolean;
+  begin
+    Result := MoveFileEx(PChar(OldName), PChar(NewName), MOVEFILE_COPY_ALLOWED);
+  end;
+
+  function _RenameWithShell(const OldName, NewName: TFileName): Boolean;
+  var
+    shOp: TSHFileOpStruct;
+    fromBuf, toBuf: array[0..MAX_PATH] of Char;
+
+  begin
+    ZeroMemory(@shOp, SizeOf(shOp));
+
+    StrPCopy(fromBuf, OldName + #0#0); // double null-terminated
+    StrPCopy(toBuf,   NewName + #0#0);
+
+    shOp.Wnd := 0;
+    shOp.wFunc := FO_RENAME;
+    shOp.pFrom := @fromBuf[0];
+    shOp.pTo   := @toBuf[0];
+    shOp.fFlags := FOF_NOCONFIRMATION or FOF_SILENT;
+
+    Result := (SHFileOperation(shOp) = 0);
+  end;
+
 begin
   Result := False;
 
@@ -770,6 +797,12 @@ begin
 
   // The new name has been found, in NewObjectName (full path in NewTargetPath)
   Result := RenameFile(CleanTargetPath, NewTargetPath);
+
+  // Fail-safes for stranges cases where RenameFile gets Access Denied #5...
+  if not Result then
+    Result := _RenameWithMoveFileEx(CleanTargetPath, NewTargetPath);
+  if not Result then
+    Result := _RenameWithShell(CleanTargetPath, NewTargetPath);
 
 {$IFDEF DEBUG}
   DebugLog(Format('  RenameFileOrDirectoryAsBackup Result: "%s"', [
