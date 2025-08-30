@@ -9,8 +9,32 @@ uses
   SysUtils;
 
 type
+  // Result of the backup rename operation
+  TRenameFileOrDirectoryAsBackupResult = (
+    brrSuccess,           // Operation successful
+    brrFileNotFound,      // Source file/directory does not exist
+    brrInvalidPath,       // Invalid path provided
+    brrTooManyBackups,    // Too many backup files already exist
+    brrAccessDenied,      // Insufficient permissions
+    brrUnknownError       // Unknown error occurred
+  );
+  
   EFileSystemTools = class(Exception);
-  ERenameFileOrDirectoryAsBackupException = class(EFileSystemTools);
+
+  { ERenameFileOrDirectoryAsBackupException }
+
+  ERenameFileOrDirectoryAsBackupException = class(EFileSystemTools)
+  private
+    FResult: TRenameFileOrDirectoryAsBackupResult;
+    FOriginalPath: TFileName;
+    FTargetPath: TFileName;
+  public
+    constructor Create(AResult: TRenameFileOrDirectoryAsBackupResult;
+      const AOriginalPath, ATargetPath: TFileName);
+    property Result: TRenameFileOrDirectoryAsBackupResult read FResult;
+    property OriginalPath: TFileName read FOriginalPath;
+    property TargetPath: TFileName read FTargetPath;
+  end;
 
   { TParseInputFileSystemObjectBehaviour }
   TParseInputFileSystemObjectBehaviour = (
@@ -79,10 +103,14 @@ function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string;
 function PatchTextFile(const FileName: TFileName; OldValue, NewValue: string;
   const Behaviour: TPatchTextFileBehaviour;
   const WatermarkPrefix, WatermarkSuffix: string): Boolean; overload;
+
 (* Renames the passed file or directory in parameter, with a ".old" suffix *)
-function RenameFileOrDirectoryAsBackup(const TargetFileOrDirectory: TFileName): Boolean; overload;
-function RenameFileOrDirectoryAsBackup(const TargetFileOrDirectory: TFileName;
-  var NewTargetPath: TFileName): Boolean; overload;
+function RenameFileOrDirectoryAsBackup(
+  const TargetFileOrDirectory: TFileName): TRenameFileOrDirectoryAsBackupResult; overload;
+function RenameFileOrDirectoryAsBackup(
+  const TargetFileOrDirectory: TFileName;
+  out NewTargetPath: TFileName): TRenameFileOrDirectoryAsBackupResult; overload;
+
 procedure SaveStringToFile(const InString: string; FileName: TFileName;
   const Append: Boolean = False);
 function SetDirectoryRights(const DirectoryFullPath: TFileName;
@@ -663,7 +691,8 @@ begin
   end;
 end;
 
-function RenameFileOrDirectoryAsBackup(const TargetFileOrDirectory: TFileName): Boolean; overload;
+function RenameFileOrDirectoryAsBackup(
+  const TargetFileOrDirectory: TFileName): TRenameFileOrDirectoryAsBackupResult; overload;
 var
   NewTargetPath: TFileName;
 
@@ -672,147 +701,215 @@ begin
   Result := RenameFileOrDirectoryAsBackup(TargetFileOrDirectory, NewTargetPath);
 end;
 
-(* This function rename the object (file or directory) passed parameter with the
- * ".old" suffix in order to keep a backup, instead of just deleting the object.
- * This is used in the DreamSDK Setup and DreamSDK Manager.
+(* Improved version of the backup rename function
+ * Renames a file or directory by adding the ".old" suffix to create a backup
+ * instead of simply deleting the object.
  *)
 function RenameFileOrDirectoryAsBackup(const TargetFileOrDirectory: TFileName;
-  var NewTargetPath: TFileName): Boolean;
+  out NewTargetPath: TFileName): TRenameFileOrDirectoryAsBackupResult;
 const
-  MAX_TRIES = 999;
+  MAX_BACKUP_COUNT = 99;  // Reasonable limit for backup files
+  BACKUP_SUFFIX = '.old';
 
 var
-  Count: Integer;
+  BackupIndex: Integer;
+  CleanTargetPath: TFileName;
+  SourceDir: TFileName;
+  OriginalName: TFileName;
+  NewBackupName: TFileName;
+  CandidatePath: TFileName;
+  IsFile: Boolean;
+  IsDirectory: Boolean;
 
-  SourcePath,
-  CleanTargetPath,
-  OldObjectName,
-  NewObjectName: TFileName;
+  function IsValidPath(const Path: string): Boolean;
+  begin
+    Result := (Path <> EmptyStr) and
+              (Length(Path) >= 3) and
+              (Length(Path) <= MAX_PATH - 20) and  // Leave room for suffix
+              (Pos(#0, Path) = 0);  // No null characters
+  end;
 
-  IsTargetFile,
-  IsTargetDirectory,
-  ShouldContinue: Boolean;
+  function PathExists(const Path: string): Boolean;
+  begin
+    Result := FileExists(Path) or DirectoryExists(Path);
+  end;
 
-  function _RenameWithMoveFileEx(const OldName, NewName: TFileName): Boolean;
+  function TryRenameWithMoveFileEx(const OldName, NewName: TFileName): Boolean;
   begin
     Result := MoveFileEx(PChar(OldName), PChar(NewName), MOVEFILE_COPY_ALLOWED);
   end;
 
-  function _RenameWithShell(const OldName, NewName: TFileName): Boolean;
+  function TryRenameWithShell(const OldName, NewName: TFileName): Boolean;
   var
-    shOp: TSHFileOpStruct;
-    fromBuf, toBuf: array[0..MAX_PATH] of Char;
-
+    ShOp: TSHFileOpStruct;
+    FromBuf, ToBuf: array[0..MAX_PATH] of Char;
   begin
-    ZeroMemory(@shOp, SizeOf(shOp));
+    ZeroMemory(@ShOp, SizeOf(ShOp));
 
-    StrPCopy(fromBuf, OldName + #0#0); // double null-terminated
-    StrPCopy(toBuf,   NewName + #0#0);
+    StrPCopy(FromBuf, OldName + #0#0);
+    StrPCopy(ToBuf, NewName + #0#0);
 
-    shOp.Wnd := 0;
-    shOp.wFunc := FO_RENAME;
-    shOp.pFrom := @fromBuf[0];
-    shOp.pTo   := @toBuf[0];
-    shOp.fFlags := FOF_NOCONFIRMATION or FOF_SILENT;
+    ShOp.Wnd := 0;
+    ShOp.wFunc := FO_RENAME;
+    ShOp.pFrom := @FromBuf[0];
+    ShOp.pTo := @ToBuf[0];
+    ShOp.fFlags := FOF_NOCONFIRMATION or FOF_SILENT or FOF_NOERRORUI;
 
-    Result := (SHFileOperation(shOp) = 0);
+    Result := (SHFileOperation(ShOp) = 0) and (ShOp.fAnyOperationsAborted = False);
+  end;
+
+  function PerformRename(const OldPath, NewPath: TFileName): Boolean;
+  begin
+    // Attempt 1: RenameFile (fastest)
+    Result := RenameFile(OldPath, NewPath);
+
+    // Attempt 2: MoveFileEx (handles complex cases better)
+    if not Result then
+      Result := TryRenameWithMoveFileEx(OldPath, NewPath);
+
+    // Attempt 3: Shell API (last resort)
+    if not Result then
+      Result := TryRenameWithShell(OldPath, NewPath);
   end;
 
 begin
-  Result := False;
+{$IFDEF DEBUG}
+  DebugLog('RenameFileOrDirectoryAsBackup');
+{$ENDIF}
 
-  // Cleanup input param by removing trailing slashes
-  CleanTargetPath := ExcludeTrailingPathDelimiter(TargetFileOrDirectory);
+  NewTargetPath := EmptyStr;
 
-  // If we have an empty string or just a drive reference we stop
-  if (CleanTargetPath = EmptyStr) or (Length(CleanTargetPath) <= 3) then
-    Exit;
+  // Input path validation
+  CleanTargetPath := ExcludeTrailingPathDelimiter(Trim(TargetFileOrDirectory));
 
-  IsTargetFile := FileExists(CleanTargetPath);
-  IsTargetDirectory := DirectoryExists(CleanTargetPath);
+  if not IsValidPath(CleanTargetPath) then
+  begin
+{$IFDEF DEBUG}
+    DebugLog(Format('Invalid path: "%s"', [TargetFileOrDirectory]));
+{$ENDIF}
+    Exit(brrInvalidPath);
+  end;
+
+  // Check existence only once
+  IsFile := FileExists(CleanTargetPath);
+  IsDirectory := DirectoryExists(CleanTargetPath);
+
+  if not IsFile and not IsDirectory then
+  begin
+{$IFDEF DEBUG}
+    DebugLog(Format('File/directory does not exist: "%s"', [CleanTargetPath]));
+{$ENDIF}
+    Exit(brrFileNotFound);
+  end;
+
+  // Extract path components
+  SourceDir := IncludeTrailingPathDelimiter(ExtractFilePath(CleanTargetPath));
+  OriginalName := ExtractFileName(CleanTargetPath);
+
+  if OriginalName = EmptyStr then
+  begin
+{$IFDEF DEBUG}
+    DebugLog(Format('Cannot extract filename from: "%s"', [CleanTargetPath]));
+{$ENDIF}
+    Exit(brrInvalidPath);
+  end;
 
 {$IFDEF DEBUG}
-  DebugLog(Format('RenameFileOrDirectoryAsBackup [IsFile: %s, IsDir: %s]: "%s" (cleaned: "%s")', [
-    BoolToStr(IsTargetFile, True),
-    BoolToStr(IsTargetDirectory, True),
-    TargetFileOrDirectory,
+  DebugLog(Format('RenameFileOrDirectoryAsBackup [File: %s, Dir: %s]: "%s"', [
+    BoolToStr(IsFile, True),
+    BoolToStr(IsDirectory, True),
     CleanTargetPath
   ]));
 {$ENDIF}
 
-  if not IsTargetFile and not IsTargetDirectory then
-    Exit;
+  // Find available backup name
+  BackupIndex := 0;
 
-  Count := 0;
-  OldObjectName := ExtractFileName(CleanTargetPath);
+  // Generate initial candidate name
+  NewBackupName := OriginalName + BACKUP_SUFFIX;
+  CandidatePath := SourceDir + NewBackupName;
 
-  // Additional check: if ExtractFileName returns an empty string, we have an issue
-  if OldObjectName = EmptyStr then
+  while PathExists(CandidatePath) do
   begin
+    Inc(BackupIndex);
+
+    if BackupIndex > MAX_BACKUP_COUNT then
+    begin
 {$IFDEF DEBUG}
-    DebugLog(Format('ExtractFileName returned empty string for: "%s"', [CleanTargetPath]));
+      DebugLog(Format('Too many backup files exist (max: %d)', [MAX_BACKUP_COUNT]));
 {$ENDIF}
-    Exit;
+      Exit(brrTooManyBackups);
+    end;
+
+    NewBackupName := Format('%s%s.%.3d', [OriginalName, BACKUP_SUFFIX, BackupIndex]);
+    CandidatePath := SourceDir + NewBackupName;
+
+{$IFDEF DEBUG}
+    DebugLog(Format('  Testing backup #%d: "%s"', [BackupIndex, CandidatePath]));
+{$ENDIF}
   end;
 
-  SourcePath := IncludeTrailingPathDelimiter(ExtractFilePath(CleanTargetPath));
-
-  // Find the new name
-  repeat
-    if (Count = 0) then
-      NewObjectName := Format('%s.old', [OldObjectName])
-    else
-      NewObjectName := Format('%s.old.%.3d', [OldObjectName, Count]);
-
-    NewTargetPath := SourcePath + NewObjectName;
-
-    ShouldContinue := FileExists(NewTargetPath) or DirectoryExists(NewTargetPath);
+  // Attempt to rename
+  NewTargetPath := CandidatePath;
 
 {$IFDEF DEBUG}
-    DebugLog(Format('  [ShouldContinue: %s, Counter: %d] "%s"', [
-      BoolToStr(ShouldContinue, True),
-      Count,
-      NewTargetPath
+  DebugLog(Format('  Renaming: "%s" -> "%s"', [CleanTargetPath, NewTargetPath]));
+{$ENDIF}
+
+  if PerformRename(CleanTargetPath, NewTargetPath) then
+  begin
+{$IFDEF DEBUG}
+    DebugLog('  Rename successful');
+{$ENDIF}
+    Result := brrSuccess;
+  end
+  else
+  begin
+    NewTargetPath := EmptyStr;
+
+{$IFDEF DEBUG}
+    DebugLog(Format('  Rename failed. Error #%d: %s', [
+      GetLastOSError,
+      SysErrorMessage(GetLastOSError)
     ]));
 {$ENDIF}
 
-    // Fail-safe
-    if (Count > MAX_TRIES) then
-      raise ERenameFileOrDirectoryAsBackupException.CreateFmt('Unable to rename the object: "%s"', [
-        CleanTargetPath]);
+    // Classify error based on system error code
+    case GetLastOSError of
+      ERROR_ACCESS_DENIED,
+      ERROR_SHARING_VIOLATION,
+      ERROR_WRITE_PROTECT:
+        Result := brrAccessDenied;
+      else
+        Result := brrUnknownError;
+    end;
+  end;
+end;
 
-    // Next try (if needed)
-    Inc(Count);
-  until (not ShouldContinue);
+{ ERenameFileOrDirectoryAsBackupException }
 
-{$IFDEF DEBUG}
-  DebugLog('  RenameFileOrDirectoryAsBackup defined the new name:');
-  DebugLog(Format('    Old: "%s"', [
-    CleanTargetPath
-  ]));
-  DebugLog(Format('    New: "%s"', [
-    NewTargetPath
-  ]));
-{$ENDIF}
+constructor ERenameFileOrDirectoryAsBackupException.Create(
+  AResult: TRenameFileOrDirectoryAsBackupResult;
+  const AOriginalPath, ATargetPath: TFileName);
+const
+  ERROR_MESSAGES: array[TRenameFileOrDirectoryAsBackupResult] of string = (
+    'Operation successful',
+    'File or directory does not exist',
+    'Invalid path',
+    'Too many backup files exist',
+    'Access denied',
+    'Unknown error'
+  );
 
-  // The new name has been found, in NewObjectName (full path in NewTargetPath)
-  Result := RenameFile(CleanTargetPath, NewTargetPath);
+begin
+  FResult := AResult;
+  FOriginalPath := AOriginalPath;
+  FTargetPath := ATargetPath;
 
-  // Fail-safes for stranges cases where RenameFile gets Access Denied #5...
-  if not Result then
-    Result := _RenameWithMoveFileEx(CleanTargetPath, NewTargetPath);
-  if not Result then
-    Result := _RenameWithShell(CleanTargetPath, NewTargetPath);
-
-{$IFDEF DEBUG}
-  DebugLog(Format('  RenameFileOrDirectoryAsBackup Result: "%s"', [
-    BoolToStr(Result, True)
-  ]));
-  DebugLog(Format('Error #%d: %s', [
-    GetLastOSError,
-    SysErrorMessage(GetLastOSError)
-  ]));
-{$ENDIF}
+  inherited CreateFmt('Unable to rename "%s": %s', [
+    AOriginalPath,
+    ERROR_MESSAGES[AResult]
+  ]);
 end;
 
 { TFileListItem }
