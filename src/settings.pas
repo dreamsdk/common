@@ -109,12 +109,18 @@ type
     fKallistiURL: string;
     fDreamcastToolSerialURL: string;
     fDreamcastToolInternetProtocolURL: string;
+    fKallistiRef: string;
+    fKallistiPortsRef: string;
+    fDreamcastToolSerialRef: string;
+    fDreamcastToolInternetProtocolRef: string;
     function GetDreamcastToolInternetProtocolURL: string;
     function GetDreamcastToolSerialURL: string;
     function GetKallistiPortsURL: string;
     function GetKallistiURL: string;
   protected
     function GetURL(const FieldValue, DefaultFieldValue: string): string;
+    procedure LoadConfiguration(IniFile: TIniFile);
+    procedure SaveConfiguration(IniFile: TIniFile);
   public
     property KallistiURL: string
       read GetKallistiURL write fKallistiURL;
@@ -124,6 +130,15 @@ type
       read GetDreamcastToolSerialURL write fDreamcastToolSerialURL;
     property DreamcastToolInternetProtocolURL: string
       read GetDreamcastToolInternetProtocolURL write fDreamcastToolInternetProtocolURL;
+    // Branch/tag to checkout for each repository. Empty means "use the remote default branch"
+    property KallistiRef: string
+      read fKallistiRef write fKallistiRef;
+    property KallistiPortsRef: string
+      read fKallistiPortsRef write fKallistiPortsRef;
+    property DreamcastToolSerialRef: string
+      read fDreamcastToolSerialRef write fDreamcastToolSerialRef;
+    property DreamcastToolInternetProtocolRef: string
+      read fDreamcastToolInternetProtocolRef write fDreamcastToolInternetProtocolRef;
   end;
 
   { TDreamcastSoftwareDevelopmentSettingsCodeBlocks }
@@ -308,6 +323,7 @@ const
   // dreamsdk.conf: sections
   CONFIG_DREAMSDK_SECTION_SETTINGS = 'Settings';
   CONFIG_DREAMSDK_SECTION_DREAMCAST_TOOL = 'DreamcastTool';
+  CONFIG_DREAMSDK_SECTION_REPOSITORIES = 'Repositories';
 
   // ide.conf: section Global
   CONFIG_IDE_SECTION_GLOBAL = 'Global';
@@ -607,6 +623,32 @@ begin
   Result := FieldValue;
   if IsEmpty(FieldValue) then
     Result := DefaultFieldValue;
+end;
+
+procedure TDreamcastSoftwareDevelopmentSettingsRepositories.LoadConfiguration(
+  IniFile: TIniFile);
+begin
+  fKallistiRef := IniFile.ReadString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
+    'KallistiRef', EmptyStr);
+  fKallistiPortsRef := IniFile.ReadString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
+    'KallistiPortsRef', EmptyStr);
+  fDreamcastToolSerialRef := IniFile.ReadString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
+    'DreamcastToolSerialRef', EmptyStr);
+  fDreamcastToolInternetProtocolRef := IniFile.ReadString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
+    'DreamcastToolInternetProtocolRef', EmptyStr);
+end;
+
+procedure TDreamcastSoftwareDevelopmentSettingsRepositories.SaveConfiguration(
+  IniFile: TIniFile);
+begin
+  IniFile.WriteString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
+    'KallistiRef', fKallistiRef);
+  IniFile.WriteString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
+    'KallistiPortsRef', fKallistiPortsRef);
+  IniFile.WriteString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
+    'DreamcastToolSerialRef', fDreamcastToolSerialRef);
+  IniFile.WriteString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
+    'DreamcastToolInternetProtocolRef', fDreamcastToolInternetProtocolRef);
 end;
 
 { TDreamcastSoftwareDevelopmentSettingsCodeBlocksPatcher }
@@ -1277,6 +1319,7 @@ begin
     end;
 
     DreamcastTool.LoadConfiguration(IniFile);
+    Repositories.LoadConfiguration(IniFile);
 
     Result := True;
   finally
@@ -1324,6 +1367,7 @@ begin
     );
 
     DreamcastTool.SaveConfiguration(IniFile);
+    Repositories.SaveConfiguration(IniFile);
   finally
     IniFile.Free;
   end;
