@@ -471,9 +471,12 @@ begin
 end;
 
 function GetSidFromUser(const UserName: string; out Sid: PSID): Boolean;
+type
+  TDomainBuffer = array[0..255] of Char;
+
 var
   SidSize, DomainSize: DWORD;
-  Domain: array[0..255] of Char;
+  Domain: TDomainBuffer;
   Use: SID_NAME_USE;
 
 begin
@@ -481,7 +484,7 @@ begin
   Sid := nil;
   Use := Default(SID_NAME_USE);
   SidSize := 0;
-  Domain := Default(LPTSTR);
+  Domain := Default(TDomainBuffer);
   DomainSize := SizeOf(Domain);
 
   if LookupAccountName(nil, PChar(UserName), nil, SidSize, Domain, DomainSize,
