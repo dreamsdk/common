@@ -148,7 +148,7 @@ end;
 procedure TDreamcastSoftwareDevelopmentKitRunner.InitializeEnvironment;
 begin
   fExecutableMinTTY := GetUserBinariesBaseDirectory + 'mintty.exe';
-  fExecutableShell := GetUserBinariesBaseDirectory + 'sh.exe';
+  fExecutableShell := GetUserBinariesBaseDirectory + 'bash.exe';
 end;
 
 function TDreamcastSoftwareDevelopmentKitRunner.GetHealthy: Boolean;

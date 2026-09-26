@@ -175,7 +175,7 @@ begin
                 if Operation = wtsoInstall then
                 begin
                   Profile := TJSONObject.Create;
-                  Profile.Add('commandline', GetUserBinariesBaseDirectory + 'sh.exe --login -i');
+                  Profile.Add('commandline', GetUserBinariesBaseDirectory + 'bash.exe --login -i');
                   Profile.Add('guid', Settings.WindowsTerminalProfileGuid);
                   Profile.Add('hidden', False);
                   Profile.Add('icon', GetWindowsTerminalResourceDirectory + 'wt.ico');
