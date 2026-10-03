@@ -628,6 +628,16 @@ end;
 procedure TDreamcastSoftwareDevelopmentSettingsRepositories.LoadConfiguration(
   IniFile: TIniFile);
 begin
+  // Empty URL means "use the default URL" (see GetURL)
+  fKallistiURL := IniFile.ReadString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
+    'KallistiURL', EmptyStr);
+  fKallistiPortsURL := IniFile.ReadString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
+    'KallistiPortsURL', EmptyStr);
+  fDreamcastToolSerialURL := IniFile.ReadString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
+    'DreamcastToolSerialURL', EmptyStr);
+  fDreamcastToolInternetProtocolURL := IniFile.ReadString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
+    'DreamcastToolInternetProtocolURL', EmptyStr);
+
   fKallistiRef := IniFile.ReadString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
     'KallistiRef', EmptyStr);
   fKallistiPortsRef := IniFile.ReadString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
@@ -641,6 +651,15 @@ end;
 procedure TDreamcastSoftwareDevelopmentSettingsRepositories.SaveConfiguration(
   IniFile: TIniFile);
 begin
+  IniFile.WriteString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
+    'KallistiURL', fKallistiURL);
+  IniFile.WriteString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
+    'KallistiPortsURL', fKallistiPortsURL);
+  IniFile.WriteString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
+    'DreamcastToolSerialURL', fDreamcastToolSerialURL);
+  IniFile.WriteString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
+    'DreamcastToolInternetProtocolURL', fDreamcastToolInternetProtocolURL);
+
   IniFile.WriteString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
     'KallistiRef', fKallistiRef);
   IniFile.WriteString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
