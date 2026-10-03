@@ -293,7 +293,7 @@ const
   TAG_EXTR_END2 = ':';
 
 var
-  Buffer: TByteArray;
+  Buffer: TBytes;
   AnsiStr: AnsiString;
   StartIndex,
   EndIndex: Integer;
@@ -303,7 +303,7 @@ var
 
 begin
   Result := INVALID_VERSION;
-  Buffer := Default(TByteArray);
+  Buffer := Default(TBytes);
   UseRegister := False;
 
   if EnableRegister then
@@ -317,12 +317,16 @@ begin
   begin
     try
       // Extract 'banner.o' into memory; in Buffer variable
-      ExtractFileFromAr(KallistiLibraryFileName, BANNER_O, Buffer);
+      if not ExtractFileFromAr(KallistiLibraryFileName, BANNER_O, Buffer) then
+        raise Exception.CreateFmt('Unable to extract "%s"', [BANNER_O]);
       SetString(AnsiStr, PAnsiChar(@Buffer[0]), Length(Buffer));
 
-      // Extract the valuable part from this buffer
+      // Extract the valuable part from this buffer (search for the start tag
+      // backwards from the end tag, as debug info may contain the start tag)
       EndIndex := Pos(TAG_END, AnsiStr) - 1;
-      StartIndex := RPos(TAG_START, AnsiStr);
+      if EndIndex < 1 then
+        raise Exception.CreateFmt('Unable to find "%s"', [TAG_END]);
+      StartIndex := RPosEx(TAG_START, AnsiStr, EndIndex);
       Result := Copy(AnsiStr, StartIndex, EndIndex - StartIndex);
 
 {$IFDEF DEBUG}

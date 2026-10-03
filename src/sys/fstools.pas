@@ -81,7 +81,7 @@ function ExtractDirectoryName(const DirectoryName: string): string;
 function ExtractEmbeddedFileToWorkingPath(const ResourceName: string;
   const FileName: TFileName): TFileName;
 function ExtractFileFromAr(const ArchiveFileName,
-  FileNameToExtract: TFileName; var ADestination: TByteArray): Boolean;
+  FileNameToExtract: TFileName; var ADestination: TBytes): Boolean;
 function GetApplicationPath: TFileName;
 function GetFileHash(const FileName: TFileName): string;
 function GetProgramName: string;
@@ -603,7 +603,7 @@ begin
 end;
 
 function ExtractFileFromAr(const ArchiveFileName,
-  FileNameToExtract: TFileName; var ADestination: TByteArray): Boolean;
+  FileNameToExtract: TFileName; var ADestination: TBytes): Boolean;
 type
   TArFileSignature = array[0..7] of Char;
   TArFileHeader = packed record
@@ -625,11 +625,11 @@ var
   Header: TArFileHeader;
   FileName: TFileName;
   FileSize: Int64;
-  FileData: TMemoryStream;
   Found: Boolean;
 
 begin
   Result := False;
+  SetLength(ADestination, 0);
   Signature := Default(TArFileSignature);
 
   if FileExists(ArchiveFileName) then
@@ -673,17 +673,12 @@ begin
       end;
 
       // Extract the found file from the ar file
-      if Found then
+      if Found and (FileSize > 0)
+        and (FileSize <= ArchiveFile.Size - ArchiveFile.Position) then
       begin
-        FileData := TMemoryStream.Create;
-        try
-          FileData.CopyFrom(ArchiveFile, FileSize);
-          FileData.Seek(0, soFromBeginning);
-          FileData.Read(ADestination, FileSize);
-          Result := True;
-        finally
-          FileData.Free;
-        end;
+        SetLength(ADestination, FileSize);
+        ArchiveFile.ReadBuffer(ADestination[0], FileSize);
+        Result := True;
       end;
     finally
       ArchiveFile.Free;
