@@ -72,6 +72,7 @@ var
   EffectiveSerialPortsCount: Integer;
   SerialPort: TSerialPort;
   CurrentItem: TSharedSerialPortInformation;
+  OldErrorMode: UINT;
 
 begin
   Result := False;
@@ -80,7 +81,15 @@ begin
 {$ENDIF}
 
   SerialPortInformationArray := Default(TSharedSerialPortInformationArray);
-  DLLHandle := LoadLibrary(PChar(EnumComFileName));
+  // Don't let Windows display a blocking error dialog if the library can't
+  // be loaded (e.g., missing CRT entry points on older systems): just fail
+  OldErrorMode := SetErrorMode(SEM_FAILCRITICALERRORS);
+  try
+    DLLHandle := LoadLibrary(PChar(EnumComFileName));
+  finally
+    SetErrorMode(OldErrorMode);
+  end;
+
   if DLLHandle <> 0 then
   begin
     try
