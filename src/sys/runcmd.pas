@@ -31,6 +31,11 @@ type
     fNewLine: TNewLineEvent;
     fParameters: TStringList;
     fWorkingDirectory: TFileName;
+{$IFDEF Windows}
+    fJobHandle: THandle;
+    procedure AssignProcessToJob;
+    procedure TerminateJob;
+{$ENDIF}
     function GetExitCode: Integer;
     function GetTargetCommandLine: string;
     function GetTargetProcessId: LongWord;
@@ -64,9 +69,9 @@ type
 implementation
 
 uses
-{$IFDEF RELEASE}
 {$IFDEF Windows}
   JwaWinBase,
+{$IFDEF RELEASE}
   JwaWinNT,
   JwaWinCon,
 {$ENDIF}
@@ -75,6 +80,42 @@ uses
   StrTools;
 
 { TRunCommand }
+
+{$IFDEF Windows}
+(* Put the process in a job object: every process started from it (e.g., make,
+   gcc) belongs to that job too, even with MSYS2, where the parent process IDs
+   can't be used for that (fork emulation). *)
+procedure TRunCommand.AssignProcessToJob;
+begin
+  fJobHandle := CreateJobObject(nil, nil);
+  if (fJobHandle <> 0)
+    and (not AssignProcessToJobObject(fJobHandle, fProcess.ProcessHandle)) then
+  begin
+    CloseHandle(fJobHandle);
+    fJobHandle := 0;
+  end;
+end;
+
+(* Terminate all the processes of the job. This is needed when the CTRL+BREAK
+   signal couldn't be sent to the process group (e.g., when our process has
+   already a console, like DreamSDK Manager in Debug mode, AttachConsole fails),
+   as the children would continue to run and keep the output pipe opened. *)
+procedure TRunCommand.TerminateJob;
+var
+  LogContext: TLogMessageContext;
+
+begin
+  LogContext := LogMessageEnter({$I %FILE%}, {$I %CURRENTROUTINE%}, ClassName);
+  try
+    if fJobHandle <> 0 then
+      LogMessage(LogContext, Format('TerminateJobObject: %s', [
+        BoolToStr(TerminateJobObject(fJobHandle, 1), True)
+      ]));
+  finally
+    LogMessageExit(LogContext);
+  end;
+end;
+{$ENDIF}
 
 procedure TRunCommand.InitializeProcess;
 var
@@ -86,6 +127,9 @@ begin
   try
 
     fAbortRequested := False;
+{$IFDEF Windows}
+    fJobHandle := 0;
+{$ENDIF}
     fProcess := {$IFDEF WINDOWS}TProcess{$ELSE}TProcessUTF8{$ENDIF}.Create(nil);
     for i := 1 to GetEnvironmentVariableCount do
       fProcess.Environment.Add(GetEnvironmentString(i));
@@ -216,6 +260,10 @@ begin
       poUsePipes,
       poStdErrToOutput
     ];
+{$IFDEF Windows}
+    // Suspended until the process is in the job (see AssignProcessToJob)
+    fProcess.Options := fProcess.Options + [poRunSuspended];
+{$ENDIF}
 
 {$IFDEF RELEASE}
     fProcess.ShowWindow := swoHide;
@@ -231,6 +279,10 @@ begin
 
     fPipeOpened := True;
     fProcess.Execute;
+{$IFDEF Windows}
+    AssignProcessToJob;
+    fProcess.Resume;
+{$ENDIF}
 
     LogMessage(LogContext, Format('ThreadId: %d, ExecProcessId: %d, ExecCommandLine: "%s", Environment: [%s], ThreadEnvironmentPath: [%s]', [
       ThreadID,
@@ -328,6 +380,11 @@ begin
         LogMessage(LogContext, 'Process has been already killed');
     end;
 
+{$IFDEF Windows}
+    // Terminate the remaining processes (e.g., if CTRL+BREAK wasn't sent)
+    TerminateJob;
+{$ENDIF}
+
   finally
     LogMessageExit(LogContext);
   end;
@@ -358,6 +415,10 @@ destructor TRunCommand.Destroy;
 begin
   fBufferOutput.Free;
   fProcess.Free;
+{$IFDEF Windows}
+  if fJobHandle <> 0 then
+    CloseHandle(fJobHandle);
+{$ENDIF}
   fEnvironment.Free;
   fParameters.Free;
   inherited Destroy;
