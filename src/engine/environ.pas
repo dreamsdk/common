@@ -379,6 +379,7 @@ type
     function GetOffline: Boolean;
     function GetReady: Boolean;
     function GetRef: string;
+    function RunGit(const CommandLine: string; out Output: string): Boolean;
     function GetURL: string;
     function GetVersion: string;
   protected
@@ -473,20 +474,41 @@ begin
   Result := Environment.IsRepositoryReady(fRepositoryDirectory);
 end;
 
+// Run a git command in the repository directory. Since stderr is merged into
+// the output, the output is only meaningful when git succeeded (exit code 0),
+// otherwise it's an error message (e.g., "fatal: No such ref: HEAD").
+function TDreamcastSoftwareDevelopmentRepository.RunGit(
+  const CommandLine: string; out Output: string): Boolean;
+var
+  SavedDirectory: TFileName;
+  ProcessId,
+  ProcessExitCode: Integer;
+
+begin
+  Output := EmptyStr;
+  ProcessId := Default(Integer);
+  ProcessExitCode := -1;
+  SavedDirectory := GetCurrentDir;
+  try
+    SetCurrentDir(fRepositoryDirectory);
+    Output := Trim(Run('git', CommandLine, ProcessId, ProcessExitCode));
+  finally
+    SetCurrentDir(SavedDirectory);
+  end;
+  Result := (ProcessExitCode = 0) and (not IsInString(FAIL_TAG, Output));
+  if not Result then
+    Output := EmptyStr;
+end;
+
 function TDreamcastSoftwareDevelopmentRepository.GetRef: string;
 begin
   Result := EmptyStr;
   if Ready then
     try
       // A real branch (e.g., master or a maintenance branch)
-      Result := Trim(Run('git', 'symbolic-ref -q --short HEAD', fRepositoryDirectory));
-      if IsEmpty(Result) then
-      begin
+      if not RunGit('symbolic-ref -q --short HEAD', Result) then
         // Detached HEAD: resolve the tag pointing exactly at HEAD (if any)
-        Result := Trim(Run('git', 'describe --tags --exact-match', fRepositoryDirectory));
-        if IsInString(FAIL_TAG, Result) then
-          Result := EmptyStr;
-      end;
+        RunGit('describe --tags --exact-match', Result);
     except
       // Silent exception (not needed in that case)
     end;
@@ -497,9 +519,9 @@ begin
   Result := EmptyStr;
   if Ready then
     try
-        Result := Trim(Run('git', 'config --get remote.origin.url', fRepositoryDirectory));
+      RunGit('config --get remote.origin.url', Result);
     except
-        // Silent exception (not needed in that case)
+      // Silent exception (not needed in that case)
     end;
 end;
 

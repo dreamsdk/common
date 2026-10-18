@@ -637,6 +637,17 @@ end;
 
 procedure TDreamcastSoftwareDevelopmentSettingsRepositories.LoadConfiguration(
   IniFile: TIniFile);
+
+  // Older builds could store a git error message as the ref (e.g.,
+  // "fatal: No such ref: HEAD"): discard it so the ref is detected again
+  function ReadRef(const Key: string): string;
+  begin
+    Result := Trim(IniFile.ReadString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
+      Key, EmptyStr));
+    if Pos('fatal:', LowerCase(Result)) > 0 then
+      Result := EmptyStr;
+  end;
+
 begin
   // Empty URL means "use the default URL" (see GetURL)
   fKallistiURL := IniFile.ReadString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
@@ -648,14 +659,10 @@ begin
   fDreamcastToolInternetProtocolURL := IniFile.ReadString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
     'DreamcastToolInternetProtocolURL', EmptyStr);
 
-  fKallistiRef := IniFile.ReadString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
-    'KallistiRef', EmptyStr);
-  fKallistiPortsRef := IniFile.ReadString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
-    'KallistiPortsRef', EmptyStr);
-  fDreamcastToolSerialRef := IniFile.ReadString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
-    'DreamcastToolSerialRef', EmptyStr);
-  fDreamcastToolInternetProtocolRef := IniFile.ReadString(CONFIG_DREAMSDK_SECTION_REPOSITORIES,
-    'DreamcastToolInternetProtocolRef', EmptyStr);
+  fKallistiRef := ReadRef('KallistiRef');
+  fKallistiPortsRef := ReadRef('KallistiPortsRef');
+  fDreamcastToolSerialRef := ReadRef('DreamcastToolSerialRef');
+  fDreamcastToolInternetProtocolRef := ReadRef('DreamcastToolInternetProtocolRef');
 end;
 
 procedure TDreamcastSoftwareDevelopmentSettingsRepositories.SaveConfiguration(
