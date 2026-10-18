@@ -386,7 +386,7 @@ type
   end;
 
 var
-  DefaultRepository: TDefaultRepository;
+  DefaultRepositoryInstance: TDefaultRepository = nil;
 
 {$IFDEF DEBUG}
 {$IFDEF DEBUG_SETTINGS_RECOMPUTE_DYNAMIC_DIRECTORIES}
@@ -404,6 +404,16 @@ function GetDefaultCodeBlocksBackupDirectory: TFileName;
 begin
   Result := Format(DEFAULT_CODEBLOCKS_BACKUP_DIR, [
       '%' + GetBaseEnvironmentVariableName + '%']);
+end;
+
+(* The default repositories are loaded on first use (and not in the
+   initialization section), as they rely on the DreamSDK home directory, which
+   may be set after this unit is loaded (see SetBaseInstallationHomeDirectory). *)
+function DefaultRepository: TDefaultRepository;
+begin
+  if not Assigned(DefaultRepositoryInstance) then
+    DefaultRepositoryInstance := TDefaultRepository.Create;
+  Result := DefaultRepositoryInstance;
 end;
 
 function GetDefaultUrlKallisti: string;
@@ -1392,11 +1402,8 @@ begin
   end;
 end;
 
-initialization
-  DefaultRepository := TDefaultRepository.Create;
-
 finalization
-  DefaultRepository.Free;
+  DefaultRepositoryInstance.Free;
 
 end.
 

@@ -23,7 +23,7 @@ uses
   , UTF8Process,
 {$ENDIF}
   SysTools,
-  UITools,
+  WinTools,
   FSTools;
 
 const

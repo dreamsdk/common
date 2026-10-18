@@ -67,13 +67,32 @@ const
   VERSION_REGISTRY_FILE_SYSTEM_LOCATION = 'versions.conf';
 
 var
+  VersionInterfaceInitialized: Boolean = False;
   GrepFileName: TFileName;
   ComSpecFileName: TFileName;
-  VersionInformationRegistry: TIniFile;
-  ShellRunner: TDreamcastSoftwareDevelopmentKitRunner;
+  VersionInformationRegistry: TIniFile = nil;
+  ShellRunner: TDreamcastSoftwareDevelopmentKitRunner = nil;
+
+(* Initialize the objects used by this unit on first use (and not in the
+   initialization section), as they rely on the DreamSDK home directory, which
+   may be set after this unit is loaded (see SetBaseInstallationHomeDirectory). *)
+procedure InitializeVersionInterface;
+begin
+  if VersionInterfaceInitialized then
+    Exit;
+  VersionInterfaceInitialized := True;
+
+  ShellRunner := TDreamcastSoftwareDevelopmentKitRunner.Create(True);
+  GrepFileName := GetUserBinariesBaseDirectory + GREP_BINARY_FILENAME;
+  ComSpecFileName := GetEnvironmentVariable('COMSPEC');
+  if DirectoryExists(GetConfigurationDirectory) then
+    VersionInformationRegistry := TIniFile.Create(
+      GetConfigurationDirectory + VERSION_REGISTRY_FILE_SYSTEM_LOCATION);
+end;
 
 function GetRegisteredVersion(const FileName: TFileName): string;
 begin
+  InitializeVersionInterface;
   Result := VersionInformationRegistry.ReadString('Versions',
     GetFileHash(FileName), EmptyStr);
 end;
@@ -83,6 +102,7 @@ begin
 {$IFDEF DEBUG}
   WriteLn('SetRegisteredVersion: ', FileName, ': ', Version);
 {$ENDIF}
+  InitializeVersionInterface;
   if IsVersionValid(Version) then
     VersionInformationRegistry.WriteString('Versions',
       GetFileHash(FileName), Version);
@@ -205,6 +225,7 @@ var
   FileLocations: TStringList;
 
 begin
+  InitializeVersionInterface;
   Result := EmptyStr;
   Buffer := EmptyStr;
   UseRegister := False;
@@ -386,6 +407,7 @@ var
   CommandLine: string;
 
 begin
+  InitializeVersionInterface;
   Result := EmptyStr;
 
   if EnableRegister then
@@ -473,14 +495,6 @@ begin
   ModuleVersion.BuildDateTime := FormatDateTime(STRING_DATE_FORMAT, GetCompiledDateTime);
   Result := ProcessModuleVersion(ModuleVersion, UnknownValueIfEmpty);
 end;
-
-initialization
-  ShellRunner := TDreamcastSoftwareDevelopmentKitRunner.Create(True);
-  GrepFileName := GetUserBinariesBaseDirectory + GREP_BINARY_FILENAME;
-  ComSpecFileName := GetEnvironmentVariable('COMSPEC');
-  if DirectoryExists(GetConfigurationDirectory) then
-    VersionInformationRegistry := TIniFile.Create(
-      GetConfigurationDirectory + VERSION_REGISTRY_FILE_SYSTEM_LOCATION);
 
 finalization
   if Assigned(ShellRunner) then

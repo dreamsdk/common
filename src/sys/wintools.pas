@@ -1,0 +1,147 @@
+unit WinTools;
+
+(*
+  Windows and processes tools. This unit doesn't depend on the LCL, so it can be
+  used in non-GUI programs and libraries (e.g., the DreamSDK Setup helpers).
+  The tools that need the LCL are in the UITools unit.
+*)
+
+{$mode objfpc}{$H+}
+
+interface
+
+uses
+{$IFDEF Windows}
+  Windows,
+{$ENDIF}
+  Classes,
+  SysUtils;
+
+function FindProcessWindows(ProcessID: LongWord; Handles: TList): Boolean;
+procedure SetWindowIconForProcessId(const ProcessID: LongWord;
+  const IconResourceName: string); overload;
+procedure SetWindowIconForProcessId(const ProcessID: LongWord); overload;
+function GetWindowTitle(const AWindowHandle: THandle): string;
+function SetWindowTitle(const AWindowHandle: THandle;
+  const NewTitle: string): Boolean;
+procedure WaitForWindowCreationForProcessId(const ProcessId: LongWord;
+  const MaxTries: Integer = 10; MillisecondsBetweenTries: LongWord = 100);
+
+implementation
+
+type
+  PFindWindowsStruct = ^TFindWindowsStruct;
+  TFindWindowsStruct = record
+    ProcessID: LongWord;
+    HandleList: TList;
+  end;
+
+function EnumWindowsProc(hwnd: HWND; lParam: LPARAM): LongBool; stdcall;
+var
+  dwProcessId: LongWord;
+
+begin
+  Result := False;
+  dwProcessId := 0;
+  if lParam <> 0 then
+  begin
+    GetWindowThreadProcessId(hwnd, dwProcessId);
+    with {%H-}PFindWindowsStruct(lParam)^ do
+	    if (dwProcessID = ProcessID) and IsWindowVisible(hwnd) then
+        HandleList.Add({%H-}Pointer(hwnd));
+    Result:= True;
+  end;
+end;
+
+// https://delphi.developpez.com/faq/?page=Systeme-moins-Divers#Comment-recuperer-les-handles-des-fenetres-d-un-processus
+function FindProcessWindows(ProcessID: LongWord; Handles: TList): Boolean;
+var
+  FindWindowsStruct: TFindWindowsStruct;
+
+begin
+  FindWindowsStruct.ProcessID := ProcessID;
+  FindWindowsStruct.HandleList := Handles;
+  Result := EnumWindows(@EnumWindowsProc, {%H-}IntPtr(@FindWindowsStruct));
+end;
+
+procedure SetWindowIconForProcessId(const ProcessID: LongWord;
+  const IconResourceName: string); overload;
+var
+  WinHandles: TList;
+  BigIcon,
+  SmallIcon: HICON;
+  WinHandle: THandle;
+  i: Integer;
+
+begin
+  WinHandles := TList.Create;
+  try
+    // Load icons
+    BigIcon := LoadImage(hInstance, PChar(IconResourceName), IMAGE_ICON,
+      GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), 0);
+    SmallIcon := LoadImage(hInstance, PChar(IconResourceName), IMAGE_ICON,
+      GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
+
+    // Set icons for all window associated to that ProcessID
+    FindProcessWindows(ProcessID, WinHandles);
+    for i:= 0 to WinHandles.Count - 1 do
+    begin
+      WinHandle := {%H-}THandle(WinHandles[i]);
+      SendMessage(WinHandle, WM_SETICON, ICON_BIG, LParam(BigIcon));
+      SendMessage(WinHandle, WM_SETICON, ICON_SMALL, LParam(SmallIcon));
+    end;
+  finally
+    WinHandles.Free;
+  end;
+end;
+
+procedure SetWindowIconForProcessId(const ProcessID: LongWord); overload;
+begin
+  SetWindowIconForProcessId(ProcessID, 'MAINICON');
+end;
+
+function GetWindowTitle(const AWindowHandle: THandle): string;
+var
+  TitleLength: Integer;
+  Title: string;
+
+begin
+  Result := EmptyStr;
+  Title := EmptyStr;
+  TitleLength := GetWindowTextLength(AWindowHandle);
+  if TitleLength <> 0 then
+  begin
+    SetLength(Title, TitleLength);
+    GetWindowText(AWindowHandle, PChar(Title), TitleLength + 1);
+    Result := PChar(Title);
+  end;
+end;
+
+function SetWindowTitle(const AWindowHandle: THandle;
+  const NewTitle: string): Boolean;
+begin
+  Result := SetWindowText(AWindowHandle, PChar(NewTitle))
+end;
+
+procedure WaitForWindowCreationForProcessId(const ProcessId: LongWord;
+  const MaxTries: Integer = 10; MillisecondsBetweenTries: LongWord = 100);
+var
+  WinHandles: TList;
+  i: Integer;
+
+begin
+  WinHandles := TList.Create;
+  try
+    for i := 0 to MaxTries - 1 do
+    begin
+      if FindProcessWindows(ProcessId, WinHandles) then
+        if WinHandles.Count > 0 then
+          Break;
+      Sleep(MillisecondsBetweenTries);
+    end;
+  finally
+    WinHandles.Free;
+  end;
+end;
+
+end.

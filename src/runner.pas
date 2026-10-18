@@ -93,11 +93,10 @@ uses
   CThreads,
   CMem,
 {$ENDIF}
-  Interfaces,
   RefBase,
   Version,
   FSTools,
-  UITools;
+  WinTools;
 
 type
   { TShellWindowWatchdogThread }
