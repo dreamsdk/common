@@ -379,7 +379,6 @@ type
     function GetOffline: Boolean;
     function GetReady: Boolean;
     function GetRef: string;
-    function RunGit(const CommandLine: string; out Output: string): Boolean;
     function GetURL: string;
     function GetVersion: string;
   protected
@@ -462,6 +461,31 @@ uses
 const
   FAIL_TAG = 'fatal: ';
 
+// Run a git command in the working directory. Since stderr is merged into
+// the output, the output is only meaningful when git succeeded (exit code 0),
+// otherwise it's an error message (e.g., "fatal: No such ref: HEAD").
+function RunGit(const WorkingDirectory: TFileName; const CommandLine: string;
+  out Output: string; RefreshUI: Boolean = True): Boolean;
+var
+  SavedDirectory: TFileName;
+  ProcessId,
+  ProcessExitCode: Integer;
+
+begin
+  Output := EmptyStr;
+  ProcessId := Default(Integer);
+  ProcessExitCode := -1;
+  SavedDirectory := GetCurrentDir;
+  try
+    SetCurrentDir(WorkingDirectory);
+    Output := Trim(Run('git', CommandLine, ProcessId, ProcessExitCode,
+      RefreshUI));
+  finally
+    SetCurrentDir(SavedDirectory);
+  end;
+  Result := (ProcessExitCode = 0) and (not IsInString(FAIL_TAG, Output));
+end;
+
 { TDreamcastSoftwareDevelopmentRepository }
 
 function TDreamcastSoftwareDevelopmentRepository.GetOffline: Boolean;
@@ -474,41 +498,18 @@ begin
   Result := Environment.IsRepositoryReady(fRepositoryDirectory);
 end;
 
-// Run a git command in the repository directory. Since stderr is merged into
-// the output, the output is only meaningful when git succeeded (exit code 0),
-// otherwise it's an error message (e.g., "fatal: No such ref: HEAD").
-function TDreamcastSoftwareDevelopmentRepository.RunGit(
-  const CommandLine: string; out Output: string): Boolean;
-var
-  SavedDirectory: TFileName;
-  ProcessId,
-  ProcessExitCode: Integer;
-
-begin
-  Output := EmptyStr;
-  ProcessId := Default(Integer);
-  ProcessExitCode := -1;
-  SavedDirectory := GetCurrentDir;
-  try
-    SetCurrentDir(fRepositoryDirectory);
-    Output := Trim(Run('git', CommandLine, ProcessId, ProcessExitCode));
-  finally
-    SetCurrentDir(SavedDirectory);
-  end;
-  Result := (ProcessExitCode = 0) and (not IsInString(FAIL_TAG, Output));
-  if not Result then
-    Output := EmptyStr;
-end;
-
 function TDreamcastSoftwareDevelopmentRepository.GetRef: string;
 begin
   Result := EmptyStr;
   if Ready then
     try
       // A real branch (e.g., master or a maintenance branch)
-      if not RunGit('symbolic-ref -q --short HEAD', Result) then
+      if not RunGit(fRepositoryDirectory, 'symbolic-ref -q --short HEAD',
+        Result) then
         // Detached HEAD: resolve the tag pointing exactly at HEAD (if any)
-        RunGit('describe --tags --exact-match', Result);
+        if not RunGit(fRepositoryDirectory, 'describe --tags --exact-match',
+          Result) then
+          Result := EmptyStr;
     except
       // Silent exception (not needed in that case)
     end;
@@ -519,7 +520,9 @@ begin
   Result := EmptyStr;
   if Ready then
     try
-      RunGit('config --get remote.origin.url', Result);
+      if not RunGit(fRepositoryDirectory, 'config --get remote.origin.url',
+        Result) then
+        Result := EmptyStr;
     except
       // Silent exception (not needed in that case)
     end;
@@ -1321,7 +1324,6 @@ const
 var
   TempBuffer,
   CommandLine: string;
-  IsDetachedHead: Boolean;
 {$IFDEF DEBUG}
   OfflineVersion: string;
 {$ENDIF}
@@ -1333,15 +1335,20 @@ begin
   begin
     if IsRepositoryReady(WorkingDirectory) then
     begin
-      // A repository checked out on a tag (rather than a branch) has a
-      // detached HEAD: it has nothing to pull since a tag never moves by design
-      IsDetachedHead := IsEmpty(Trim(Run('git',
-        'symbolic-ref -q --short HEAD', WorkingDirectory, False)));
-
-      if IsDetachedHead then
+      if not RunGit(WorkingDirectory, 'symbolic-ref -q --short HEAD',
+        TempBuffer, False) then
       begin
-        BufferOutput := USELESS_TAG;
-        Result := uosUpdateUseless;
+        // A repository checked out on a tag (rather than a branch) has a
+        // detached HEAD: "symbolic-ref -q" fails silently in that case, and
+        // there is nothing to pull since a tag never moves by design.
+        // Any output means HEAD itself can't be resolved (broken repository).
+        if IsEmpty(TempBuffer) then
+        begin
+          BufferOutput := USELESS_TAG;
+          Result := uosUpdateUseless;
+        end
+        else
+          BufferOutput := TempBuffer;
       end
       else
       begin
