@@ -116,6 +116,22 @@ resourcestring
   MSYSShellNotFound             = 'MinGW/MSYS is not properly installed.';
   ErrorTitle                    = 'Error';
 
+(* Check if our standard output is a real console (i.e., not redirected) *)
+function IsConsoleOutput: Boolean;
+{$IFDEF Windows}
+var
+  Mode: DWORD;
+
+begin
+  Mode := 0;
+  Result := GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), Mode);
+end;
+{$ELSE}
+begin
+  Result := False;
+end;
+{$ENDIF}
+
 { TShellWindowTitleWatchdogThread }
 
 procedure TShellWindowWatchdogThread.Execute;
@@ -301,6 +317,24 @@ begin
   end;
 
   fShellCommand.RootSystemPath := RootSystemPath;
+
+  // DreamSDK Runner: the output is just forwarded, so keep it as is (colors...)
+  // and, if we are in a console, let the shell use it directly, so the
+  // programs see a real terminal
+  if not fEmbeddedMode then
+  begin
+    fShellCommand.KeepEscapeSequences := True;
+    fShellCommand.InheritConsole := IsConsoleOutput;
+
+    // As stdin is a terminal, Bash would be interactive: on CTRL+C, it would
+    // stop the profile script and display a prompt instead of exiting.
+    // The command is run by the profile script, which logs out before "-c".
+    if fShellCommand.InheritConsole then
+    begin
+      fShellCommand.Parameters.Add('-c');
+      fShellCommand.Parameters.Add('exit');
+    end;
+  end;
 
   fShellCommand.OnNewLine := @HandleNewLine;
   fShellCommand.OnTerminate := @HandleTerminate;

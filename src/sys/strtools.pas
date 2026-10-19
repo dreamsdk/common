@@ -70,6 +70,9 @@ function Right(SubStr: string; S: string): string;
 (* Checks if S starts with SubStr - reverse of EndsWith *)
 function StartsWith(const SubStr, S: string): Boolean;
 
+(* Remove the ANSI/VT escape sequences (e.g., colors, window title) from S *)
+function StripEscapeSequences(const S: string): string;
+
 (* Explode S into SL, using Delimiter - reverse of StringListToString *)
 procedure StringToStringList(const S, Delimiter: string; SL: TStringList);
 
@@ -214,6 +217,59 @@ end;
 function StartsWith(const SubStr, S: string): Boolean;
 begin
   Result := AnsiStartsStr(SubStr, S);
+end;
+
+function StripEscapeSequences(const S: string): string;
+var
+  i, j, n: Integer;
+
+begin
+  n := Length(S);
+  SetLength(Result, n);
+  i := 1;
+  j := 0;
+  while i <= n do
+  begin
+    if S[i] <> #27 then
+    begin
+      Inc(j);
+      Result[j] := S[i];
+      Inc(i);
+      Continue;
+    end;
+
+    Inc(i);
+    if i > n then
+      Break;
+    case S[i] of
+      // CSI: parameters/intermediates, then a final byte (e.g., colors)
+      '[':
+        begin
+          Inc(i);
+          while (i <= n) and not (S[i] in [#$40..#$7E]) do
+            Inc(i);
+          Inc(i);
+        end;
+      // OSC/DCS/APC/PM: terminated by BEL or ST (ESC \) (e.g., window title)
+      ']', 'P', '_', '^':
+        begin
+          Inc(i);
+          while (i <= n) and (S[i] <> #7)
+            and not ((S[i] = #27) and (i < n) and (S[i + 1] = '\')) do
+            Inc(i);
+          if (i <= n) and (S[i] = #27) then
+            Inc(i, 2)
+          else
+            Inc(i);
+        end;
+    else
+      // Other sequences: intermediates, then a final byte (e.g., ESC ( B)
+      while (i <= n) and (S[i] in [#$20..#$2F]) do
+        Inc(i);
+      Inc(i);
+    end;
+  end;
+  SetLength(Result, j);
 end;
 
 function IsEmpty(const S: string): Boolean;

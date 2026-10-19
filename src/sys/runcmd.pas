@@ -31,11 +31,17 @@ type
     fNewLine: TNewLineEvent;
     fParameters: TStringList;
     fWorkingDirectory: TFileName;
+    fInheritConsole: Boolean;
+    fKeepEscapeSequences: Boolean;
 {$IFDEF Windows}
     fJobHandle: THandle;
+    fConsoleOutputMode: LongWord;
+    fConsoleOutputModeChanged: Boolean;
     procedure AssignProcessToJob;
     procedure TerminateJob;
 {$ENDIF}
+    procedure BeginConsoleSharing;
+    procedure EndConsoleSharing;
     function GetExitCode: Integer;
     function GetTargetCommandLine: string;
     function GetTargetProcessId: LongWord;
@@ -63,6 +69,14 @@ type
       read fRootSystemPath write fRootSystemPath;
     property WorkingDirectory: TFileName read fWorkingDirectory
       write fWorkingDirectory;
+    (* The process shares our console and standard handles instead of using
+       pipes, so programs see a real terminal (colors, stdin, CTRL+C...).
+       OnNewLine is never triggered in that mode. *)
+    property InheritConsole: Boolean read fInheritConsole write fInheritConsole;
+    (* By default, escape sequences (e.g., colors) are removed from the
+       lines sent to OnNewLine. *)
+    property KeepEscapeSequences: Boolean read fKeepEscapeSequences
+      write fKeepEscapeSequences;
     property OnNewLine: TNewLineEvent read fNewLine write fNewLine;
   end;
 
@@ -71,9 +85,9 @@ implementation
 uses
 {$IFDEF Windows}
   JwaWinBase,
+  JwaWinCon,
 {$IFDEF RELEASE}
   JwaWinNT,
-  JwaWinCon,
 {$ENDIF}
 {$ENDIF}
   SysTools,
@@ -115,7 +129,48 @@ begin
     LogMessageExit(LogContext);
   end;
 end;
+
+const
+  ENABLE_VIRTUAL_TERMINAL_PROCESSING = $0004;
+
+(* When the console is shared, CTRL+C/CTRL+BREAK are received by the process
+   too: let it handle them and just wait for it. *)
+function IgnoreConsoleCtrlHandler(CtrlType: DWORD): LongBool; stdcall;
+begin
+  Result := (CtrlType = CTRL_C_EVENT) or (CtrlType = CTRL_BREAK_EVENT);
+end;
 {$ENDIF}
+
+procedure TRunCommand.BeginConsoleSharing;
+{$IFDEF Windows}
+var
+  OutputHandle: THandle;
+  OutputMode: DWORD;
+
+begin
+  SetConsoleCtrlHandler(@IgnoreConsoleCtrlHandler, True);
+
+  // Allow ANSI escape sequences (e.g., colors) on legacy consoles
+  OutputMode := 0;
+  OutputHandle := GetStdHandle(STD_OUTPUT_HANDLE);
+  fConsoleOutputModeChanged := GetConsoleMode(OutputHandle, OutputMode)
+    and SetConsoleMode(OutputHandle,
+      OutputMode or ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+  fConsoleOutputMode := OutputMode;
+end;
+{$ELSE}
+begin
+end;
+{$ENDIF}
+
+procedure TRunCommand.EndConsoleSharing;
+begin
+{$IFDEF Windows}
+  if fConsoleOutputModeChanged then
+    SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), fConsoleOutputMode);
+  SetConsoleCtrlHandler(@IgnoreConsoleCtrlHandler, False);
+{$ENDIF}
+end;
 
 procedure TRunCommand.InitializeProcess;
 var
@@ -127,8 +182,12 @@ begin
   try
 
     fAbortRequested := False;
+    fInheritConsole := False;
+    fKeepEscapeSequences := False;
 {$IFDEF Windows}
     fJobHandle := 0;
+    fConsoleOutputMode := 0;
+    fConsoleOutputModeChanged := False;
 {$ENDIF}
     fProcess := {$IFDEF WINDOWS}TProcess{$ELSE}TProcessUTF8{$ENDIF}.Create(nil);
     for i := 1 to GetEnvironmentVariableCount do
@@ -141,7 +200,7 @@ end;
 
 function TRunCommand.IsValidNewLine(const NewLine: string): Boolean;
 begin
-  Result := (Trim(NewLine) <> EmptyStr) and (not StartsWith(#$1B, NewLine));
+  Result := (Trim(NewLine) <> EmptyStr);
 end;
 
 function TRunCommand.GetExitCode: Integer;
@@ -162,8 +221,10 @@ procedure TRunCommand.SyncSendNewLineEvent;
 var
   i, LinesCount: Integer;
 
-  procedure SendLine(const Line: string);
+  procedure SendLine(Line: string);
   begin
+    if not KeepEscapeSequences then
+      Line := StripEscapeSequences(Line);
     fBufferOutput.Add(Line);
     fNewLine(Self, Line);
     fPartialLine := '';
@@ -252,14 +313,18 @@ begin
       DebugLog('    ' + fEnvironment[i]);
 {$ENDIF}
 
-    // NoConsole / NewProcessGroup are used for handling CTRL+BREAK signals without exiting our app
-    // UsePipes / StdErrToOutput for getting stream in real time
-    fProcess.Options := [
-      poNoConsole,
-      poNewProcessGroup,
-      poUsePipes,
-      poStdErrToOutput
-    ];
+    if InheritConsole then
+      // The process uses our console and standard handles directly
+      fProcess.Options := []
+    else
+      // NoConsole / NewProcessGroup are used for handling CTRL+BREAK signals without exiting our app
+      // UsePipes / StdErrToOutput for getting stream in real time
+      fProcess.Options := [
+        poNoConsole,
+        poNewProcessGroup,
+        poUsePipes,
+        poStdErrToOutput
+      ];
 {$IFDEF Windows}
     // Suspended until the process is in the job (see AssignProcessToJob)
     fProcess.Options := fProcess.Options + [poRunSuspended];
@@ -276,6 +341,9 @@ begin
 {$IFDEF DEBUG}
     DebugLog('  WorkingDirectory: ' + WorkingDirectory);
 {$ENDIF}
+
+    if InheritConsole then
+      BeginConsoleSharing;
 
     fPipeOpened := True;
     fProcess.Execute;
@@ -299,6 +367,10 @@ begin
 {$ENDIF}
 {$ENDIF}
 
+    // No pipes in that mode: the output is already displayed in the console
+    if InheritConsole then
+      fProcess.WaitOnExit;
+
     repeat
       BytesRead := 0;
       FillByte(Buffer, BUF_SIZE, $00);
@@ -312,8 +384,10 @@ begin
           Inc(i);
         end;
 {$ENDIF}
+        // Every chunk must be sent, even blank ones, as they may terminate
+        // the current partial line
         SetString(NewLine, PChar(@Buffer[0]), BytesRead);
-        if IsValidNewLine(NewLine) then
+        if BytesRead > 0 then
           SendNewLine(NewLine, False);
       end;
     until (BytesRead = 0);
@@ -322,6 +396,8 @@ begin
       SendNewLine(fPartialLine, True);
 
   finally
+    if InheritConsole then
+      EndConsoleSharing;
     LogMessageExit(LogContext);
   end;
 end;
