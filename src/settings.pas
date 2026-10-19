@@ -1258,7 +1258,88 @@ begin
   );
 end;
 
-{ TDreamcastSoftwareDevelopmentSettingsDreamcastTool }
+{ TDreamcastSoftwareDevelopmentSettings }
+
+const
+  SETTINGS_FILE_ACCESS_RETRY_COUNT = 20;
+  SETTINGS_FILE_ACCESS_RETRY_DELAY = 50; // ms
+
+// The settings file may be accessed by several DreamSDK processes at the same
+// time (e.g., "kosports status installed & kosports status available &"), so
+// it's always read with full sharing, and access is retried if another process
+// is holding it.
+function LoadSettingsFileStream(const FileName: TFileName): TMemoryStream;
+var
+  i: Integer;
+  FileStream: TFileStream;
+
+begin
+  Result := TMemoryStream.Create;
+  if not FileExists(FileName) then
+    Exit;
+
+  for i := 1 to SETTINGS_FILE_ACCESS_RETRY_COUNT do
+    try
+      Result.Clear;
+      FileStream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
+      try
+        Result.CopyFrom(FileStream, 0);
+      finally
+        FileStream.Free;
+      end;
+      Break;
+    except
+      on EFOpenError do
+      begin
+        if i = SETTINGS_FILE_ACCESS_RETRY_COUNT then
+        begin
+          Result.Free;
+          raise;
+        end;
+        Sleep(SETTINGS_FILE_ACCESS_RETRY_DELAY);
+      end;
+    end;
+
+  Result.Position := 0;
+end;
+
+// The settings file is only rewritten if its content has really changed.
+procedure SaveSettingsFileStream(const FileName: TFileName;
+  Stream: TMemoryStream);
+var
+  i: Integer;
+  CurrentStream: TMemoryStream;
+  FileStream: TFileStream;
+
+begin
+  CurrentStream := LoadSettingsFileStream(FileName);
+  try
+    if (CurrentStream.Size = Stream.Size)
+      and CompareMem(CurrentStream.Memory, Stream.Memory, Stream.Size) then
+      Exit;
+  finally
+    CurrentStream.Free;
+  end;
+
+  ForceDirectories(ExtractFilePath(FileName));
+  for i := 1 to SETTINGS_FILE_ACCESS_RETRY_COUNT do
+    try
+      FileStream := TFileStream.Create(FileName, fmCreate);
+      try
+        FileStream.CopyFrom(Stream, 0);
+      finally
+        FileStream.Free;
+      end;
+      Break;
+    except
+      on EFCreateError do
+      begin
+        if i = SETTINGS_FILE_ACCESS_RETRY_COUNT then
+          raise;
+        Sleep(SETTINGS_FILE_ACCESS_RETRY_DELAY);
+      end;
+    end;
+end;
 
 function TDreamcastSoftwareDevelopmentSettings.GetConfigurationFileName: TFileName;
 begin
@@ -1290,13 +1371,15 @@ end;
 
 function TDreamcastSoftwareDevelopmentSettings.LoadConfiguration: Boolean;
 var
+  Stream: TMemoryStream;
   IniFile: TIniFile;
   DefaultInstallationPath: TFileName;
   RealGuid: TGUID;
 
 begin
   Result := FileExists(FileName);
-  IniFile := TIniFile.Create(FileName);
+  Stream := LoadSettingsFileStream(FileName);
+  IniFile := TIniFile.Create(Stream, [ifoStripQuotes]);
   try
     // Settings
     DefaultInstallationPath := GetBaseInstallationHomeDirectory;
@@ -1360,16 +1443,21 @@ begin
     Result := True;
   finally
     IniFile.Free;
+    Stream.Free;
   end;
 end;
 
 procedure TDreamcastSoftwareDevelopmentSettings.SaveConfiguration;
 var
+  Stream: TMemoryStream;
   IniFile: TIniFile;
 
 begin
-  IniFile := TIniFile.Create(FileName);
+  Stream := LoadSettingsFileStream(FileName);
+  IniFile := TIniFile.Create(Stream, [ifoStripQuotes]);
   try
+    IniFile.CacheUpdates := True;
+
     // Settings
     IniFile.WriteString(
       CONFIG_DREAMSDK_SECTION_SETTINGS,
@@ -1404,8 +1492,12 @@ begin
 
     DreamcastTool.SaveConfiguration(IniFile);
     Repositories.SaveConfiguration(IniFile);
+
+    IniFile.UpdateFile;
+    SaveSettingsFileStream(FileName, Stream);
   finally
     IniFile.Free;
+    Stream.Free;
   end;
 end;
 
