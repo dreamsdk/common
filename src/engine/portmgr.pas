@@ -9,7 +9,7 @@ uses
 
 type
   TLibraryLanguageKind = (llkAll, llkC, llkCPP);
-  TOverridenInformationKind = (oikLibrary, oikInclude);
+  TOverridenInformationKind = (oikLibrary, oikInclude, oikIncludeDirectory);
 
   TKallistiPortManager = class;
 
@@ -241,8 +241,10 @@ end;
 
 function TKallistiPortItem.GetLibraries: string;
 begin
+  // Use the sorted list whenever it was computed, so Libraries and
+  // LibraryWeights are always in the same order (even without dependencies)
   Result := fSelfLibraries;
-  if fFullComputedDependenciesNameList.Count > 0 then
+  if not IsEmpty(fFullComputedDependenciesLibraries) then
     Result := fFullComputedDependenciesLibraries;
 end;
 
@@ -582,16 +584,42 @@ var
 
   function GetPackageIncludeDirectory: TFileName;
   begin
-    Result := GetPackageString('HDR_FULLDIR');
+    Result := GetOverridenInformation(oikIncludeDirectory, PortName);
+    if SameText(Result, EmptyStr) then
+      Result := GetPackageString('HDR_FULLDIR');
   end;
 
   function GetPackageLibraries: string;
+  var
+    Targets: TStringList;
+    i: Integer;
+    LibraryName: string;
+
   begin
     Result := GetOverridenInformation(oikLibrary, PortName);
     if SameText(Result, EmptyStr) then
     begin
-      Result := ChangeFileExt(GetPackageString('TARGET'), EmptyStr);
-      Result := Copy(Result, 4, Length(Result));
+      // TARGET may declare several libraries (e.g. "libGL.a libGLU.a") and
+      // may use the PORTNAME variable (e.g. "lib$(PORTNAME).a")
+      Result := GetPackageString('TARGET');
+      Result := StringReplace(Result, '$(PORTNAME)', PortName, [rfReplaceAll]);
+      Result := StringReplace(Result, '${PORTNAME}', PortName, [rfReplaceAll]);
+
+      Targets := TStringList.Create;
+      try
+        StringToStringList(SuppressUselessWhiteSpaces(Result), WhiteSpaceStr, Targets);
+        for i := 0 to Targets.Count - 1 do
+        begin
+          // "libGL.a" => "GL"
+          LibraryName := ChangeFileExt(Trim(Targets[i]), EmptyStr);
+          if StartsWith('lib', LibraryName) then
+            LibraryName := Copy(LibraryName, 4, Length(LibraryName));
+          Targets[i] := LibraryName;
+        end;
+        Result := StringListToString(Targets, ArraySeparator);
+      finally
+        Targets.Free;
+      end;
     end
     else
       Result := StringReplace(Trim(Result), ' ', ArraySeparator, [rfReplaceAll]);
@@ -779,9 +807,14 @@ var
   SectionName: string;
 
 begin
-  SectionName := 'Libraries';
-  if InformationKind = oikInclude then
-    SectionName := 'Includes';
+  case InformationKind of
+    oikInclude:
+      SectionName := 'Includes';
+    oikIncludeDirectory:
+      SectionName := 'IncludeDirectories';
+    else
+      SectionName := 'Libraries';
+  end;
   Result := fKallistiLibraryInformation.ReadString(SectionName, PortName, EmptyStr);
 end;
 
@@ -904,8 +937,9 @@ var
       StringToStringList(MultipleLibraryStr, ArraySeparator, Buffer);
       for k := 0 to Buffer.Count - 1 do
       begin
-        SinglePortName := Buffer[k];
-        OutputBuffer.Add(GenerateLine(SinglePortName));
+        SinglePortName := Trim(Buffer[k]);
+        if not IsEmpty(SinglePortName) then
+          OutputBuffer.Add(GenerateLine(SinglePortName));
       end;
       Result := True;
     finally
@@ -919,8 +953,9 @@ begin
     DependencyPortLibrary := GetPortLibrary(PortName);
     if IsInString(ArraySeparator, DependencyPortLibrary) then
       HandleMultipleLibrary(OutputBuffer, DependencyPortLibrary)
-    else
+    else if not IsEmpty(DependencyPortLibrary) then
     begin
+      // An unknown dependency (not a port) has no library: don't add an empty entry
       OutputBuffer.Add(GenerateLine(DependencyPortLibrary));
     end;
   end;
@@ -932,6 +967,31 @@ var
   j: Integer;
   DependencyPortName, DependencyPortLibrary, DependencyPortWeight: string;
   PortOrderingBuffer, WeightsBuffer: TStringList;
+
+  // Sort "weight:library" entries on the weight only, with a stable insertion
+  // sort: libraries with the same weight keep their declared order, which is
+  // the link order required by the port (e.g. mbedtls mbedx509 mbedcrypto).
+  // TStringList.Sort can't be used: it sorts the whole string (so it falls
+  // back to alphabetical order on equal weights) and isn't stable.
+  procedure StableSortByWeight(Buffer: TStringList);
+  var
+    i, k: Integer;
+    Entry, EntryWeight: string;
+
+  begin
+    for i := 1 to Buffer.Count - 1 do
+    begin
+      Entry := Buffer[i];
+      EntryWeight := Left(':', Entry);
+      k := i - 1;
+      while (k >= 0) and (CompareStr(Left(':', Buffer[k]), EntryWeight) > 0) do
+      begin
+        Buffer[k + 1] := Buffer[k];
+        Dec(k);
+      end;
+      Buffer[k + 1] := Entry;
+    end;
+  end;
 
 begin
   PortOrderingBuffer := TStringList.Create;
@@ -949,7 +1009,7 @@ begin
       HandleLibrary(PortOrderingBuffer, PortInfo.Name);
 
     // Sort by Port weights
-    PortOrderingBuffer.Sort;
+    StableSortByWeight(PortOrderingBuffer);
 
 {$IFDEF DEBUG}
     DebugLog(StringListToString(PortOrderingBuffer, ' + '));
