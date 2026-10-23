@@ -922,7 +922,11 @@ begin
   begin
     ProcessedNewLine := LowerCase(ProcessedNewLine); // only used for detecting errors
     for i := Low(ERROR_KEYWORDS) to High(ERROR_KEYWORDS) do
-      fShellCommandError := IsInString(ERROR_KEYWORDS[i], ProcessedNewLine);
+      if IsInString(ERROR_KEYWORDS[i], ProcessedNewLine) then
+      begin
+        fShellCommandError := True;
+        Break;
+      end;
   end;
 end;
 
