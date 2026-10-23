@@ -125,7 +125,8 @@ type
 
 function IsDebuggerPythonVersionInstalled(
   AManager: TDreamcastSoftwareDevelopmentKitManager;
-  const DebuggerProfileKey: string; var VersionWithDot: string): Boolean;
+  const DebuggerProfileKey: string; var VersionWithDot: string;
+  var Bitness: string): Boolean;
 
 implementation
 
@@ -137,7 +138,8 @@ uses
 
 function IsDebuggerPythonVersionInstalled(
   AManager: TDreamcastSoftwareDevelopmentKitManager;
-  const DebuggerProfileKey: string; var VersionWithDot: string): Boolean;
+  const DebuggerProfileKey: string; var VersionWithDot: string;
+  var Bitness: string): Boolean;
 var
   GdbProfileInfo: TGdbProfileInfo;
   i: Integer;
@@ -156,6 +158,9 @@ begin
   if Assigned(GdbProfileInfo) then
   begin
     VersionWithDot := GdbProfileInfo.PythonVersion;
+    Bitness := '32';
+    if GdbProfileInfo.Bitness = peb64 then
+      Bitness := '64';
     Result := IsEmpty(VersionWithDot); // if no Python version available, then return TRUE (OK to continue)
     if not Result then
     begin
