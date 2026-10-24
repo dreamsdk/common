@@ -74,6 +74,7 @@ type
     property LibraryWeights: string read fFullComputedDependenciesLibraryWeights;
     property UseSubversion: Boolean read fUseSubversion;
     property UsableWithinIDE: Boolean read fUsableWithinIDE;
+    property LibraryLanguageKind: TLibraryLanguageKind read fLibraryLanguageKind;
   end;
 
   { TKallistiPortManager }
@@ -126,6 +127,7 @@ type
   protected
     procedure GenerateIntegratedDevelopmentEnvironmentLibraryInformation(
       const LibraryLanguageKind: TLibraryLanguageKind);
+    procedure GenerateLibraryInformationFile;
     function GetAddonIncludes(const AddonIndex: Integer): string;
     function GetAddonIndex(const AddonName: string): Integer;
     procedure RetrieveAvailableAddons;
@@ -163,6 +165,7 @@ implementation
 
 uses
   FileUtil,
+  FPJson,
   FSTools,
   StrTools;
 
@@ -1156,6 +1159,100 @@ begin
   end;
 end;
 
+// Generates the IDE-neutral library information file (JSON), used by IDEs
+// that can't use the Code::Blocks files (e.g. Visual Studio Code).
+// It contains all the ports and addons, whatever the IDE settings are.
+procedure TKallistiPortManager.GenerateLibraryInformationFile;
+const
+  LIBINFO_DIRECTORY = 'ide';
+  LIBINFO_FILE = 'libraries.json';
+  LIBINFO_FORMAT_VERSION = 1;
+  LANGUAGE_KIND_NAMES: array[TLibraryLanguageKind] of string = ('all', 'c', 'cpp');
+
+var
+  OutputDirectory, OutputFileName, TempFileName: TFileName;
+  Root, PortObject: TJSONObject;
+  PortsArray: TJSONArray;
+  i: Integer;
+  PortInfo: TKallistiPortItem;
+
+  function ToJSONArray(const Value: string): TJSONArray;
+  var
+    Buffer: TStringList;
+    j: Integer;
+    Item: string;
+
+  begin
+    Result := TJSONArray.Create;
+    Buffer := TStringList.Create;
+    try
+      StringToStringList(Value, ArraySeparator, Buffer);
+      for j := 0 to Buffer.Count - 1 do
+      begin
+        Item := Trim(Buffer[j]);
+        if not IsEmpty(Item) then
+          Result.Add(Item);
+      end;
+    finally
+      Buffer.Free;
+    end;
+  end;
+
+begin
+  OutputDirectory := Environment.FileSystem.Shell.ConfigurationDirectory
+    + LIBINFO_DIRECTORY + DirectorySeparator;
+  OutputFileName := OutputDirectory + LIBINFO_FILE;
+  TempFileName := OutputFileName + '.tmp';
+
+{$IFDEF DEBUG}
+  DebugLog('> GenerateLibraryInformationFile: "' + OutputFileName + '"');
+{$ENDIF}
+
+  Root := TJSONObject.Create;
+  try
+    try
+      PortsArray := TJSONArray.Create;
+      Root.Add('version', LIBINFO_FORMAT_VERSION);
+      Root.Add('libraries', PortsArray);
+
+      for i := 0 to Count - 1 do
+      begin
+        PortInfo := Items[i];
+        PortObject := TJSONObject.Create;
+        PortObject.Add('name', PortInfo.Name);
+        PortObject.Add('version', PortInfo.Version);
+        PortObject.Add('description', PortInfo.ShortDescription);
+        PortObject.Add('addon', PortInfo.Hidden);
+        PortObject.Add('installed', PortInfo.Installed);
+        PortObject.Add('usable', PortInfo.UsableWithinIDE);
+        PortObject.Add('language', LANGUAGE_KIND_NAMES[PortInfo.LibraryLanguageKind]);
+        PortObject.Add('includes', ToJSONArray(PortInfo.Includes));
+        PortObject.Add('includeDirectories', ToJSONArray(PortInfo.IncludeDirectory));
+        PortObject.Add('libraries', ToJSONArray(PortInfo.Libraries));
+        PortObject.Add('weights', ToJSONArray(PortInfo.LibraryWeights));
+        PortsArray.Add(PortObject);
+      end;
+
+      // Write to a temporary file first, so readers never see a partial file
+      ForceDirectories(OutputDirectory);
+      SaveStringToFile(Root.FormatJSON, TempFileName);
+      if FileExists(OutputFileName) then
+        DeleteFile(OutputFileName);
+      RenameFile(TempFileName, OutputFileName);
+    except
+      // Never fail the caller (e.g. DreamSDK Manager on exit) for this file
+      on E: Exception do
+      begin
+{$IFDEF DEBUG}
+        DebugLog('  GenerateLibraryInformationFile failed: ' + E.Message);
+{$ENDIF}
+      end;
+    end;
+  finally
+    Root.Free;
+  end;
+end;
+
 function TKallistiPortManager.GetAddonIncludes(const AddonIndex: Integer): string;
 var
   IncludeFiles: string;
@@ -1231,6 +1328,10 @@ end;
 
 procedure TKallistiPortManager.GenerateIntegratedDevelopmentEnvironmentLibraryInformation;
 begin
+  // IDE-neutral library information file, always generated
+  GenerateLibraryInformationFile;
+
+  // Code::Blocks library information files
   if IntegratedDevelopmentEnvironment.CodeBlocks.Settings.ExportLibraryInformation then
   begin
     GenerateIntegratedDevelopmentEnvironmentLibraryInformation(llkC);
