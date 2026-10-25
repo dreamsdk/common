@@ -184,6 +184,7 @@ type
   private
     fOwner: TDreamcastSoftwareDevelopmentFileSystem;
     fCodeBlocksPatcherExecutable: TFileName;
+    fVisualStudioCodeExtensionFileName: TFileName;
     fConfigurationDirectory: TFileName;
     fDreamSDKDirectory: TFileName;
     fDreamSDKExecutable: TFileName;
@@ -207,6 +208,8 @@ type
       read fIntegratedDevelopmentEnvironmentConfigurationFile;
     property CodeBlocksPatcherExecutable: TFileName
       read fCodeBlocksPatcherExecutable;
+    property VisualStudioCodeExtensionFileName: TFileName
+      read fVisualStudioCodeExtensionFileName;
   end;
 
   { TToolchainProfileInfo }
@@ -723,6 +726,8 @@ begin
       + DREAMSDK_HELP_FILE;
     fCodeBlocksPatcherExecutable := fDreamSDKDirectory +
       'packages\ide\codeblocks\codeblocks-patcher.exe';
+    fVisualStudioCodeExtensionFileName := fDreamSDKDirectory +
+      'packages\ide\vscode\dreamsdk.vsix';
   end;
 
   // Toolchain for Super-H (Hitachi SH-4)

@@ -52,11 +52,60 @@ type
       read fSettings;
   end;
 
+  { TVisualStudioCodeIntegratedDevelopmentEnvironment }
+  // Visual Studio Code or one of its forks (e.g. VSCodium): see VSCODE_EDITORS
+  TVisualStudioCodeIntegratedDevelopmentEnvironment = class(TObject)
+  private
+    fIntegratedDevelopmentEnvironment: TIntegratedDevelopmentEnvironment;
+    fEditorId: string;
+    fName: string;
+    fRefreshed: Boolean;
+    fAvailableUsers: TStringList;
+    fInstalledUsers: TStringList;
+    fDetected: Boolean;
+    fVersion: string;
+    fCommandLineInterface: TFileName;
+    fLastErrorMessage: string;
+    fLastOperationSuccess: Boolean;
+    function GetExtensionFileName: TFileName;
+    function GetInstalled: Boolean;
+  public
+    constructor Create(AIntegratedDevelopmentEnvironment: TIntegratedDevelopmentEnvironment;
+      const AEditorId, AName: string);
+    destructor Destroy; override;
+
+    // Install (or update) the extension for all the users
+    function Install: Boolean;
+    // Remove the extension from all the users
+    function Uninstall: Boolean;
+    // Retrieve the Visual Studio Code installation and the users state
+    procedure Refresh;
+    procedure UpdateStateFromElevatedTask(const SwapExchangeFileName: TFileName);
+
+    property AvailableUsers: TStringList read fAvailableUsers;
+    property CommandLineInterface: TFileName read fCommandLineInterface;
+    property Detected: Boolean read fDetected;
+    property EditorId: string read fEditorId;
+    property ExtensionFileName: TFileName read GetExtensionFileName;
+    property Installed: Boolean read GetInstalled;
+    property InstalledUsers: TStringList read fInstalledUsers;
+    property LastErrorMessage: string read fLastErrorMessage;
+    property LastOperationSuccess: Boolean read fLastOperationSuccess;
+    property Name: string read fName;
+    // True when Refresh was called at least once
+    property Refreshed: Boolean read fRefreshed;
+    property Version: string read fVersion;
+  end;
+  TVisualStudioCodeIntegratedDevelopmentEnvironmentArray =
+    array of TVisualStudioCodeIntegratedDevelopmentEnvironment;
+
   { TIntegratedDevelopmentEnvironment }
   TIntegratedDevelopmentEnvironment = class(TObject)
   private
     fCodeBlocks: TCodeBlocksIntegratedDevelopmentEnvironment;
     fEnvironment: TDreamcastSoftwareDevelopmentEnvironment;
+    fVisualStudioCodeEditors: TVisualStudioCodeIntegratedDevelopmentEnvironmentArray;
+    function GetVisualStudioCode: TVisualStudioCodeIntegratedDevelopmentEnvironment;
   protected
     property Environment: TDreamcastSoftwareDevelopmentEnvironment
       read fEnvironment;
@@ -65,6 +114,17 @@ type
     destructor Destroy; override;
     property CodeBlocks: TCodeBlocksIntegratedDevelopmentEnvironment
       read fCodeBlocks;
+    // Retrieve an editor from its identifier or its name (nil if unknown)
+    function GetVisualStudioCodeEditor(const EditorId: string):
+      TVisualStudioCodeIntegratedDevelopmentEnvironment;
+    function GetVisualStudioCodeEditorByName(const Name: string):
+      TVisualStudioCodeIntegratedDevelopmentEnvironment;
+    // Visual Studio Code itself
+    property VisualStudioCode: TVisualStudioCodeIntegratedDevelopmentEnvironment
+      read GetVisualStudioCode;
+    // Visual Studio Code and its forks
+    property VisualStudioCodeEditors: TVisualStudioCodeIntegratedDevelopmentEnvironmentArray
+      read fVisualStudioCodeEditors;
   end;
 
 implementation
@@ -74,7 +134,8 @@ uses
   StrTools,
   RunTools,
   RefBase,
-  CBTools;
+  CBTools,
+  VSCTools;
 
 const
   CODEBLOCKS_SUCCESSFUL_STATE = 'Code::Blocks is now';
@@ -232,17 +293,151 @@ begin
   Refresh;
 end;
 
+{ TVisualStudioCodeIntegratedDevelopmentEnvironment }
+
+function TVisualStudioCodeIntegratedDevelopmentEnvironment.GetExtensionFileName: TFileName;
+begin
+  Result := fIntegratedDevelopmentEnvironment.Environment.FileSystem.Shell
+    .VisualStudioCodeExtensionFileName;
+end;
+
+function TVisualStudioCodeIntegratedDevelopmentEnvironment.GetInstalled: Boolean;
+begin
+  Result := fInstalledUsers.Count > 0;
+end;
+
+constructor TVisualStudioCodeIntegratedDevelopmentEnvironment.Create(
+  AIntegratedDevelopmentEnvironment: TIntegratedDevelopmentEnvironment;
+  const AEditorId, AName: string);
+begin
+  fIntegratedDevelopmentEnvironment := AIntegratedDevelopmentEnvironment;
+  fEditorId := AEditorId;
+  fName := AName;
+  fAvailableUsers := TStringList.Create;
+  fInstalledUsers := TStringList.Create;
+  fLastOperationSuccess := True;
+end;
+
+destructor TVisualStudioCodeIntegratedDevelopmentEnvironment.Destroy;
+begin
+  fInstalledUsers.Free;
+  fAvailableUsers.Free;
+  inherited Destroy;
+end;
+
+function TVisualStudioCodeIntegratedDevelopmentEnvironment.Install: Boolean;
+begin
+  Result := VisualStudioCodeInstallExtension(EditorId, ExtensionFileName,
+    fLastErrorMessage);
+  fLastOperationSuccess := Result;
+  Refresh;
+end;
+
+function TVisualStudioCodeIntegratedDevelopmentEnvironment.Uninstall: Boolean;
+begin
+  Result := VisualStudioCodeUninstallExtension(EditorId,
+    VSCODE_DREAMSDK_EXTENSION_ID, fLastErrorMessage);
+  fLastOperationSuccess := Result;
+  Refresh;
+end;
+
+procedure TVisualStudioCodeIntegratedDevelopmentEnvironment.Refresh;
+var
+  LogContext: TLogMessageContext;
+  Installation: TVisualStudioCodeInstallation;
+  Users: TWindowsUserAccountInformationArray;
+  i: Integer;
+
+begin
+  LogContext := LogMessageEnter({$I %FILE%}, {$I %CURRENTROUTINE%}, ClassName);
+  try
+    fDetected := GetVisualStudioCodeInstallation(EditorId, Installation);
+    fVersion := Installation.Version;
+    fCommandLineInterface := Installation.CommandLineInterface;
+
+    // The state is read from each user profile, so it's always up-to-date
+    fAvailableUsers.Clear;
+    fInstalledUsers.Clear;
+    if GetVisualStudioCodeAvailableUsers(Users) then
+      for i := Low(Users) to High(Users) do
+      begin
+        fAvailableUsers.Add(Users[i].FriendlyName);
+        if IsVisualStudioCodeExtensionInstalled(EditorId, Users[i],
+          VSCODE_DREAMSDK_EXTENSION_ID) then
+          fInstalledUsers.Add(Users[i].FriendlyName);
+      end;
+
+    fRefreshed := True;
+
+    LogMessage(LogContext, Format('%s: Detected: %s, Version: "%s", Installed users: %d', [
+      EditorId, BoolToStr(fDetected, True), fVersion, fInstalledUsers.Count]));
+  finally
+    LogMessageExit(LogContext);
+  end;
+end;
+
+procedure TVisualStudioCodeIntegratedDevelopmentEnvironment.UpdateStateFromElevatedTask(
+  const SwapExchangeFileName: TFileName);
+begin
+  fLastOperationSuccess := not FileExists(SwapExchangeFileName);
+  if not LastOperationSuccess then
+    fLastErrorMessage := LoadFileToString(SwapExchangeFileName);
+end;
+
 { TIntegratedDevelopmentEnvironment }
+
+function TIntegratedDevelopmentEnvironment.GetVisualStudioCode:
+  TVisualStudioCodeIntegratedDevelopmentEnvironment;
+begin
+  Result := GetVisualStudioCodeEditor(VSCODE_EDITOR_VSCODE);
+end;
+
+function TIntegratedDevelopmentEnvironment.GetVisualStudioCodeEditor(
+  const EditorId: string): TVisualStudioCodeIntegratedDevelopmentEnvironment;
+var
+  i: Integer;
+
+begin
+  Result := nil;
+  for i := Low(fVisualStudioCodeEditors) to High(fVisualStudioCodeEditors) do
+    if SameText(fVisualStudioCodeEditors[i].EditorId, EditorId) then
+      Exit(fVisualStudioCodeEditors[i]);
+end;
+
+function TIntegratedDevelopmentEnvironment.GetVisualStudioCodeEditorByName(
+  const Name: string): TVisualStudioCodeIntegratedDevelopmentEnvironment;
+var
+  i: Integer;
+
+begin
+  Result := nil;
+  for i := Low(fVisualStudioCodeEditors) to High(fVisualStudioCodeEditors) do
+    if SameText(fVisualStudioCodeEditors[i].Name, Name) then
+      Exit(fVisualStudioCodeEditors[i]);
+end;
 
 constructor TIntegratedDevelopmentEnvironment.Create(
   AEnvironment: TDreamcastSoftwareDevelopmentEnvironment);
+var
+  i: Integer;
+
 begin
   fCodeBlocks := TCodeBlocksIntegratedDevelopmentEnvironment.Create(Self);
+  SetLength(fVisualStudioCodeEditors, Length(VSCODE_EDITORS));
+  for i := Low(VSCODE_EDITORS) to High(VSCODE_EDITORS) do
+    fVisualStudioCodeEditors[i - Low(VSCODE_EDITORS)] :=
+      TVisualStudioCodeIntegratedDevelopmentEnvironment.Create(Self,
+        VSCODE_EDITORS[i].Id, VSCODE_EDITORS[i].Name);
   fEnvironment := AEnvironment;
 end;
 
 destructor TIntegratedDevelopmentEnvironment.Destroy;
+var
+  i: Integer;
+
 begin
+  for i := Low(fVisualStudioCodeEditors) to High(fVisualStudioCodeEditors) do
+    fVisualStudioCodeEditors[i].Free;
   fCodeBlocks.Free;
   inherited Destroy;
 end;
