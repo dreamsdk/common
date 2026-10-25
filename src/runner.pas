@@ -15,6 +15,7 @@ uses
 
 const
   UNKNOWN_EXIT_CODE = -1;
+  INTERRUPTED_EXIT_CODE = 130; // 128 + SIGINT, like the profile script
 
 type
   { TDreamcastSoftwareDevelopmentKitRunner }
@@ -320,20 +321,22 @@ begin
 
   // DreamSDK Runner: the output is just forwarded, so keep it as is (colors...)
   // and, if we are in a console, let the shell use it directly, so the
-  // programs see a real terminal
+  // programs see a real terminal. Otherwise, our input is forwarded too
+  // (e.g., "gcc -" reading the source from stdin).
   if not fEmbeddedMode then
   begin
     fShellCommand.KeepEscapeSequences := True;
     fShellCommand.InheritConsole := IsConsoleOutput;
+    fShellCommand.ForwardInput := True;
+    fShellCommand.KillProcessesOnExit := True;
 
-    // As stdin is a terminal, Bash would be interactive: on CTRL+C, it would
-    // stop the profile script and display a prompt instead of exiting.
-    // The command is run by the profile script, which logs out before "-c".
-    if fShellCommand.InheritConsole then
-    begin
-      fShellCommand.Parameters.Add('-c');
-      fShellCommand.Parameters.Add('exit');
-    end;
+    // Without "-c", Bash would read its commands from stdin: if it's a
+    // terminal, it would be interactive (on CTRL+C, it would stop the profile
+    // script and display a prompt instead of exiting), otherwise it would run
+    // the forwarded input. The command is run by the profile script, which
+    // logs out before "-c".
+    fShellCommand.Parameters.Add('-c');
+    fShellCommand.Parameters.Add('exit');
   end;
 
   fShellCommand.OnNewLine := @HandleNewLine;
@@ -355,7 +358,13 @@ begin
 {$ENDIF}
 {$ENDIF}
 
-  if (fShellCommand.ExitCode = 0) then
+  if fShellCommand.Interrupted then
+  begin
+    // The processes were terminated, so the exit code file may be missing
+    Result := INTERRUPTED_EXIT_CODE;
+    SysUtils.DeleteFile(fShellRunnerClientExitCodeTempFileName);
+  end
+  else if (fShellCommand.ExitCode = 0) then
     Result := GetClientExitCode;
 
   OutputBuffer := GetShellCommandOutputBuffer;

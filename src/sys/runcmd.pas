@@ -33,12 +33,19 @@ type
     fWorkingDirectory: TFileName;
     fInheritConsole: Boolean;
     fKeepEscapeSequences: Boolean;
+    fForwardInput: Boolean;
+    fKillProcessesOnExit: Boolean;
+    fInterrupted: Boolean;
 {$IFDEF Windows}
+    fInputForwarder: TThread;
     fJobHandle: THandle;
     fConsoleOutputMode: LongWord;
     fConsoleOutputModeChanged: Boolean;
     procedure AssignProcessToJob;
     procedure TerminateJob;
+    procedure Interrupt;
+    procedure StartInputForwarding;
+    procedure StopInputForwarding;
 {$ENDIF}
     procedure BeginConsoleSharing;
     procedure EndConsoleSharing;
@@ -77,6 +84,17 @@ type
        lines sent to OnNewLine. *)
     property KeepEscapeSequences: Boolean read fKeepEscapeSequences
       write fKeepEscapeSequences;
+    (* When pipes are used (i.e., InheritConsole is False), our standard input
+       is forwarded to the process, until EOF. Otherwise, the process reads an
+       empty pipe that is never closed. *)
+    property ForwardInput: Boolean read fForwardInput write fForwardInput;
+    (* All the processes started are terminated when we exit, even if we are
+       killed (e.g., by an IDE). When pipes are used, they are terminated on
+       CTRL+C/CTRL+BREAK too, as they don't share our console: Interrupted is
+       then True. *)
+    property KillProcessesOnExit: Boolean read fKillProcessesOnExit
+      write fKillProcessesOnExit;
+    property Interrupted: Boolean read fInterrupted;
     property OnNewLine: TNewLineEvent read fNewLine write fNewLine;
   end;
 
@@ -86,9 +104,7 @@ uses
 {$IFDEF Windows}
   JwaWinBase,
   JwaWinCon,
-{$IFDEF RELEASE}
   JwaWinNT,
-{$ENDIF}
 {$ENDIF}
   SysTools,
   StrTools;
@@ -100,10 +116,25 @@ uses
    gcc) belongs to that job too, even with MSYS2, where the parent process IDs
    can't be used for that (fork emulation). *)
 procedure TRunCommand.AssignProcessToJob;
+var
+  LimitInformation: TJobObjectExtendedLimitInformation;
+
 begin
   fJobHandle := CreateJobObject(nil, nil);
-  if (fJobHandle <> 0)
-    and (not AssignProcessToJobObject(fJobHandle, fProcess.ProcessHandle)) then
+  if fJobHandle = 0 then
+    Exit;
+
+  // The job is closed when we exit (even if killed), then the processes too
+  if KillProcessesOnExit then
+  begin
+    LimitInformation := Default(TJobObjectExtendedLimitInformation);
+    LimitInformation.BasicLimitInformation.LimitFlags :=
+      JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    SetInformationJobObject(fJobHandle, JobObjectExtendedLimitInformation,
+      @LimitInformation, SizeOf(LimitInformation));
+  end;
+
+  if not AssignProcessToJobObject(fJobHandle, fProcess.ProcessHandle) then
   begin
     CloseHandle(fJobHandle);
     fJobHandle := 0;
@@ -138,6 +169,140 @@ const
 function IgnoreConsoleCtrlHandler(CtrlType: DWORD): LongBool; stdcall;
 begin
   Result := (CtrlType = CTRL_C_EVENT) or (CtrlType = CTRL_BREAK_EVENT);
+end;
+
+var
+  InterruptibleRunCommand: TRunCommand = nil;
+
+(* When pipes are used, CTRL+C/CTRL+BREAK can't reach the processes, as they
+   don't share our console: terminate them instead of exiting right now. *)
+function InterruptConsoleCtrlHandler(CtrlType: DWORD): LongBool; stdcall;
+begin
+  Result := (CtrlType = CTRL_C_EVENT) or (CtrlType = CTRL_BREAK_EVENT);
+  if Result and Assigned(InterruptibleRunCommand) then
+    InterruptibleRunCommand.Interrupt;
+end;
+
+procedure TRunCommand.Interrupt;
+begin
+  fInterrupted := True;
+  TerminateJob;
+end;
+
+type
+  { TInputForwarderThread }
+  (* Copy our standard input to the input pipe of the process, until EOF.
+     Only its own handles are used, so it can outlive the TRunCommand. *)
+  TInputForwarderThread = class(TThread)
+  private
+    fSourceHandle: THandle;
+    fTargetHandle: THandle;
+  protected
+    procedure Execute; override;
+  public
+    constructor Create(const ASourceHandle, ATargetHandle: THandle);
+  end;
+
+  TCancelSynchronousIo = function(hThread: THandle): LongBool; stdcall;
+
+constructor TInputForwarderThread.Create(const ASourceHandle,
+  ATargetHandle: THandle);
+begin
+  fSourceHandle := ASourceHandle;
+  fTargetHandle := ATargetHandle;
+  inherited Create(False);
+end;
+
+procedure TInputForwarderThread.Execute;
+const
+  BUF_SIZE = 4096;
+
+var
+  Buffer: array[0..BUF_SIZE - 1] of Byte;
+  BytesRead,
+  BytesWritten,
+  Offset: DWORD;
+  Done: Boolean;
+
+begin
+  try
+    Done := False;
+    repeat
+      BytesRead := 0;
+      // Failure or nothing read: EOF (e.g., pipe closed, CTRL+Z on a console)
+      if (not ReadFile(fSourceHandle, @Buffer[0], BUF_SIZE, @BytesRead, nil))
+        or (BytesRead = 0) then
+        Done := True;
+
+      Offset := 0;
+      while (not Done) and (Offset < BytesRead) do
+      begin
+        BytesWritten := 0;
+        // Failure: the process doesn't read its input anymore
+        if WriteFile(fTargetHandle, @Buffer[Offset], BytesRead - Offset,
+          @BytesWritten, nil) then
+          Inc(Offset, BytesWritten)
+        else
+          Done := True;
+      end;
+    until Done;
+  finally
+    // The process receives EOF
+    CloseHandle(fTargetHandle);
+  end;
+end;
+
+(* Our own duplicate of the input pipe is used by the forwarder thread, so the
+   TProcess one is closed. If there is nothing to forward, the process just
+   receives EOF. *)
+procedure TRunCommand.StartInputForwarding;
+var
+  SourceHandle,
+  TargetHandle: THandle;
+
+begin
+  SourceHandle := GetStdHandle(STD_INPUT_HANDLE);
+  TargetHandle := 0;
+  if (SourceHandle <> 0) and (SourceHandle <> INVALID_HANDLE_VALUE)
+    and DuplicateHandle(GetCurrentProcess, fProcess.Input.Handle,
+      GetCurrentProcess, @TargetHandle, 0, False, DUPLICATE_SAME_ACCESS) then
+    fInputForwarder := TInputForwarderThread.Create(SourceHandle, TargetHandle);
+  fProcess.CloseInput;
+end;
+
+(* The process has exited, but the forwarder may still wait on our standard
+   input (e.g., a pipe that is never closed): unblock it if possible. If it's
+   still running, it's left behind, as freeing it would wait for it. *)
+procedure TRunCommand.StopInputForwarding;
+const
+  STOP_ATTEMPTS = 10;
+  STOP_ATTEMPT_TIMEOUT = 50;
+
+var
+  CancelSynchronousIo: TCancelSynchronousIo;
+  i: Integer;
+
+begin
+  if not Assigned(fInputForwarder) then
+    Exit;
+
+  // Not available on Windows XP
+  CancelSynchronousIo := TCancelSynchronousIo(
+    GetProcAddress(GetModuleHandle('kernel32.dll'), 'CancelSynchronousIo'));
+
+  i := 0;
+  while (not fInputForwarder.Finished) and (i < STOP_ATTEMPTS) do
+  begin
+    if Assigned(CancelSynchronousIo) then
+      CancelSynchronousIo(fInputForwarder.Handle);
+    WaitForSingleObject(fInputForwarder.Handle, STOP_ATTEMPT_TIMEOUT);
+    Inc(i);
+  end;
+
+  if fInputForwarder.Finished then
+    FreeAndNil(fInputForwarder)
+  else
+    fInputForwarder := nil;
 end;
 {$ENDIF}
 
@@ -184,7 +349,11 @@ begin
     fAbortRequested := False;
     fInheritConsole := False;
     fKeepEscapeSequences := False;
+    fForwardInput := False;
+    fKillProcessesOnExit := False;
+    fInterrupted := False;
 {$IFDEF Windows}
+    fInputForwarder := nil;
     fJobHandle := 0;
     fConsoleOutputMode := 0;
     fConsoleOutputModeChanged := False;
@@ -281,6 +450,7 @@ begin
   try
 
     fAbortRequested := False;
+    fInterrupted := False;
     Buffer[0] := #0;
 
 {$IFDEF DEBUG}
@@ -349,6 +519,13 @@ begin
     fProcess.Execute;
 {$IFDEF Windows}
     AssignProcessToJob;
+    if KillProcessesOnExit and (not InheritConsole) then
+    begin
+      InterruptibleRunCommand := Self;
+      SetConsoleCtrlHandler(@InterruptConsoleCtrlHandler, True);
+    end;
+    if ForwardInput and (not InheritConsole) then
+      StartInputForwarding;
     fProcess.Resume;
 {$ENDIF}
 
@@ -396,6 +573,14 @@ begin
       SendNewLine(fPartialLine, True);
 
   finally
+{$IFDEF Windows}
+    StopInputForwarding;
+    if InterruptibleRunCommand = Self then
+    begin
+      SetConsoleCtrlHandler(@InterruptConsoleCtrlHandler, False);
+      InterruptibleRunCommand := nil;
+    end;
+{$ENDIF}
     if InheritConsole then
       EndConsoleSharing;
     LogMessageExit(LogContext);
