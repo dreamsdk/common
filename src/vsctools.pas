@@ -50,6 +50,8 @@ type
     CommandLineInterface: string;
     // Extensions directory, relative to the user profile
     ExtensionsDirectory: string;
+    // Section in the DreamSDK IDE configuration file (ide.conf)
+    ConfigurationSection: string;
   end;
   TVisualStudioCodeEditorArray = array of TVisualStudioCodeEditor;
 
@@ -71,7 +73,8 @@ const
       DisplayNames: 'Microsoft Visual Studio Code|Microsoft Visual Studio Code (User)';
       UserInstallationDirectory: 'AppData\Local\Programs\Microsoft VS Code\';
       CommandLineInterface: 'bin\code.cmd';
-      ExtensionsDirectory: '.vscode\extensions'
+      ExtensionsDirectory: '.vscode\extensions';
+      ConfigurationSection: 'VisualStudioCode'
     ),
     (
       Id: VSCODE_EDITOR_VSCODIUM;
@@ -79,7 +82,8 @@ const
       DisplayNames: 'VSCodium|VSCodium (User)';
       UserInstallationDirectory: 'AppData\Local\Programs\VSCodium\';
       CommandLineInterface: 'bin\codium.cmd';
-      ExtensionsDirectory: '.vscode-oss\extensions'
+      ExtensionsDirectory: '.vscode-oss\extensions';
+      ConfigurationSection: 'VSCodium'
     )
   );
 
@@ -114,6 +118,16 @@ function IsVisualStudioCodeExtensionInstalled(const EditorId: string;
   const User: TWindowsUserAccountInformation;
   const ExtensionId: string): Boolean;
 
+(* Retrieve the names of the users that have the extension installed in an
+   editor. The profiles of the other users can't be read without elevation:
+   for them, the list saved in the configuration file (ide.conf) is used.
+   That list is saved when all the profiles could be read (i.e., elevated:
+   DreamSDK Setup, DreamSDK Manager elevated tasks). Returns True if all the
+   profiles could be read. *)
+function RefreshVisualStudioCodeInstalledUsers(const EditorId,
+  ExtensionId: string; const ConfigurationFileName: TFileName;
+  InstalledUsers: TStringList): Boolean;
+
 (* Install the extension (.vsix) in an editor for all the available users, or
    for the specified users. *)
 function VisualStudioCodeInstallExtension(const EditorId: string;
@@ -136,6 +150,7 @@ implementation
 uses
   Windows,
   Registry,
+  IniFiles,
   FPJson,
   JSONParser,
   FSTools,
@@ -147,6 +162,8 @@ const
   UNINSTALL_KEY = 'Software\Microsoft\Windows\CurrentVersion\Uninstall';
   EXTENSIONS_REGISTRY = 'extensions.json';
   CLI_NOT_INSTALLED_TAG = 'is not installed';
+  CONFIGURATION_INSTALLED_USERS = 'InstalledUsers';
+  CONFIGURATION_USERS_SEPARATOR = '|';
 
 // =============================================================================
 // Utilities
@@ -414,6 +431,19 @@ begin
     if DirectoryExists(UserDataDirectory) then
       KillDirectory(UserDataDirectory);
   end;
+end;
+
+(* Check if the profile of an user can be read (the profiles of the other users
+   can't be read without elevation). *)
+function IsUserProfileReadable(const User: TWindowsUserAccountInformation): Boolean;
+var
+  SearchRec: TSearchRec;
+
+begin
+  Result := FindFirst(IncludeTrailingPathDelimiter(User.ProfilePath) + '*',
+    faAnyFile, SearchRec) = 0;
+  if Result then
+    SysUtils.FindClose(SearchRec);
 end;
 
 (* Format an error message for an user. *)
@@ -701,6 +731,56 @@ begin
     ErrorMessage := Trim(Errors.Text);
   finally
     Errors.Free;
+  end;
+end;
+
+function RefreshVisualStudioCodeInstalledUsers(const EditorId,
+  ExtensionId: string; const ConfigurationFileName: TFileName;
+  InstalledUsers: TStringList): Boolean;
+var
+  Editor: TVisualStudioCodeEditor;
+  AvailableUsers: TWindowsUserAccountInformationArray;
+  SavedUsers: TStringList;
+  IniFile: TIniFile;
+  i: Integer;
+
+begin
+  Result := True;
+  InstalledUsers.Clear;
+  if not GetVisualStudioCodeEditor(EditorId, Editor) then
+    Exit(False);
+
+  SavedUsers := TStringList.Create;
+  IniFile := TIniFile.Create(ConfigurationFileName);
+  try
+    StringToStringList(IniFile.ReadString(Editor.ConfigurationSection,
+      CONFIGURATION_INSTALLED_USERS, EmptyStr), CONFIGURATION_USERS_SEPARATOR,
+      SavedUsers);
+
+    if GetVisualStudioCodeAvailableUsers(AvailableUsers) then
+      for i := Low(AvailableUsers) to High(AvailableUsers) do
+        if IsUserProfileReadable(AvailableUsers[i]) then
+        begin
+          if IsVisualStudioCodeExtensionInstalled(EditorId, AvailableUsers[i],
+            ExtensionId) then
+            InstalledUsers.Add(AvailableUsers[i].FriendlyName);
+        end
+        else
+        begin
+          // This profile can't be read: use the saved state
+          Result := False;
+          if SavedUsers.IndexOf(AvailableUsers[i].FriendlyName) <> -1 then
+            InstalledUsers.Add(AvailableUsers[i].FriendlyName);
+        end;
+
+    // All the profiles were read: save the state for the next time
+    if Result then
+      IniFile.WriteString(Editor.ConfigurationSection,
+        CONFIGURATION_INSTALLED_USERS,
+        StringListToString(InstalledUsers, CONFIGURATION_USERS_SEPARATOR));
+  finally
+    IniFile.Free;
+    SavedUsers.Free;
   end;
 end;
 

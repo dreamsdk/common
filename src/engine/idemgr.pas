@@ -65,6 +65,7 @@ type
     fDetected: Boolean;
     fVersion: string;
     fCommandLineInterface: TFileName;
+    fInstallationDirectory: TFileName;
     fLastErrorMessage: string;
     fLastOperationSuccess: Boolean;
     function GetExtensionFileName: TFileName;
@@ -84,6 +85,7 @@ type
 
     property AvailableUsers: TStringList read fAvailableUsers;
     property CommandLineInterface: TFileName read fCommandLineInterface;
+    property InstallationDirectory: TFileName read fInstallationDirectory;
     property Detected: Boolean read fDetected;
     property EditorId: string read fEditorId;
     property ExtensionFileName: TFileName read GetExtensionFileName;
@@ -354,18 +356,19 @@ begin
     fDetected := GetVisualStudioCodeInstallation(EditorId, Installation);
     fVersion := Installation.Version;
     fCommandLineInterface := Installation.CommandLineInterface;
+    fInstallationDirectory := Installation.InstallationDirectory;
 
-    // The state is read from each user profile, so it's always up-to-date
     fAvailableUsers.Clear;
-    fInstalledUsers.Clear;
     if GetVisualStudioCodeAvailableUsers(Users) then
       for i := Low(Users) to High(Users) do
-      begin
         fAvailableUsers.Add(Users[i].FriendlyName);
-        if IsVisualStudioCodeExtensionInstalled(EditorId, Users[i],
-          VSCODE_DREAMSDK_EXTENSION_ID) then
-          fInstalledUsers.Add(Users[i].FriendlyName);
-      end;
+
+    // The readable profiles are checked directly; for the other ones (when
+    // not elevated), the state saved in ide.conf by the elevated operations
+    // is used. ide.conf is updated when all the profiles could be read.
+    RefreshVisualStudioCodeInstalledUsers(EditorId, VSCODE_DREAMSDK_EXTENSION_ID,
+      fIntegratedDevelopmentEnvironment.Environment.FileSystem.Shell
+        .IntegratedDevelopmentEnvironmentConfigurationFile, fInstalledUsers);
 
     fRefreshed := True;
 
