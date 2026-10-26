@@ -19,7 +19,6 @@ type
     fIncludeDirectory: TFileName;
     fOwner: TKallistiPortManager;
     fUsableWithinIDE: Boolean;
-    fUseSubversion: Boolean;
     fVirtualAddon: Boolean;
     fListIndex: Integer;
     fSourceDirectory: TFileName;
@@ -72,7 +71,6 @@ type
     property Version: string read fVersion;
     property Hidden: Boolean read fVirtualAddon;
     property LibraryWeights: string read fFullComputedDependenciesLibraryWeights;
-    property UseSubversion: Boolean read fUseSubversion;
     property UsableWithinIDE: Boolean read fUsableWithinIDE;
     property LibraryLanguageKind: TLibraryLanguageKind read fLibraryLanguageKind;
   end;
@@ -689,7 +687,6 @@ begin
         fPortsMap.Add(PortName, fListIndex);
         fLibraryLanguageKind := GetPortLanguageKind(PortName);
         fVirtualAddon := False;
-        fUseSubversion := not SameText(GetPackageString('SVN_REPOSITORY'), EmptyStr);
       end;
 
       Inc(fOnlyVisibleListCount);
@@ -1349,19 +1346,16 @@ function TKallistiPortManager.InitializeEnvironment: Boolean;
 const
   CONFIG_MAKEFILE = 'config.mk';
   BUILD_MAKEFILE = 'scripts\build.mk';
-  DOWNLOAD_MAKEFILE = 'scripts\download.mk';
 
 var
   ConfigFileName,
-  BuildFileName,
-  DownloadFileName: TFileName;
+  BuildFileName: TFileName;
   PythonValidateDistFilesOld,
   PythonValidateDistFilesNew: string;
 
 begin
   ConfigFileName := Environment.FileSystem.Kallisti.KallistiPortsDirectory + CONFIG_MAKEFILE;
   BuildFileName := Environment.FileSystem.Kallisti.KallistiPortsDirectory + BUILD_MAKEFILE;
-  DownloadFileName := Environment.FileSystem.Kallisti.KallistiPortsDirectory + DOWNLOAD_MAKEFILE;
 
   Result := FileExists(ConfigFileName) and FileExists(BuildFileName);
   if Result then
@@ -1377,13 +1371,6 @@ begin
       ConfigFileName,
       'FETCH_CMD = curl',
       '#FETCH_CMD = curl',
-      ptfbPatchWithWatermark
-    );
-
-    PatchTextFile(
-      DownloadFileName,
-      'svn checkout',
-      'svn checkout --non-interactive --trust-server-cert',
       ptfbPatchWithWatermark
     );
 
