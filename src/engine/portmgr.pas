@@ -173,7 +173,8 @@ uses
   FileUtil,
   FPJson,
   FSTools,
-  StrTools;
+  StrTools,
+  Version;
 
 const
   KALLISTI_PORTS_PACKAGE_DESCRIPTION = 'pkg-descr';
@@ -1400,16 +1401,20 @@ function TKallistiPortManager.InitializeEnvironment: Boolean;
 const
   CONFIG_MAKEFILE = 'config.mk';
   BUILD_MAKEFILE = 'scripts\build.mk';
+  DOWNLOAD_MAKEFILE = 'scripts\download.mk';
+  GIT_CLONE_FILTER_MINIMAL_VERSION = '2.20.0';
 
 var
   ConfigFileName,
-  BuildFileName: TFileName;
+  BuildFileName,
+  DownloadFileName: TFileName;
   PythonValidateDistFilesOld,
   PythonValidateDistFilesNew: string;
 
 begin
   ConfigFileName := Environment.FileSystem.Kallisti.KallistiPortsDirectory + CONFIG_MAKEFILE;
   BuildFileName := Environment.FileSystem.Kallisti.KallistiPortsDirectory + BUILD_MAKEFILE;
+  DownloadFileName := Environment.FileSystem.Kallisti.KallistiPortsDirectory + DOWNLOAD_MAKEFILE;
 
   Result := FileExists(ConfigFileName) and FileExists(BuildFileName);
   if Result then
@@ -1459,6 +1464,16 @@ begin
       Format('VALIDATE_DISTFILES = %s', [PythonValidateDistFilesNew]),
       ptfbAlwaysPatch
     );
+
+    // "git clone --filter=tree:0" isn't supported by older Git (e.g., on Windows XP)
+    if Versions.GitInstalled
+      and (CompareVersion(Versions.Git, GIT_CLONE_FILTER_MINIMAL_VERSION) = 1) then
+      PatchTextFile(
+        DownloadFileName,
+        'git clone --filter=tree:0 ',
+        'git clone ',
+        ptfbPatchWithWatermark
+      );
   end;
 end;
 
