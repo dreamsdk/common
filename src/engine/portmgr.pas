@@ -10,6 +10,8 @@ uses
 type
   TLibraryLanguageKind = (llkAll, llkC, llkCPP);
   TOverridenInformationKind = (oikLibrary, oikInclude, oikIncludeDirectory);
+  TKallistiPortHostTool = (phtCMake, phtRuby, phtPython);
+  TKallistiPortHostTools = set of TKallistiPortHostTool;
 
   TKallistiPortManager = class;
 
@@ -19,7 +21,7 @@ type
     fIncludeDirectory: TFileName;
     fOwner: TKallistiPortManager;
     fUsableWithinIDE: Boolean;
-    fUseCMake: Boolean;
+    fRequiredHostTools: TKallistiPortHostTools;
     fVirtualAddon: Boolean;
     fListIndex: Integer;
     fSourceDirectory: TFileName;
@@ -40,6 +42,7 @@ type
     fLibraryLanguageKind: TLibraryLanguageKind;
     function GetEnvironment: TDreamcastSoftwareDevelopmentEnvironment;
     function GetLibraries: string;
+    function GetMissingHostTools: TKallistiPortHostTools;
     function IsPortInstalled: Boolean;
     function DeleteInstallPortDirectoryIfNeeded: Boolean;
   protected
@@ -72,7 +75,8 @@ type
     property Version: string read fVersion;
     property Hidden: Boolean read fVirtualAddon;
     property LibraryWeights: string read fFullComputedDependenciesLibraryWeights;
-    property UseCMake: Boolean read fUseCMake;
+    property RequiredHostTools: TKallistiPortHostTools read fRequiredHostTools;
+    property MissingHostTools: TKallistiPortHostTools read GetMissingHostTools;
     property UsableWithinIDE: Boolean read fUsableWithinIDE;
     property LibraryLanguageKind: TLibraryLanguageKind read fLibraryLanguageKind;
   end;
@@ -161,6 +165,8 @@ type
       read fRepository;
   end;
 
+function HostToolsToString(const HostTools: TKallistiPortHostTools): string;
+
 implementation
 
 uses
@@ -180,6 +186,35 @@ const
 
   PROCESS_DEPENDENCIES_MAX_DEPTH = 128;
   PROCESS_DEPENDENCIES_CIRCULAR_REFERENCE_ERROR = '#CIRCULAR_REFERENCE_ERROR#';
+
+function HostToolsToString(const HostTools: TKallistiPortHostTools): string;
+const
+  HOST_TOOL_NAMES: array[TKallistiPortHostTool] of string = (
+    'CMake', 'Ruby', 'Python'
+  );
+
+var
+  HostTool: TKallistiPortHostTool;
+
+begin
+  Result := EmptyStr;
+  for HostTool in HostTools do
+  begin
+    if not IsEmpty(Result) then
+      Result := Result + ', ';
+    Result := Result + HOST_TOOL_NAMES[HostTool];
+  end;
+end;
+
+// Host tools needed by some ports, as they aren't declared in the port Makefile
+function GetPortExtraHostTools(const PortName: string): TKallistiPortHostTools;
+begin
+  Result := [];
+  if SameText(PortName, 'mruby') then
+    Result := [phtRuby]
+  else if SameText(PortName, 'micropython') then
+    Result := [phtPython];
+end;
 
 { TKallistiPortItem }
 
@@ -249,6 +284,20 @@ begin
   Result := fSelfLibraries;
   if not IsEmpty(fFullComputedDependenciesLibraries) then
     Result := fFullComputedDependenciesLibraries;
+end;
+
+function TKallistiPortItem.GetMissingHostTools: TKallistiPortHostTools;
+begin
+  Result := [];
+  with fOwner.Versions do
+  begin
+    if (phtCMake in fRequiredHostTools) and (not CMakeInstalled) then
+      Include(Result, phtCMake);
+    if (phtRuby in fRequiredHostTools) and (not RubyInstalled) then
+      Include(Result, phtRuby);
+    if (phtPython in fRequiredHostTools) and (not PythonInstalled) then
+      Include(Result, phtPython);
+  end;
 end;
 
 constructor TKallistiPortItem.Create(AOwner: TKallistiPortManager);
@@ -689,7 +738,9 @@ begin
         fPortsMap.Add(PortName, fListIndex);
         fLibraryLanguageKind := GetPortLanguageKind(PortName);
         fVirtualAddon := False;
-        fUseCMake := SameText(GetPackageString('PORT_BUILD'), 'cmake');
+        fRequiredHostTools := GetPortExtraHostTools(PortName);
+        if SameText(GetPackageString('PORT_BUILD'), 'cmake') then
+          Include(fRequiredHostTools, phtCMake);
       end;
 
       Inc(fOnlyVisibleListCount);
