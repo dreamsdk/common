@@ -449,6 +449,8 @@ type
       write fShellCommandNewLine;
   end;
 
+function IsGitCommitHash(const Ref: string): Boolean;
+
 implementation
 
 uses
@@ -464,6 +466,26 @@ uses
 
 const
   FAIL_TAG = 'fatal: ';
+
+// A (possibly abbreviated) commit hash, as opposed to a branch or a tag name
+function IsGitCommitHash(const Ref: string): Boolean;
+const
+  MIN_LENGTH = 7;
+  MAX_LENGTH = 64; // SHA-256 repositories
+
+var
+  i: Integer;
+
+begin
+  Result := (Length(Ref) >= MIN_LENGTH) and (Length(Ref) <= MAX_LENGTH);
+  if Result then
+    for i := 1 to Length(Ref) do
+      if not (Ref[i] in ['0'..'9', 'a'..'f', 'A'..'F']) then
+      begin
+        Result := False;
+        Break;
+      end;
+end;
 
 // Run a git command in the working directory. Since stderr is merged into
 // the output, the output is only meaningful when git succeeded (exit code 0),
@@ -510,10 +532,12 @@ begin
       // A real branch (e.g., master or a maintenance branch)
       if not RunGit(fRepositoryDirectory, 'symbolic-ref -q --short HEAD',
         Result) then
-        // Detached HEAD: resolve the tag pointing exactly at HEAD (if any)
+        // Detached HEAD: resolve the tag pointing exactly at HEAD (if any),
+        // otherwise it's a commit
         if not RunGit(fRepositoryDirectory, 'describe --tags --exact-match',
           Result) then
-          Result := EmptyStr;
+          if not RunGit(fRepositoryDirectory, 'rev-parse HEAD', Result) then
+            Result := EmptyStr;
     except
       // Silent exception (not needed in that case)
     end;
@@ -1149,8 +1173,8 @@ function TDreamcastSoftwareDevelopmentEnvironment.CloneRepository(
   var BufferOutput: string; const Ref: string): Boolean;
 var
   CommandLine,
-  RefCommandLineOption,
   TargetDirectoryFileName: TFileName;
+  CheckoutOutput: string;
 {$IFDEF DEBUG}
   OfflineVersion: string;
 {$ENDIF}
@@ -1180,18 +1204,29 @@ begin
     if IsEmpty(URL) then
       DebugLog('Warning: CloneRepository: URL is empty!');
 {$ENDIF}
-    RefCommandLineOption := EmptyStr;
-    if not IsEmpty(Ref) then
-      RefCommandLineOption := Format('-b "%s" ', [Ref]);
-
-    CommandLine := Format('git -C "%s" clone "%s" "%s" %s--progress', [
+    CommandLine := Format('git -C "%s" clone "%s" "%s" --progress', [
       SystemToDreamSdkPath(WorkingDirectory),
       URL,
-      TargetDirectoryName,
-      RefCommandLineOption
+      TargetDirectoryName
     ]);
     BufferOutput := ExecuteShellCommand(CommandLine, WorkingDirectory);
     Result := not IsInString(FAIL_TAG, BufferOutput);
+
+    // "clone -b" only takes a branch or a tag, while "checkout" takes a commit
+    // too. The "--" ensures the ref is never taken as a path.
+    if Result and (not IsEmpty(Ref)) then
+    begin
+      Result := RunGit(TargetDirectoryFileName, Format('checkout -q "%s" --',
+        [Ref]), CheckoutOutput, False);
+      if not Result then
+      begin
+        BufferOutput := BufferOutput + sLineBreak + CheckoutOutput;
+
+        // Like "clone -b" with an unknown ref: don't keep the default branch
+        // checked out, as it would be taken as the selected ref afterwards
+        KillDirectory(TargetDirectoryFileName);
+      end;
+    end;
   end
   else
   begin

@@ -130,7 +130,7 @@ type
       read GetDreamcastToolSerialURL write fDreamcastToolSerialURL;
     property DreamcastToolInternetProtocolURL: string
       read GetDreamcastToolInternetProtocolURL write fDreamcastToolInternetProtocolURL;
-    // Branch/tag to checkout for each repository. Empty means "use the remote default branch"
+    // Branch/tag/commit to checkout for each repository. Empty means "use the remote default branch"
     property KallistiRef: string
       read fKallistiRef write fKallistiRef;
     property KallistiPortsRef: string

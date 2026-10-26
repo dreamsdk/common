@@ -52,8 +52,18 @@ uses
 
 procedure TDreamcastSoftwareDevelopmentKitManager.UpdateRepositoriesURL;
 var
-  LiveURL,
-  LiveRef: string;
+  LiveURL: string;
+
+  // A commit is reported as a full hash: keep the stored one if it's the
+  // same commit given as an abbreviated hash
+  function GetSyncedRef(const StoredRef, LiveRef: string): string;
+  begin
+    Result := LiveRef;
+    if IsEmpty(LiveRef) or (IsGitCommitHash(StoredRef)
+      and IsGitCommitHash(LiveRef)
+      and StartsWith(LowerCase(StoredRef), LowerCase(LiveRef))) then
+        Result := StoredRef;
+  end;
 
 begin
   with Environment.Settings.Repositories do
@@ -76,25 +86,18 @@ begin
     if not IsEmpty(LiveURL) then
       DreamcastToolInternetProtocolURL := LiveURL;
 
-    // Keep the branch/tag selection in sync with what's actually checked
-    // out once a repository exists. Leave the stored choice alone otherwise
-    // (not cloned yet, or the live ref couldn't be determined) so a pick
-    // that hasn't been applied yet survives a restart.
-    LiveRef := KallistiOS.Repository.Ref;
-    if not IsEmpty(LiveRef) then
-      KallistiRef := LiveRef;
-
-    LiveRef := KallistiPorts.Repository.Ref;
-    if not IsEmpty(LiveRef) then
-      KallistiPortsRef := LiveRef;
-
-    LiveRef := DreamcastTool.RepositorySerial.Ref;
-    if not IsEmpty(LiveRef) then
-      DreamcastToolSerialRef := LiveRef;
-
-    LiveRef := DreamcastTool.RepositoryInternetProtocol.Ref;
-    if not IsEmpty(LiveRef) then
-      DreamcastToolInternetProtocolRef := LiveRef;
+    // Keep the branch/tag/commit selection in sync with what's actually
+    // checked out once a repository exists. Leave the stored choice alone
+    // otherwise (not cloned yet, or the live ref couldn't be determined) so a
+    // pick that hasn't been applied yet survives a restart.
+    KallistiRef := GetSyncedRef(KallistiRef,
+      KallistiOS.Repository.Ref);
+    KallistiPortsRef := GetSyncedRef(KallistiPortsRef,
+      KallistiPorts.Repository.Ref);
+    DreamcastToolSerialRef := GetSyncedRef(DreamcastToolSerialRef,
+      DreamcastTool.RepositorySerial.Ref);
+    DreamcastToolInternetProtocolRef := GetSyncedRef(DreamcastToolInternetProtocolRef,
+      DreamcastTool.RepositoryInternetProtocol.Ref);
   end;
 end;
 
