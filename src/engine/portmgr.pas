@@ -19,6 +19,7 @@ type
     fIncludeDirectory: TFileName;
     fOwner: TKallistiPortManager;
     fUsableWithinIDE: Boolean;
+    fUseCMake: Boolean;
     fVirtualAddon: Boolean;
     fListIndex: Integer;
     fSourceDirectory: TFileName;
@@ -71,6 +72,7 @@ type
     property Version: string read fVersion;
     property Hidden: Boolean read fVirtualAddon;
     property LibraryWeights: string read fFullComputedDependenciesLibraryWeights;
+    property UseCMake: Boolean read fUseCMake;
     property UsableWithinIDE: Boolean read fUsableWithinIDE;
     property LibraryLanguageKind: TLibraryLanguageKind read fLibraryLanguageKind;
   end;
@@ -687,6 +689,7 @@ begin
         fPortsMap.Add(PortName, fListIndex);
         fLibraryLanguageKind := GetPortLanguageKind(PortName);
         fVirtualAddon := False;
+        fUseCMake := SameText(GetPackageString('PORT_BUILD'), 'cmake');
       end;
 
       Inc(fOnlyVisibleListCount);
