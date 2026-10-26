@@ -21,6 +21,7 @@ type
   { TDreamcastSoftwareDevelopmentKitRunner }
   TDreamcastSoftwareDevelopmentKitRunner = class(TObject)
   private
+    fCommandName: string;
     fCurrentCommandLine: string;
     fDebugEnabled: Boolean;
     fEmbeddedMode: Boolean;
@@ -62,6 +63,11 @@ type
 
     property Healthy: Boolean
       read GetHealthy;
+
+    (* Name displayed instead of the temporary script name when a command is
+       not found (e.g., "kos-cc: foo: command not found"). Empty to disable. *)
+    property CommandName: string
+      read fCommandName write fCommandName;
 
     (* Activate this flag to debug the command executed in the Shell. *)
     property DebugEnabled: Boolean
@@ -193,6 +199,7 @@ end;
 procedure TDreamcastSoftwareDevelopmentKitRunner.Initialize(
   const EmbeddedMode: Boolean);
 begin
+  fCommandName := EmptyStr;
   fCurrentCommandLine := EmptyStr;
   fEmbeddedMode := EmbeddedMode;
   fShellCommandOutputBuffer := TStringList.Create;
@@ -315,6 +322,8 @@ begin
   begin
     Add('_EXTERNAL_COMMAND=' + fCurrentCommandLine);
     Add('_EXITCODE=' + ClientExitCodeUnixFileName);
+    if CommandName <> EmptyStr then
+      Add('_EXTERNAL_COMMAND_NAME=' + CommandName);
   end;
 
   fShellCommand.RootSystemPath := RootSystemPath;
