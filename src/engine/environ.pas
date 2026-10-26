@@ -431,7 +431,8 @@ type
     function CloneRepository(const URL: string; const TargetDirectoryName,
       WorkingDirectory: TFileName; var BufferOutput: string;
       const Ref: string = ''): Boolean;
-    function GetRepositoryRefs(const URL: string): TStringList;
+    function GetRepositoryRefs(const URL: string;
+      out DefaultBranch: string): TStringList;
     function GetRepositoryVersion(const WorkingDirectory: TFileName): string;
     function IsComponentInstalled(const WorkingDirectory: TFileName): Boolean;
     function IsOfflineRepository(const RepositoryDirectory: TFileName): Boolean;
@@ -1205,51 +1206,66 @@ begin
 end;
 
 function TDreamcastSoftwareDevelopmentEnvironment.GetRepositoryRefs(
-  const URL: string): TStringList;
+  const URL: string; out DefaultBranch: string): TStringList;
 const
   HEADS_PREFIX = 'refs/heads/';
   TAGS_PREFIX = 'refs/tags/';
+  SYMREF_PREFIX = 'ref: ';
+  HEAD_REF = 'HEAD';
   PEELED_TAG_SUFFIX = '^{}';
 
 var
   Line,
+  Target,
   RefName: string;
   RawOutput,
   Branches,
   Tags: TStringList;
-  i: Integer;
+  i,
+  TabPosition: Integer;
 
 begin
+  DefaultBranch := EmptyStr;
   Branches := TStringList.Create;
   Tags := TStringList.Create;
   RawOutput := TStringList.Create;
   try
-    RawOutput.Text := Run('git', Format('ls-remote --heads --tags "%s"', [URL]), False);
+    // "--symref" with "HEAD" gives the default branch of the repository too
+    RawOutput.Text := Run('git', Format('ls-remote --symref "%s" HEAD '
+      + '"refs/heads/*" "refs/tags/*"', [URL]), False);
 
+    // Lines are like "<hash><TAB>refs/heads/master", plus
+    // "ref: refs/heads/master<TAB>HEAD" for the default branch
     for i := 0 to RawOutput.Count - 1 do
     begin
       Line := Trim(RawOutput[i]);
-      if EndsWith(PEELED_TAG_SUFFIX, Line) then
+      TabPosition := Pos(#9, Line);
+      if TabPosition = 0 then
         Continue;
 
-      if IsInString(HEADS_PREFIX, Line) then
+      Target := Copy(Line, 1, TabPosition - 1);
+      RefName := Trim(Copy(Line, TabPosition + 1, Length(Line)));
+
+      if RefName = HEAD_REF then
       begin
-        RefName := Right(HEADS_PREFIX, Line);
-        if not IsEmpty(RefName) then
-          Branches.Add(RefName);
+        if StartsWith(SYMREF_PREFIX + HEADS_PREFIX, Target) then
+          DefaultBranch := Copy(Target, Length(SYMREF_PREFIX + HEADS_PREFIX) + 1,
+            Length(Target));
       end
-      else if IsInString(TAGS_PREFIX, Line) then
-      begin
-        RefName := Right(TAGS_PREFIX, Line);
-        if not IsEmpty(RefName) then
-          Tags.Add(RefName);
-      end;
+      else if EndsWith(PEELED_TAG_SUFFIX, RefName) then
+        Continue
+      else if StartsWith(HEADS_PREFIX, RefName) then
+        Branches.Add(Copy(RefName, Length(HEADS_PREFIX) + 1, Length(RefName)))
+      else if StartsWith(TAGS_PREFIX, RefName) then
+        Tags.Add(Copy(RefName, Length(TAGS_PREFIX) + 1, Length(RefName)));
     end;
 
-    // Pin master/main at the top of the branch list, if present
+    // Pin the default branch at the top of the branch list (or master/main
+    // if the remote didn't tell it)
     for i := Branches.Count - 1 downto 0 do
-      if (CompareText(Branches[i], 'master') = 0)
-        or (CompareText(Branches[i], 'main') = 0) then
+      if (Branches[i] = DefaultBranch) or (IsEmpty(DefaultBranch)
+        and ((CompareText(Branches[i], 'master') = 0)
+        or (CompareText(Branches[i], 'main') = 0))) then
       begin
         Branches.Move(i, 0);
         Break;
